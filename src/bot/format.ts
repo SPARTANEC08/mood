@@ -111,6 +111,20 @@ export function code(value: string): string {
 }
 
 /**
+ * Ссылка в тексте.
+ *
+ * Telegram принимает в HTML-режиме только теги b, i, s, u, a, code, pre и
+ * blockquote, поэтому адрес уходит в атрибут href. Сам href не экранируется
+ * через esc(): там служебные символы, а экранирование сломало бы ссылку —
+ * вместо этого отсекаются кавычки и пробелы, которые иначе вырвались бы из
+ * атрибута и сломали разметку сообщения.
+ */
+export function link(url: string, text: string): string {
+  const safeUrl = String(url).trim().replace(/["'\s<>]/g, '');
+  return `<a href="${safeUrl}">${esc(text)}</a>`;
+}
+
+/**
  * Обычная цитата.
  */
 export function quote(text: string): string {

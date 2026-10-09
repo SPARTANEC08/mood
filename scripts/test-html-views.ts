@@ -373,6 +373,15 @@ async function run(): Promise<void> {
   );
   auditAll('ОСЭП (пусто)', buildOsepView([], 0).text);
 
+  // Ссылка на веб-почту: тег <a> обязан быть живым, а не заэкранированным текстом.
+  // Раньше ссылка заворачивалась в i(), курсив экранировал теги, и Telegram
+  // отвергал бы сообщение целиком.
+  const osepLink = buildOsepView([], 0).text;
+  check('ОСЭП: ссылка на почту есть', /<a href="https:\/\/[^"]+">[^<]+<\/a>/.test(osepLink));
+  check('ОСЭП: ссылка не заэкранирована', !osepLink.includes('&lt;a'));
+  check('ОСЭП: читаемый текст ссылки', osepLink.includes('Открыть почту в браузере'));
+  auditAll('ОСЭП со ссылкой', osepLink);
+
   auditAll('ошибка сервиса', buildServiceErrorView('Оценки', 'HTTP error 503: <Service Unavailable>').text);
 
   section('ДЗ и объявления');

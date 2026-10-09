@@ -12,6 +12,7 @@ import {
   expandableQuote,
   fmtNum,
   i,
+  link,
   quote,
   RULE,
   toneButton,
@@ -337,6 +338,16 @@ export function buildOrdersView(orders: OrderItem[], scholarship: ScholarshipInf
 }
 
 /**
+ * Веб-интерфейс почты ОСЭП (Exchange OWA).
+ *
+ * Отдельная константа, потому что проверить адрес не удалось: mail.mpei.ru
+ * отдаёт 401 на все пути, включая существующие, поэтому отличить рабочий
+ * путь от несуществующего без входа в почту невозможно. Значение вынесено
+ * сюда, чтобы заменить его в одном месте, если адрес окажется другим.
+ */
+const OSEP_WEB_URL = 'https://mail.mpei.ru/owa/';
+
+/**
  * Экран последних писем ОСЭП.
  */
 export function buildOsepView(messages: OsepMessage[], totalUnread?: number): BotViewResult {
@@ -345,6 +356,10 @@ export function buildOsepView(messages: OsepMessage[], totalUnread?: number): Bo
   if (totalUnread !== undefined) {
     lines.push(i(`Непрочитанных: ${totalUnread}`));
   }
+
+  // Ссылка не заворачивается в i(): курсив экранирует теги, и <a> превратился
+  // бы в текст «&lt;a href...&gt;» — Telegram счёл бы такое сообщение битым.
+  lines.push('', link(OSEP_WEB_URL, 'Открыть почту в браузере'));
 
   lines.push('', RULE);
 
