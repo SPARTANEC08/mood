@@ -88,6 +88,10 @@ function extractLecturers(raw: MpeiRawLesson): {
 
 /**
  * Parses raw lesson list into hierarchical, structured ParsedSchedule
+ *
+ * Сырые записи наружу не отдаются: расписание живёт в кэше бота месяцами,
+ * а полный ответ ts.mpei.ru — это 214 объектов по 102 ключа на группу.
+ * Всё, что нужно интерфейсу, уже извлечено в days.
  */
 export function parseSchedule(
   rawLessons: MpeiRawLesson[],
@@ -102,12 +106,13 @@ export function parseSchedule(
       totalLessons: 0,
       dateRange: { start: '', finish: '' },
       days: [],
-      rawLessons: [],
     };
   }
 
-  // Sort raw lessons by date ascending, then lessonNumberStart, then beginLesson, then subgroup
-  const sortedLessons = [...rawLessons].sort((a, b) => {
+  // Сортируем на месте: сырой массив больше нигде не нужен, а копия
+  // потребовала бы держать в памяти второй массив из 214 ссылок.
+  // Порядок — дата, номер пары, время начала, подгруппа.
+  const sortedLessons = rawLessons.sort((a, b) => {
     if (a.date !== b.date) {
       return a.date.localeCompare(b.date);
     }
@@ -225,7 +230,6 @@ export function parseSchedule(
           replaces: cleanString(lesson.replaces),
           duration: lesson.duration,
           timetableName: cleanString(lesson.tableofLessonsName),
-          raw: lesson,
         };
       });
 
@@ -263,6 +267,5 @@ export function parseSchedule(
       finish: formatDisplayDate(maxDate),
     },
     days,
-    rawLessons: sortedLessons,
   };
 }

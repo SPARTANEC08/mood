@@ -186,7 +186,6 @@ export interface ParsedLessonVariant {
   replaces?: string;
   duration?: number;
   timetableName?: string;
-  raw: MpeiRawLesson;
 }
 
 export interface ParsedLessonSlot {
@@ -218,5 +217,4 @@ export interface ParsedSchedule {
     finish: string;
   };
   days: ParsedScheduleDay[];
-  rawLessons: MpeiRawLesson[];
 }

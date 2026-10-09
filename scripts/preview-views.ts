@@ -34,7 +34,6 @@ function variant(
     allLecturers: [],
     jointGroups: [],
     onlineUrls: [],
-    raw: {} as never,
   };
 }
 
@@ -45,7 +44,6 @@ const schedule: ParsedSchedule = {
   parentScheduleName: '',
   totalLessons: 24,
   dateRange: { start: '2026.09.01', finish: '2027.01.15' },
-  rawLessons: [],
   days: [
     {
       date: '08.10.2026',

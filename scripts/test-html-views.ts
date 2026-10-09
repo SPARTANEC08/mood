@@ -166,7 +166,6 @@ const schedule: ParsedSchedule = {
   parentScheduleName: '',
   totalLessons: 24,
   dateRange: { start: '2026.09.01', finish: '2027.01.15' },
-  rawLessons: [],
   days: [
     {
       date: '08.10.2026',
@@ -192,7 +191,6 @@ const schedule: ParsedSchedule = {
               jointGroups: [],
               onlineUrls: [],
               note: 'Вход &lt;по QR&gt;',
-              raw: {} as never,
             },
           ],
         },
@@ -212,7 +210,6 @@ const schedule: ParsedSchedule = {
               allLecturers: [],
               jointGroups: [],
               onlineUrls: [],
-              raw: {} as never,
             },
           ],
         },
