@@ -22,24 +22,12 @@ const HTML_PARSE_MODE = 'HTML' as const;
 
 let botInstance: Bot | null = null;
 let botUsername: string | null = null;
-let isBotRunning = false;
-let botError: string | null = null;
 
 const BOTTOM_REPLY_KEYBOARD = {
   keyboard: [[{ text: '⚙️ Остальное' }]],
   resize_keyboard: true,
   is_persistent: true,
 };
-
-export function getBotStatus() {
-  return {
-    isConfigured: Boolean(process.env.TELEGRAM_BOT_TOKEN),
-    storageChannelConfigured: Boolean(process.env.TELEGRAM_STORAGE_CHANNEL_ID),
-    isRunning: isBotRunning,
-    botUsername,
-    error: botError,
-  };
-}
 
 /**
  * Префиксы file_id, по которым Telegram кодирует тип файла.
@@ -682,8 +670,6 @@ export async function initTelegramBot(): Promise<void> {
 
     const botInfo = await bot.api.getMe();
     botUsername = botInfo.username || null;
-    isBotRunning = true;
-    botError = null;
 
     console.log(`[Telegram Bot] Успешно запущен бот @${botUsername}!`);
 
@@ -709,7 +695,5 @@ export async function initTelegramBot(): Promise<void> {
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error('[Telegram Bot] Ошибка запуска бота:', msg);
-    botError = msg;
-    isBotRunning = false;
   }
 }

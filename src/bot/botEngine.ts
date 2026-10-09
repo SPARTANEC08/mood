@@ -75,7 +75,70 @@ export interface ProcessMessageResult {
   deletedChannelMessageIds?: number[];
 }
 
-const waitingForImportantText = new Set<number>();
+/**
+ * Пользователи, от которых бот ждёт свободный текст для «Важного».
+ *
+ * Раньше это был голый Set: запись появлялась по кнопке и удалялась только
+ * в семи местах обработчика. Если пользователь нажал «Добавить» и пропал,
+ * его ID оставался в Set навсегда — а вместе с ним и ветка «пользователь
+ * сейчас вводит текст», в которую он больше никогда не попадёт.
+ *
+ * Теперь это Map с временем ожидания: запись живёт 30 минут, по прошествии
+ * которых считается брошенной.
+ */
+const waitingForImportantText = new Map<number, number>();
+
+/** Сколько ждём текст, прежде чем считать ввод брошенным. */
+const IMPORTANT_TEXT_TTL_MS = 30 * 60 * 1000;
+
+/** Периодическая уборка брошенных записей. */
+const IMPORTANT_SWEEP_MS = 5 * 60 * 1000;
+
+/**
+ * Помечает пользователя как ожидающего текст и продлевает ожидание.
+ */
+function markWaitingForImportantText(userId: number, now: number = Date.now()): void {
+  waitingForImportantText.set(userId, now + IMPORTANT_TEXT_TTL_MS);
+}
+
+/**
+ * Проверяет, ждём ли от пользователя текст, и снимает ожидание.
+ *
+ * Снятие происходит только когда ожидание действительно закончилось: пользователь
+ * прислал текст или сказал «отмена». Раньше здесь был `Set.has()`, который не
+ * менял состояние, и `delete` стоял внутри двух веток — пустое сообщение
+ * оставляло режим ввода включённым. Это поведение сохранено.
+ */
+function isWaitingForImportantText(userId: number, now: number = Date.now()): boolean {
+  const expiresAt = waitingForImportantText.get(userId);
+  if (expiresAt === undefined) return false;
+  // Запись без времени (старая сериализация) считаем действующей.
+  if (expiresAt !== 0 && now >= expiresAt) {
+    waitingForImportantText.delete(userId);
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Явно снимает ожидание: пользователь прислал текст или отменил ввод.
+ */
+function clearWaitingForImportantText(userId: number): void {
+  waitingForImportantText.delete(userId);
+}
+
+/**
+ * Убирает записи, по которым текст так и не пришёл.
+ */
+function sweepWaitingForImportantText(now: number = Date.now()): void {
+  for (const [userId, expiresAt] of waitingForImportantText) {
+    if (now >= expiresAt) waitingForImportantText.delete(userId);
+  }
+}
+
+/** Таймер уборки: процесс не должен им удерживаться. */
+const importantSweepTimer = setInterval(sweepWaitingForImportantText, IMPORTANT_SWEEP_MS);
+importantSweepTimer.unref?.();
 
 export async function getCachedSchedule(user: TelegramUser): Promise<ParsedSchedule> {
   if (typeof user.groupId !== 'number' || user.groupId <= 0) {
@@ -298,9 +361,9 @@ export async function processTelegramMessage(
   const groupName = currentUser.groupName ?? '';
 
   // 1. Режим ввода важного объявления
-  if (waitingForImportantText.has(sender.id)) {
+  if (isWaitingForImportantText(sender.id)) {
     if (lower === 'отмена' || lower.includes('отмен') || lower === '/start') {
-      waitingForImportantText.delete(sender.id);
+      clearWaitingForImportantText(sender.id);
       const impView = buildImportantListView(groupName);
       return {
         action: 'edit',
@@ -313,7 +376,7 @@ export async function processTelegramMessage(
     }
 
     if (text || attachedFiles.length > 0) {
-      waitingForImportantText.delete(sender.id);
+      clearWaitingForImportantText(sender.id);
       const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
       const firstLine = lines[0] || (attachedFiles[0] ? `Файл: ${attachedFiles[0].fileName}` : 'Объявление');
       const title = firstLine.length > 35 ? firstLine.slice(0, 32) + '...' : firstLine;
@@ -717,7 +780,7 @@ export async function processTelegramCallback(
 
   // 5. Добавить важное
   if (callbackData === 'imp_add') {
-    waitingForImportantText.add(sender.id);
+    markWaitingForImportantText(sender.id);
     const addPrompt = buildImportantAddPromptView();
     return {
       action: 'edit',
