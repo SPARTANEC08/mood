@@ -12,7 +12,7 @@
 
 import type { SemesterGrades } from '../bars/parsers/gradesParser.js';
 import type { OrderItem, ScholarshipInfo } from '../bars/parsers/studentInfoParser.js';
-import type { OsepMessage } from '../mail/types.js';
+import type { OsepMessageBrief } from '../mail/types.js';
 import { isBarsAuthorized, TelegramUser, userStore } from '../../storage/userStore.js';
 import { isBaselineSnapshot, snapshotStore, UserSnapshot } from '../../storage/snapshotStore.js';
 import { toMoscow } from '../../utils/time.js';
@@ -145,7 +145,7 @@ export function diffSnapshots(
   next: UserSnapshot,
   context: {
     grades?: SemesterGrades;
-    mails?: OsepMessage[];
+    mails?: OsepMessageBrief[];
     orders?: OrderItem[];
   } = {},
 ): NotificationEvent[] {
@@ -246,7 +246,7 @@ interface CollectedState {
   grades: SemesterGrades;
   orders: OrderItem[];
   scholarship: ScholarshipInfo;
-  mails: OsepMessage[];
+  mails: OsepMessageBrief[];
 }
 
 /**
@@ -275,11 +275,13 @@ async function collectState(user: TelegramUser): Promise<CollectedState> {
   }
 
   // Почта ОСЭП: отдельный блок, ошибки не влияют на остальные данные.
-  let mails: OsepMessage[] = [];
+  // Нотификатору нужно лишь понять, что письмо новое, поэтому берём
+  // метаданные из ENVELOPE/BODYSTRUCTURE без скачивания тел.
+  let mails: OsepMessageBrief[] = [];
   try {
     const { login, password } = readBarsCredentials(user);
     const mail = new OsepMailClient({ user: login, pass: password });
-    mails = await mail.fetchMessages({ onlyUnread: false, limit: 15 });
+    mails = await mail.fetchMessageBriefs({ onlyUnread: false, limit: 15 });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     console.warn(`[Notifier][${user.telegramId}] ОСЭП недоступна, пропускаю: ${msg}`);
