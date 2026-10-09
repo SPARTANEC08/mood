@@ -104,10 +104,131 @@ export function readBarsCredentials(user: TelegramUser): { login: string; passwo
 }
 
 /**
+ * Живой BarsClient пользователя, готовый к запросам.
+ */
+interface CachedBarsClient {
+  service: BarsService;
+  /** Отпечаток сессии: меняется при каждом новом входе. */
+  sessionKey: string;
+  /** Когда клиент последний раз использовали — по этому живёт TTL. */
+  usedAt: number;
+  /** Создаётся ли клиент прямо сейчас: параллельные вызовы ждут один промис. */
+  inflight: Promise<BarsService> | null;
+}
+
+/**
+ * Клиенты БАРС в памяти, по одному на пользователя.
+ *
+ * Раньше клиент пересоздавался на каждый вызов сервиса, а восстановление сессии
+ * шло через временный файл: запись и удаление на каждый чих. При 50 студентах
+ * и 3 круга нотификатора в час это сотни операций FS в час ради данных,
+ * которые уже лежат в том же users.json.
+ *
+ * Время жизни клиента ограничено TTL: иначе 50 клиентов с CookieJar висели бы
+ * в памяти до перезапуска. Отпечаток сессии в ключе означает, что повторный
+ * вход пользователя сам собой даёт новый клиент, а старый вытесняется.
+ */
+const barsClients = new Map<number, CachedBarsClient>();
+
+/** Клиент бездействует дольше этого — вытесняется. */
+const BARS_CLIENT_TTL_MS = 30 * 60 * 1000;
+
+/** Больше этого клиентов одновременно в памяти держать нельзя. */
+const BARS_CLIENT_LIMIT = 60;
+
+/** Отпечаток сессии: участвует в ключе, чтобы релогин дал новый клиент. */
+function sessionFingerprint(user: TelegramUser): string {
+  const auth = user.barsAuth;
+  return `${auth?.savedAt ?? ''}:${auth?.cookiesJson?.length ?? 0}:${auth?.cookiesJson ?? ''}`.slice(0, 512);
+}
+
+/**
+ * Отбрасывает клиенты, которые давно не использовались, и лишние сверх потолка.
+ * Вызывается перед созданием нового клиента.
+ */
+function evictBarsClients(now: number): void {
+  for (const [id, entry] of barsClients) {
+    if (!entry.inflight && now - entry.usedAt > BARS_CLIENT_TTL_MS) {
+      barsClients.delete(id);
+    }
+  }
+
+  while (barsClients.size >= BARS_CLIENT_LIMIT) {
+    // Map обходит ключи в порядке вставки: первый — самый давно использованный.
+    const oldest = barsClients.keys().next();
+    if (oldest.done) break;
+    barsClients.delete(oldest.value);
+  }
+}
+
+/**
+ * Забывает клиента пользователя: после сброса авторизации или смены входа
+ * следующий вызов обязан создать нового клиента с нуля.
+ */
+export function forgetBarsClient(telegramId: number): void {
+  barsClients.delete(telegramId);
+}
+
+/**
+ * Сколько клиентов сейчас в памяти. Только для тестов и диагностики.
+ */
+export function barsClientCacheStats(): { clients: number } {
+  return { clients: barsClients.size };
+}
+
+/**
  * Восстанавливает BarsClient из сохраненной сессии пользователя.
  * Используется всеми сервисными разделами (оценки, пропуски, приказы, книги).
  */
 export async function createBarsServiceForUser(user: TelegramUser): Promise<BarsService> {
+  const auth = user.barsAuth;
+  if (!auth) {
+    throw new SessionExpiredError('Нет сохраненной сессии БАРС. Требуется повторный вход.');
+  }
+
+  const now = Date.now();
+  const key = sessionFingerprint(user);
+  const cached = barsClients.get(user.telegramId);
+
+  // Готовый клиент с той же сессией — возвращаем его и продлеваем жизнь.
+  if (cached && !cached.inflight && cached.sessionKey === key) {
+    cached.usedAt = now;
+    barsClients.delete(user.telegramId);
+    barsClients.set(user.telegramId, cached);
+    return cached.service;
+  }
+
+  // Сессия сменилась (повторный вход) — прежний клиент больше не годится.
+  if (cached && cached.sessionKey !== key) {
+    barsClients.delete(user.telegramId);
+  }
+
+  // Клиент уже создаётся — ждём тот же промис, второй temp-файл не пишем.
+  if (barsClients.get(user.telegramId)?.inflight) {
+    return barsClients.get(user.telegramId)!.inflight!;
+  }
+
+  evictBarsClients(now);
+
+  const inflight = buildBarsService(user);
+  barsClients.set(user.telegramId, { service: null as never, sessionKey: key, usedAt: now, inflight });
+
+  try {
+    const service = await inflight;
+    barsClients.set(user.telegramId, { service, sessionKey: key, usedAt: now, inflight: null });
+    return service;
+  } catch (err: unknown) {
+    // Не оставляем неудавшийся промис в кэше: следующий вызов должен повторить.
+    barsClients.delete(user.telegramId);
+    throw err;
+  }
+}
+
+/**
+ * Создаёт клиента с нуля: расшифровывает сессию, пишет temp-файл, читает его.
+ * Temp-файл нужен только здесь — loadSavedSession() умеет читать лишь с диска.
+ */
+async function buildBarsService(user: TelegramUser): Promise<BarsService> {
   const auth = user.barsAuth;
   if (!auth) {
     throw new SessionExpiredError('Нет сохраненной сессии БАРС. Требуется повторный вход.');
@@ -119,8 +240,9 @@ export async function createBarsServiceForUser(user: TelegramUser): Promise<Bars
   const tempPath = makeTempSessionPath();
 
   try {
-    // loadSavedSession() умеет читать только файл, поэтому сессия кладётся во временный файл
-    // и сразу удаляется: на диске остаются только зашифрованные данные пользователя.
+    // Сессия кладётся во временный файл и сразу удаляется: на диске остаются
+    // только зашифрованные данные пользователя. Файл создаётся один раз на
+    // клиента, а не на каждый сервисный вызов.
     await fs.writeFile(
       tempPath,
       JSON.stringify(
@@ -236,6 +358,10 @@ async function finalizeRegistration(
 
 const saved = userStore.patch(user.telegramId, updated);
   if (!saved) return;
+
+  // Новый вход = новая сессия в cookies. Старый клиент в памяти больше не
+  // годится: он держит CookieJar от прошлой авторизации.
+  forgetBarsClient(user.telegramId);
 
   // Мгновенно отрисовываем новый главный экран.
   // Ошибка загрузки расписания не должна откатывать успешный вход,
@@ -470,6 +596,8 @@ function handleAuthFailure(user: TelegramUser, login: string, err: unknown): voi
  */
 export function resetAuthFlow(telegramId: number): void {
   pending2FA.delete(telegramId);
+  // Клиент держит CookieJar отменённой авторизации — забываем вместе с воронкой.
+  forgetBarsClient(telegramId);
   userStore.patch(telegramId, {
     authState: 'AWAIT_LOGIN',
     tempAuthData: undefined,

@@ -18,7 +18,7 @@ import { isBaselineSnapshot, snapshotStore, UserSnapshot } from '../../storage/s
 import { toMoscow } from '../../utils/time.js';
 import { b, esc, fmtNum, i, RULE } from '../../bot/format.js';
 import { readBarsCredentials } from '../../bot/authFlow.js';
-import { createBarsServiceForUser } from '../../bot/authFlow.js';
+import { createBarsServiceForUser, forgetBarsClient } from '../../bot/authFlow.js';
 import { OsepMailClient } from '../mail/osepMailClient.js';
 import {
   dueSources,
@@ -471,6 +471,7 @@ export async function runCycle(): Promise<void> {
           userStore.clearAuth(user.telegramId);
           snapshotStore.remove(user.telegramId);
           forget(user.telegramId);
+          forgetBarsClient(user.telegramId);
         }
       }
 
