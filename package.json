@@ -4,9 +4,11 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "start": "tsx bot.ts",
-    "bot": "tsx bot.ts",
+    "build": "esbuild bot.ts --bundle --platform=node --target=node20 --format=esm --packages=external --outfile=dist/bot.js --log-level=warning",
+    "start": "node dist/bot.js",
+    "bot": "node dist/bot.js",
     "dev": "tsx watch bot.ts",
+    "tsx": "tsx bot.ts",
     "reset:users": "tsx scripts/reset-users.ts",
     "test:flow": "tsx scripts/test-auth-flow.ts",
     "test:notifier": "tsx scripts/test-notifier.ts",
@@ -43,6 +45,7 @@
     "@types/imapflow": "^1.0.23",
     "@types/mailparser": "^3.9.0",
     "@types/node": "^22.14.0",
+    "esbuild": "^0.28.2",
     "typescript": "^5.6.0"
   }
 }
