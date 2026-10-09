@@ -488,31 +488,30 @@ ENCRYPTION_SECRET_KEY=<64 hex-символа>
 `test-grades-calc.ts` работает на сохранённых HTML-дампах из `scratch/`.
 
 ### 14.3 systemd на сервере
-```ini
-# /etc/systemd/system/zbot.service
-[Unit]
-Description=Zbot Telegram Schedule Service
-After=network.target
-
-[Service]
-Type=simple
-User=root
-WorkingDirectory=/opt/zbot
-ExecStart=/usr/bin/npm run start
-Restart=always
-RestartSec=5
-EnvironmentFile=/opt/zbot/.env
-StandardOutput=journal
-StandardError=journal
-
-[Install]
-WantedBy=multi-user.target
-```
+Готовые файлы лежат в репозитории: `deploy/zbot.service` и `deploy/journald.conf`.
 ```bash
+npm ci && npm run build
+cp deploy/zbot.service /etc/systemd/system/zbot.service
+mkdir -p /etc/systemd/journald.conf.d
+cp deploy/journald.conf /etc/systemd/journald.conf.d/zbot.conf
 systemctl daemon-reload
 systemctl enable --now zbot
 systemctl status zbot
 ```
+Ключевые отличия от «наивного» юнита, важные для VPS с 512 МБ RAM:
+- `ExecStart=/usr/bin/node --max-old-space-size=256 dist/bot.js` — запуск собранного
+  бандла (не `npm run start`), с явным потолком кучи V8. Без флага Node подбирает
+  лимит по объёму RAM, и процесс убивает ядро через OOM-killer — в журнале остаётся
+  только «Killed» без причины. С флагом V8 останавливает процесс сам на RSS ~300 МБ
+  с `FATAL ERROR: ... JavaScript heap out of memory`, то есть причина видна.
+- `MemoryMax=400M` — предохранитель cgroup, сработает только если V8-потолок
+  почему-то не спас. Выше пикового RSS бота, но ниже 512 МБ физ. памяти.
+- `StartLimitIntervalSec=300` / `StartLimitBurst=5` — защита от бесконечного
+  цикла «упал → перезапустился → упал», который на 512 МБ рано или поздно
+  выедает весь VPS.
+- `Restart=always` + `RestartSec=10` оставлены как были: для long polling
+  `on-failure` хуже — процесс может завершиться штатно, и polling встанет.
+- `SystemMaxUse=200M` в journald — падение не должно стираться следующим рестартом.
 
 ---
 
