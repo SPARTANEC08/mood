@@ -317,7 +317,8 @@ export async function checkUser(
   });
 
   // Снимок обновляем всегда: даже если отправка не удалась, повторно не нотифицируем.
-  snapshotStore.save(user.telegramId, next);
+  // Запись идёт в память: на диск всё сбрасывается одним save() в конце круга.
+  snapshotStore.stage(user.telegramId, next);
 
   if (events.length > 0 && sender) {
     try {
@@ -414,8 +415,21 @@ export async function runCycle(): Promise<void> {
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`[Notifier] Цикл прерван, переносим на следующий круг: ${msg}`);
   } finally {
+    // Единственная запись bars_snapshots.json за круг, независимо от числа
+    // пользователей и от того, чем закончился круг. Несохранённые снимки при
+    // падении процесса привели бы к повторным уведомлениям на следующем круге.
+    snapshotStore.flush();
     isCycleRunning = false;
   }
+}
+
+/**
+ * Сбрасывает накопленные снимки при остановке процесса.
+ * Вызывается из telegramService по SIGTERM/SIGINT, чтобы systemd-рестарт
+ * не приводил к повторной рассылке уже отправленных уведомлений.
+ */
+export function flushSnapshots(): void {
+  snapshotStore.flush();
 }
 
 /**

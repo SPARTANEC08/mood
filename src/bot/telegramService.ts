@@ -10,7 +10,7 @@ import { ImportantMessage, importantStore } from '../storage/importantStore.ts';
 import { userStore } from '../storage/userStore.ts';
 import { formatDisplayDate } from '../utils/time.ts';
 import { setAuthFlowListener } from './authFlow.ts';
-import { setNotificationSender, startNotifier } from '../services/notifications/barsNotifier.ts';
+import { flushSnapshots, setNotificationSender, startNotifier } from '../services/notifications/barsNotifier.ts';
 import { esc, toneButton } from './format.ts';
 import { processTelegramCallback, processTelegramMessage } from './botEngine.ts';
 
@@ -690,6 +690,16 @@ export async function initTelegramBot(): Promise<void> {
     // Фоновый мониторинг БАРС/ОСЭП живёт в процессе бота, но не зависит от него:
     // любые сбои сети глушатся внутри воркера.
     startNotifier();
+
+    // systemd шлёт SIGTERM при остановке/рестарте. Без этого снимки,
+    // накопленные в памяти с последнего круга, потерялись бы, и после
+    // рестарта бот повторно прислал бы уже отправленные уведомления.
+    for (const signal of ['SIGTERM', 'SIGINT'] as const) {
+      process.once(signal, () => {
+        flushSnapshots();
+        process.exit(0);
+      });
+    }
 
     bot.start({
       onStart: (info) => {

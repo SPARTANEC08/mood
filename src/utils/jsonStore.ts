@@ -41,10 +41,26 @@ export class JsonStore<T> {
   }
 
   delete(key: string | number): T | undefined {
+    const removed = this.remove(key);
+    if (removed !== undefined) this.save();
+    return removed;
+  }
+
+  /**
+   * Кладёт значение в кэш без записи на диск. Сброс — через save().
+   * Нужен там, где за один проход накапливается много изменений одного файла.
+   */
+  stage(key: string | number, value: T): void {
+    this.all()[String(key)] = value;
+  }
+
+  /**
+   * Удаляет ключ из кэша без записи на диск. Сброс — через save().
+   */
+  remove(key: string | number): T | undefined {
     const existing = this.all()[String(key)];
     if (existing !== undefined) {
       delete this.all()[String(key)];
-      this.save();
     }
     return existing;
   }
