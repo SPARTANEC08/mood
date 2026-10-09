@@ -1,5 +1,4 @@
-import { fetchScheduleFromMpei } from '../parser/mpeiApi.ts';
-import { parseSchedule } from '../parser/scheduleParser.ts';
+import { clearScheduleCache, getGroupSchedule } from './scheduleCache.ts';
 import { ParsedSchedule } from '../parser/types.ts';
 import { HomeworkRecord, homeworkStore, TelegramFileRef } from '../storage/homeworkStore.ts';
 import { ImportantMessage, importantStore } from '../storage/importantStore.ts';
@@ -76,33 +75,7 @@ export interface ProcessMessageResult {
   deletedChannelMessageIds?: number[];
 }
 
-const scheduleCache = new Map<string, { schedule: ParsedSchedule; timestamp: number }>();
-const CACHE_TTL = 3 * 60 * 1000; // 3 минуты
-
 const waitingForImportantText = new Set<number>();
-
-export function clearScheduleCache(groupId?: number) {
-  if (groupId) {
-    scheduleCache.delete(`group_${groupId}`);
-  } else {
-    scheduleCache.clear();
-  }
-}
-
-function getScheduleDateRange(): { start: string; finish: string } {
-  const now = new Date();
-  const start = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
-  const finish = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000);
-
-  const fmt = (d: Date) => {
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${y}.${m}.${day}`;
-  };
-
-  return { start: fmt(start), finish: fmt(finish) };
-}
 
 export async function getCachedSchedule(user: TelegramUser): Promise<ParsedSchedule> {
   if (typeof user.groupId !== 'number' || user.groupId <= 0) {
@@ -112,23 +85,7 @@ export async function getCachedSchedule(user: TelegramUser): Promise<ParsedSched
     throw new Error('Название группы не определено.');
   }
 
-  const cacheKey = `group_${user.groupId}`;
-  const now = Date.now();
-  const cached = scheduleCache.get(cacheKey);
-
-  if (cached && now - cached.timestamp < CACHE_TTL) {
-    return cached.schedule;
-  }
-
-  const rawLessons = await fetchScheduleFromMpei(user.groupId, getScheduleDateRange());
-  const parsed = parseSchedule(rawLessons, {
-    id: user.groupId,
-    label: user.groupName,
-    description: user.faculty,
-  });
-
-  scheduleCache.set(cacheKey, { schedule: parsed, timestamp: now });
-  return parsed;
+  return getGroupSchedule(user.groupId, user.groupName, user.faculty);
 }
 
 function buildAddHwInstructionView(): { text: string; keyboard: InlineButton[][] } {
