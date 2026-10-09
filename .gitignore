@@ -1,0 +1,35 @@
+# Секреты — никогда не в git
+.env
+.env.*
+!.env.example
+*.env.vps
+bars-session-debug.json
+.bars-session-debug.json
+.bars-debug-*.html
+.bars-debug-*.json
+
+# Данные бота: персональные, с зашифрованными кредями БАРС
+data/
+
+# Бэкапы с VPS (содержат .env и данные пользователей)
+backup_vps/
+
+# Зависимости
+node_modules/
+venv/
+__pycache__/
+
+# Отладочные дампы и черновики
+scratch/
+
+# Эксперименты на aiogram: внутри захардкожен реальный токен бота.
+# Перед коммитом токен нужно отозвать через @BotFather и вычистить из файлов.
+52.py
+67.py
+
+# Сборка
+dist/
+
+# Служебное
+.DS_Store
+*.log

@@ -1,0 +1,48 @@
+{
+  "name": "zbot",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "tsx bot.ts",
+    "bot": "tsx bot.ts",
+    "dev": "tsx watch bot.ts",
+    "reset:users": "tsx scripts/reset-users.ts",
+    "test:flow": "tsx scripts/test-auth-flow.ts",
+    "test:notifier": "tsx scripts/test-notifier.ts",
+    "test:html": "tsx scripts/test-html-views.ts",
+    "check:files": "tsx scripts/check-files.ts",
+    "test:all": "tsx scripts/test-auth-flow.ts && tsx scripts/test-notifier.ts && tsx scripts/test-grades-calc.ts",
+    "test:grades-calc": "tsx scripts/test-grades-calc.ts",
+    "preview": "tsx scripts/preview-views.ts",
+    "test:auth": "tsx scripts/test-bars-auth.ts",
+    "test:client": "tsx scripts/test-bars-client.ts",
+    "test:grades": "tsx scripts/test-grades.ts",
+    "test:attendance": "tsx scripts/test-attendance.ts",
+    "test:info": "tsx scripts/test-info.ts",
+    "test:scraper": "tsx scripts/test-bars-scraper.ts",
+    "test:scraper:login": "tsx scripts/test-bars-scraper.ts --login",
+    "test:mail": "tsx scripts/test-mail-auth.ts",
+    "test:mail:fetch": "tsx scripts/test-mail-fetch.ts",
+    "test:mail:osep": "tsx scripts/test-osep-mail.ts",
+    "lint": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@types/tough-cookie": "^4.0.5",
+    "axios": "^1.20.0",
+    "axios-cookiejar-support": "^6.0.5",
+    "cheerio": "^1.2.0",
+    "dotenv": "^17.2.3",
+    "grammy": "^1.46.0",
+    "imapflow": "^2.2.8",
+    "mailparser": "^3.9.36",
+    "tough-cookie": "^6.0.2",
+    "tsx": "^4.21.0"
+  },
+  "devDependencies": {
+    "@types/imapflow": "^1.0.23",
+    "@types/mailparser": "^3.9.0",
+    "@types/node": "^22.14.0",
+    "typescript": "^5.6.0"
+  }
+}
