@@ -5,6 +5,7 @@ import { HomeworkRecord, homeworkStore, TelegramFileRef } from '../storage/homew
 import { ImportantMessage, importantStore } from '../storage/importantStore.ts';
 import { isBarsAuthorized, TelegramUser, userStore } from '../storage/userStore.ts';
 import { OsepMailClient } from '../services/mail/osepMailClient.js';
+import { markActive } from '../services/notifications/pollSchedule.js';
 import { SessionExpiredError } from '../services/bars/barsClient.js';
 import { formatDisplayDate } from '../utils/time.ts';
 import { b, code, esc, i, quote, RULE, toneButton, truncate } from './format.ts';
@@ -269,6 +270,10 @@ export async function processTelegramMessage(
   const lower = text.toLowerCase();
   const existingUser = userStore.get(sender.id);
   const authorName = [sender.firstName, sender.lastName].filter(Boolean).join(' ') || sender.username || 'Студент';
+
+  // Активность определяет частоту фонового опроса: не заходил дольше 48 ч —
+  // нотификатор опрашивает его источники в 18 раз реже.
+  markActive(sender.id);
 
   // 0. Гейт авторизации: без входа в БАРС расписание и сервисы недоступны
   if (!isBarsAuthorized(existingUser)) {
@@ -673,6 +678,7 @@ export async function processTelegramCallback(
   callbackData: string
 ): Promise<ProcessMessageResult> {
   const storedUser = userStore.get(sender.id);
+  markActive(sender.id);
 
   // Гейт авторизации: клик без входа в БАРС возвращает на экран логина
   if (!isBarsAuthorized(storedUser)) {

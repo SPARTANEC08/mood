@@ -19,6 +19,13 @@ import {
 import { encrypt } from '../src/utils/crypto.js';
 import { userStore } from '../src/storage/userStore.js';
 import { snapshotStore } from '../src/storage/snapshotStore.js';
+import {
+  dueSources,
+  forget,
+  markActive,
+  markChecked,
+  resetSchedule,
+} from '../src/services/notifications/pollSchedule.js';
 
 const TEST_ID = 998_777_666;
 
@@ -233,6 +240,69 @@ async function run(): Promise<void> {
 
   userStore.remove(TEST_ID);
   check('пользователь удалён', userStore.get(TEST_ID) === undefined);
+
+  section('График частот опроса');
+  const sid = 555_000_111;
+  resetSchedule();
+
+  check('первый круг: пора опросить всё', dueSources(sid).length === 3);
+  markChecked(sid, ['mail', 'grades', 'info']);
+  check('сразу после проверки: не пора ни разу', dueSources(sid).length === 0);
+
+  check(
+    'через 19 минут ещё не пора',
+    dueSources(sid, new Date(Date.now() + 19 * 60_000)).length === 0,
+  );
+  check(
+    'через 21 минуту пора',
+    dueSources(sid, new Date(Date.now() + 21 * 60_000)).length === 3,
+  );
+
+  // Адаптивность: давно не заходивший пользователь опрашивается реже.
+  // markActive идёт после resetSchedule: сброс очищает и активность тоже.
+  resetSchedule();
+  markActive(sid, new Date(Date.now() - 10 * 24 * 60 * 60_000));
+  markChecked(sid, ['mail', 'grades', 'info']);
+  const dormant1h = dueSources(sid, new Date(Date.now() + 60 * 60_000)).length;
+  const dormant7h = dueSources(sid, new Date(Date.now() + 7 * 60 * 60_000)).length;
+  check('спящий пользователь: через час не пора', dormant1h === 0, `получено ${dormant1h}`);
+  check('спящий пользователь: через 7 часов пора', dormant7h === 3, `получено ${dormant7h}`);
+
+  // Активный пользователь сутки не заходил — частота прежняя
+  resetSchedule();
+  markActive(sid, new Date(Date.now() - 20 * 60 * 60_000));
+  markChecked(sid, ['mail', 'grades', 'info']);
+  check(
+    'заходивший вчера: через час пора как обычно',
+    dueSources(sid, new Date(Date.now() + 60 * 60_000)).length === 3,
+  );
+
+  forget(sid);
+  check('forget() сбрасывает график', dueSources(sid).length === 3);
+  resetSchedule();
+
+  section('Пропущенный источник не обнуляет снимок');
+  const keptPrev = baseSnapshot({
+    gradesHash: { A_КТ1: 4 },
+    lastSeenMailUid: 777,
+    ordersCount: 9,
+    scholarshipStatus: 'нет',
+  });
+  // Круг, на котором БАРС не опрашивался: state со всеми null
+  const merged: UserSnapshot = {
+    gradesHash: keptPrev.gradesHash,
+    lastSeenMailUid: keptPrev.lastSeenMailUid,
+    ordersCount: keptPrev.ordersCount,
+    scholarshipStatus: keptPrev.scholarshipStatus,
+    lastCheckedAt: new Date().toISOString(),
+  };
+  check('оценки сохранены', merged.gradesHash['A_КТ1'] === 4);
+  check('UID почты сохранён', merged.lastSeenMailUid === 777);
+  check('число приказов сохранено', merged.ordersCount === 9);
+  check(
+    'дифф по неизменённому снимку пуст (нет ложных уведомлений)',
+    diffSnapshots(keptPrev, merged).length === 0,
+  );
 
   console.log('\n====================================================');
   console.log(`ИТОГО: ✅ ${passed} / ❌ ${failed}`);

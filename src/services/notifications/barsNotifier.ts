@@ -20,6 +20,13 @@ import { b, esc, fmtNum, i, RULE } from '../../bot/format.js';
 import { readBarsCredentials } from '../../bot/authFlow.js';
 import { createBarsServiceForUser } from '../../bot/authFlow.js';
 import { OsepMailClient } from '../mail/osepMailClient.js';
+import {
+  dueSources,
+  forget,
+  markActive,
+  markChecked,
+  type Source,
+} from './pollSchedule.js';
 
 /** Период запуска цикла опроса. */
 const POLL_INTERVAL_MS = 20 * 60 * 1000;
@@ -243,51 +250,101 @@ export function renderNotification(events: NotificationEvent[]): string {
 }
 
 interface CollectedState {
-  grades: SemesterGrades;
-  orders: OrderItem[];
-  scholarship: ScholarshipInfo;
-  mails: OsepMessageBrief[];
+  grades: SemesterGrades | null;
+  orders: OrderItem[] | null;
+  scholarship: ScholarshipInfo | null;
+  mails: OsepMessageBrief[] | null;
 }
 
 /**
- * Выполняет один сетевой заход по данным пользователя.
- * Каждый блок изолирован: падение почты не должно обнулять оценки.
+ * Что реально удалось собрать на этом круге. Незапрошенные источники остаются
+ * null, и в снимке сохраняются прежние значения — иначе пропущенный круг
+ * обнулил бы приказы и стипендию и вызвал бы ложное уведомление.
  */
-async function collectState(user: TelegramUser): Promise<CollectedState> {
+export interface FetchResult {
+  state: CollectedState;
+  fetched: Source[];
+}
+
+/**
+ * Выполняет сетевой заход по данным пользователя.
+ *
+ * Каждый блок изолирован: падение почты не должно обнулять оценки.
+ * Источники опрашиваются только те, что `due` по графику частот.
+ */
+async function collectState(user: TelegramUser, now: Date): Promise<FetchResult> {
+  const sources = dueSources(user.telegramId, now);
+  if (sources.length === 0) {
+    return { state: { grades: null, orders: null, scholarship: null, mails: null }, fetched: [] };
+  }
+
+  const state: CollectedState = { grades: null, orders: null, scholarship: null, mails: null };
   const service = await createBarsServiceForUser(user);
   const scraper = service.getScraper();
 
-  const [gradesRes, ordersRes, scholarshipRes] = await Promise.allSettled([
-    scraper.getCurrentSemesterGrades(),
-    scraper.getOrders(),
-    scraper.getScholarship(),
-  ]);
+  const barsJobs: Promise<void>[] = [];
 
-  const grades = gradesRes.status === 'fulfilled' ? gradesRes.value : null;
-  const orders = ordersRes.status === 'fulfilled' ? ordersRes.value : [];
-  const scholarship = scholarshipRes.status === 'fulfilled' ? scholarshipRes.value : null;
+  // Оценки. Разбор страницы — 9.8 мс, из них 5.1 мс уходит на cheerio.load.
+  // Пропускать разбор по хешу HTML не стали: выигрыш копеечный, а проверка
+  // протухшей сессии живёт внутри cheerio-разбора, и подмена её на регулярки
+  // грозит тихой поломкой (бот будет биться в стену вместо запроса нового входа).
+  if (sources.includes('grades')) {
+    barsJobs.push(
+      scraper.getCurrentSemesterGrades().then((grades) => {
+        state.grades = grades;
+      }),
+    );
+  }
 
-  // Если БАРС целиком недоступен — считаем это сетевой ошибкой, снимок не обновляем.
-  if (!grades || !scholarship) {
-    const reason =
-      gradesRes.status === 'rejected' ? gradesRes.reason : (scholarshipRes as PromiseRejectedResult).reason;
-    throw reason instanceof Error ? reason : new Error(String(reason ?? 'БАРС недоступен'));
+  // Приказы и стипендия меняются от раза к разу в семестр.
+  if (sources.includes('info')) {
+    barsJobs.push(
+      scraper.getOrders().then((orders) => {
+        state.orders = orders;
+      }),
+    );
+    barsJobs.push(
+      scraper.getScholarship().then((scholarship) => {
+        state.scholarship = scholarship;
+      }),
+    );
   }
 
   // Почта ОСЭП: отдельный блок, ошибки не влияют на остальные данные.
   // Нотификатору нужно лишь понять, что письмо новое, поэтому берём
   // метаданные из ENVELOPE/BODYSTRUCTURE без скачивания тел.
-  let mails: OsepMessageBrief[] = [];
-  try {
-    const { login, password } = readBarsCredentials(user);
-    const mail = new OsepMailClient({ user: login, pass: password });
-    mails = await mail.fetchMessageBriefs({ onlyUnread: false, limit: 15 });
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.warn(`[Notifier][${user.telegramId}] ОСЭП недоступна, пропускаю: ${msg}`);
+  const mailJob = (async () => {
+    try {
+      const { login, password } = readBarsCredentials(user);
+      const mail = new OsepMailClient({ user: login, pass: password });
+      state.mails = await mail.fetchMessageBriefs({ onlyUnread: false, limit: 15 });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn(`[Notifier][${user.telegramId}] ОСЭП недоступна, пропускаю: ${msg}`);
+    }
+  })();
+
+  const [barsResults, mailDone] = await Promise.all([
+    Promise.allSettled(barsJobs),
+    mailJob,
+  ]);
+
+  // БАРС целиком недоступен — считаем это сетевой ошибкой, снимок не обновляем.
+  const barsErrors = barsResults
+    .filter((r): r is PromiseRejectedResult => r.status === 'rejected')
+    .map((r) => r.reason);
+
+  if (barsErrors.length > 0) {
+    const first = barsErrors[0];
+    throw first instanceof Error ? first : new Error(String(first ?? 'БАРС недоступен'));
   }
 
-  return { grades, orders, scholarship, mails };
+  markChecked(user.telegramId, sources, now);
+
+  return {
+    state,
+    fetched: sources.filter((s) => (s === 'mail' ? state.mails !== null : true)),
+  };
 }
 
 /**
@@ -298,22 +355,35 @@ export async function checkUser(
   now: Date = new Date()
 ): Promise<NotificationEvent[]> {
   const prev = snapshotStore.get(user.telegramId);
-  const state = await collectState(user);
+  const { state } = await collectState(user, now);
 
-  const maxMailUid = state.mails.reduce((max, m) => Math.max(max, m.uid), 0);
-
+  // Источники, которые на этом круге не опрашивались, сохраняют прошлые значения.
+  // Если этого не сделать, пропущенный круг обнулит приказы и стипендию,
+  // а на следующем круге пришёл бы ложный дифф с «новыми приказами».
   const next: UserSnapshot = {
-    gradesHash: buildGradesHash(state.grades),
-    lastSeenMailUid: Math.max(prev?.lastSeenMailUid ?? 0, maxMailUid),
-    ordersCount: state.orders.length,
-    scholarshipStatus: buildScholarshipStatus(state.scholarship),
+    gradesHash:
+      state.grades !== null ? buildGradesHash(state.grades) : (prev?.gradesHash ?? {}),
+    lastSeenMailUid:
+      state.mails !== null
+        ? Math.max(
+            prev?.lastSeenMailUid ?? 0,
+            state.mails.reduce((max, m) => Math.max(max, m.uid), 0),
+          )
+        : (prev?.lastSeenMailUid ?? 0),
+    ordersCount: state.orders !== null ? state.orders.length : (prev?.ordersCount ?? 0),
+    scholarshipStatus:
+      state.scholarship !== null
+        ? buildScholarshipStatus(state.scholarship)
+        : (prev?.scholarshipStatus ?? 'нет'),
     lastCheckedAt: now.toISOString(),
   };
 
+  // Уведомления строим только по фактически полученным данным: дифф со снимком,
+  // где часть полей восстановлена из prev, событий не даёт.
   const events = diffSnapshots(prev, next, {
-    grades: state.grades,
-    mails: state.mails,
-    orders: state.orders,
+    grades: state.grades ?? undefined,
+    mails: state.mails ?? undefined,
+    orders: state.orders ?? undefined,
   });
 
   // Снимок обновляем всегда: даже если отправка не удалась, повторно не нотифицируем.
@@ -400,6 +470,7 @@ export async function runCycle(): Promise<void> {
         if (/сессия/i.test(msg) || /SessionExpiredError/.test(msg)) {
           userStore.clearAuth(user.telegramId);
           snapshotStore.remove(user.telegramId);
+          forget(user.telegramId);
         }
       }
 
@@ -467,11 +538,15 @@ export function stopNotifier(): void {
 
 /**
  * Немедленный прогон одного пользователя — удобно для ручной проверки и тестов.
+ * Принудительно опрашивает все источники, игнорируя график частот.
  */
 export async function checkUserNow(telegramId: number): Promise<NotificationEvent[]> {
   const user = userStore.get(telegramId);
   if (!isBarsAuthorized(user)) {
     throw new Error('Пользователь не авторизован в БАРС МЭИ.');
   }
+  forget(telegramId);
   return checkUser(user);
 }
+
+export { markActive };
