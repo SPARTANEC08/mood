@@ -32,12 +32,20 @@ const store = new JsonStore<UserSnapshot>('bars_snapshots.json');
 let dirty = false;
 
 export const snapshotStore = {
-  get(telegramId: number): UserSnapshot | undefined {
-    return store.get(telegramId);
+  /**
+   * Снимок по userId, а не по Telegram ID.
+   *
+   * Уведомления ходят в Telegram, но состояние БАРС общее для обоих клиентов,
+   * и ключ по телеграму приводил к тому, что один и тот же человек, вошедший
+   * и в бота, и в PWA, числился двумя разными проверяемыми. Снимок по userId
+   * закрывает это: один человек — один снимок, одна проверка за круг.
+   */
+  get(userId: string): UserSnapshot | undefined {
+    return store.get(userId);
   },
 
-  save(telegramId: number, snapshot: UserSnapshot): void {
-    store.set(telegramId, snapshot);
+  save(userId: string, snapshot: UserSnapshot): void {
+    store.set(userId, snapshot);
     dirty = false;
   },
 
@@ -50,8 +58,8 @@ export const snapshotStore = {
    * Теперь изменения копятся в памяти, а на диск сбрасываются одним flush()
    * в конце круга (см. barsNotifier.runCycle).
    */
-  stage(telegramId: number, snapshot: UserSnapshot): void {
-    store.stage(telegramId, snapshot);
+  stage(userId: string, snapshot: UserSnapshot): void {
+    store.stage(userId, snapshot);
     dirty = true;
   },
 
@@ -62,8 +70,8 @@ export const snapshotStore = {
     dirty = false;
   },
 
-  remove(telegramId: number): UserSnapshot | undefined {
-    const removed = store.remove(telegramId);
+  remove(userId: string): UserSnapshot | undefined {
+    const removed = store.remove(userId);
     dirty = false;
     return removed;
   },
@@ -76,11 +84,11 @@ export const snapshotStore = {
   /**
    * Возвращает снимки всех пользователей, у которых есть хотя бы одна проверка.
    */
-  checked(): Map<number, UserSnapshot> {
-    const out = new Map<number, UserSnapshot>();
+  checked(): Map<string, UserSnapshot> {
+    const out = new Map<string, UserSnapshot>();
     for (const [key, value] of Object.entries(store.all())) {
       if (value && value.lastCheckedAt) {
-        out.set(Number(key), value);
+        out.set(key, value);
       }
     }
     return out;

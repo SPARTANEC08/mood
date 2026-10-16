@@ -1,5 +1,7 @@
 import * as cheerio from 'cheerio';
 
+import { cleanText } from './shared.ts';
+
 /**
  * Одна пропущенная пара в МЭИ равна 2 академическим часам.
  * БАРС в таблице пропусков отдаёт количество ЗАНЯТИЙ, а не часов,
@@ -38,17 +40,6 @@ export interface AttendanceSummary {
   totalUnexcused: number;
   bySubject: SubjectAttendance[];
   lastUpdated?: string;
-}
-
-/**
- * Очищает текст от &nbsp;, неразрывных пробелов и множественных пробельных символов.
- */
-function cleanText(text: string): string {
-  return text
-    .replace(/&nbsp;/g, ' ')
-    .replace(/\u00a0/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
 }
 
 /**

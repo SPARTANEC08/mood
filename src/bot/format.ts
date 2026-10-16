@@ -1,82 +1,21 @@
 /**
- * Форматирование текста и кнопок для Telegram.
+ * Форматирование текста для Telegram.
  *
  * Всё сообщение отправляется в HTML-режиме: это единственный способ получить
  * настоящие цитаты (<blockquote>) и сворачиваемые блоки (<blockquote expandable>).
  * Любой пользовательский текст обязательно проходит через esc().
- */
-
-import type { InlineButton } from './scheduleView.js';
-
-/**
- * Стиль кнопки. Telegram поддерживает ровно три цвета:
- * danger — красный, success — зелёный, primary — синий.
- * Если стиль не указан, клиент рисует кнопку в своём дефолтном виде.
- */
-export type ButtonStyle = 'danger' | 'success' | 'primary';
-
-/**
- * Тема кнопки. Хранится именно смысл, а не цвет: один и тот же смысл
- * может выглядеть по-разному в разных экранах.
- */
-export type Tone =
-  // Типы занятий в расписании
-  | 'lecture'
-  | 'practice'
-  | 'lab'
-  | 'lunch'
-  // Сервисы
-  | 'grades'
-  | 'mail'
-  | 'homework'
-  | 'important'
-  | 'attendance'
-  | 'library'
-  | 'orders'
-  | 'session'
-  | 'more'
-  // Навигация и действия
-  | 'back'
-  | 'logout'
-  | 'neutral';
-
-/**
- * Соответствие тона и реального цвета Telegram.
  *
- * Правила цветов:
- * - лекции — синие, практики — красные, лабораторные — синие, обед — зелёный;
- * - сервисы чередуют синий и зелёный, чтобы ряд читался;
- * - навигация внутри экрана — синяя;
- * - красный закреплён только за «выйти» и «назад».
+ * Про кнопки. Их сборки здесь больше нет: пока бот был интерфейсом, здесь была
+ * палитра из семнадцати тонов («лекция», «выйти», «обед»…) и их отображение в
+ * три цвета Telegram. Бот стал push-каналом с тремя экранами, и палитра из
+ * семнадцати значений на три кнопки стала балластом — кнопки теперь
+ * собираются прямо в pwaView.ts, где видно, какие они вообще есть.
+ *
+ * RULE при этом остался: он нужен barsNotifier для пуш-уведомлений, и формат
+ * уведомлений менять нельзя.
  */
-const TONE_STYLE: Record<Tone, ButtonStyle | undefined> = {
-  lecture: 'primary',
-  practice: 'danger',
-  lab: 'primary',
-  lunch: 'success',
 
-  grades: 'primary',
-  mail: 'success',
-  homework: 'primary',
-  important: 'success',
-  attendance: 'primary',
-  library: 'success',
-  orders: 'primary',
-  session: 'success',
-  more: 'primary',
-
-  back: 'danger',
-  logout: 'danger',
-  neutral: undefined,
-};
-
-/**
- * Кнопка с цветом Telegram.
- */
-export function toneButton(text: string, tone: Tone, callbackData: string): InlineButton {
-  const style = TONE_STYLE[tone];
-  return style ? { text, callback_data: callbackData, style } : { text, callback_data: callbackData };
-}
+import { randomUUID } from 'node:crypto';
 
 /**
  * Экранирование текста для HTML-режима Telegram.
@@ -120,7 +59,16 @@ export function code(value: string): string {
  * атрибута и сломали разметку сообщения.
  */
 export function link(url: string, text: string): string {
-  const safeUrl = String(url).trim().replace(/["'\s<>]/g, '');
+  let parsed: URL;
+  try {
+    parsed = new URL(String(url).trim());
+  } catch {
+    return esc(text);
+  }
+
+  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return esc(text);
+
+  const safeUrl = parsed.href.replace(/["'\s<>]/g, '');
   return `<a href="${safeUrl}">${esc(text)}</a>`;
 }
 
@@ -147,11 +95,55 @@ export function joinBlocks(blocks: (string | undefined)[]): string {
 }
 
 /**
+ * Идентификатор записи для callback_data.
+ *
+ * Раньше здесь был `Date.now().toString(36) + Math.random().toString(36).slice(2, 6)`:
+ * метка времени полностью предсказуема, оставалось всего 36^4 ≈ 1.7 млн вариантов
+ * на запись, что делало перебор чужих записей тривиальным. Теперь 122 бита из
+ * crypto.randomUUID — подобрать нельзя, а проверка группы всё равно остаётся
+ * основной защитой.
+ */
+export function makeRecordId(prefix: 'hw' | 'imp'): string {
+  return `${prefix}_${randomUUID()}`;
+}
+
+/**
+ * Разделяет текст на части и убирает повторы подряд идущих пробелов/переносов.
+ */
+export function collapseWhitespace(value: string): string {
+  return (value || '').replace(/\s+/g, ' ').trim();
+}
+
+/**
  * Сокращает строку по длине, обрезая многоточием.
  */
 export function truncate(value: string, max: number): string {
-  const clean = (value || '').replace(/\s+/g, ' ').trim();
+  const clean = collapseWhitespace(value);
   return clean.length > max ? `${clean.slice(0, max - 1)}…` : clean;
+}
+
+/**
+ * Приводит текст ошибки к тому, что можно показать пользователю в Telegram.
+ *
+ * Сырые сообщения axios и imapflow содержат внутренние детали: хосты, порты,
+ * пути, имена параметров, иногда фрагменты учётных данных. Пользователю они
+ * ничего не дают, поэтому адреса и пути заменяются на заглушку, а сообщение
+ * обрезается. Подробности остаются в логе на стороне сервера.
+ */
+export function safeErrorMessage(err: unknown, max: number = 200): string {
+  const raw = err instanceof Error ? err.message : String(err ?? '');
+
+  const cleaned = raw
+    // URL целиком и «host:port»
+    .replace(/\b[a-z][a-z0-9+.-]*:\/\/\S+/gi, 'адрес')
+    .replace(/\b[\w.-]+:\d{2,5}\b/g, 'адрес')
+    // unix/относительные пути
+    .replace(/(?:\/[\w.-]+){2,}/g, 'путь')
+    // почта и похожие на токены длинные строки
+    .replace(/\b[\w.+-]+@[\w.-]+\.[a-z]{2,}\b/gi, 'адрес')
+    .replace(/\b[A-Za-z0-9_-]{40,}\b/g, '…');
+
+  return truncate(cleaned, max);
 }
 
 /**

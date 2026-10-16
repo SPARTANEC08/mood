@@ -2,6 +2,20 @@ import { MpeiRawLesson, MpeiSearchResult } from './types.ts';
 
 const MPEI_DIRECT_API = 'https://ts.mpei.ru/api';
 
+/**
+ * Предел времени на запрос к ts.mpei.ru.
+ *
+ * Без него fetch ждёт бесконечно, а это единственный поход во внешний сервис,
+ * который происходит ВНУТРИ входа (поиск группы по названию из БАРС). Итог был
+ * такой: пароль верный, БАРС ответил, а человек смотрит на «Проверяем…», пока
+ * портал РУЗ не отпустит соединение — а на медленной мобильной сети это минуты,
+ * на лежащем портале — десятки минут.
+ *
+ * Двадцать секунд — с запасом на медленный канал: за это время нормальный ответ
+ * успевает прийти, а «висок» обрывается и превращается в понятное сообщение.
+ */
+const MPEI_TIMEOUT_MS = 20_000;
+
 export function getApiBaseUrl(): string {
   return MPEI_DIRECT_API;
 }
@@ -160,6 +174,7 @@ async function fetchSearchResults(term: string, apiBase: string): Promise<MpeiSe
       headers: {
         Accept: 'application/json',
       },
+      signal: AbortSignal.timeout(MPEI_TIMEOUT_MS),
     });
 
     if (!res.ok) {
@@ -209,6 +224,7 @@ export async function fetchScheduleFromMpei(
       headers: {
         Accept: 'application/json',
       },
+      signal: AbortSignal.timeout(MPEI_TIMEOUT_MS),
     });
 
     if (!res.ok) {

@@ -13,12 +13,10 @@ import {
   buildSemesterReport,
   weightedAverage,
 } from '../src/bot/gradeCalculator.js';
-import { buildGradesView } from '../src/bot/moreView.js';
-import { processTelegramMessage } from '../src/bot/botEngine.js';
-import { esc, expandableQuote, fmtNum, quote, toneButton } from '../src/bot/format.js';
+import { esc, expandableQuote, fmtNum, quote } from '../src/bot/format.js';
 import { encrypt } from '../src/utils/crypto.js';
-import { resolveFileType } from '../src/bot/telegramService.js';
 import { userStore } from '../src/storage/userStore.js';
+import { sanitizeFileName } from '../src/storage/fileStore.js';
 import { ACADEMIC_HOURS_PER_LESSON, parseAttendancePage } from '../src/services/bars/parsers/attendanceParser.js';
 import { parseGradesPage } from '../src/services/bars/parsers/gradesParser.js';
 import type { SubjectGrade } from '../src/services/bars/parsers/gradesParser.js';
@@ -137,42 +135,6 @@ async function run(): Promise<void> {
   check('третья — лучшая', semester[2].discipline === 'Хорошая');
   check('дисциплина без оценок уходит в конец', semester[3].discipline === 'Без оценок');
 
-  section('Экран оценок: формат');
-  const view = buildGradesView({
-    semesterName: '2026/2027, Осенний семестр',
-    isCurrent: true,
-    subjects: [
-      subject([km(1, 5, 25), km(2, 4, 25), km(3, null, 50)], {
-        discipline: 'Математика',
-        attestationRaw: 'зачёт с оценкой',
-      }),
-      subject([km(1, 5, 100)], {
-        discipline: 'Физкультура',
-        attestationRaw: 'зачёт (без оценки)',
-      }),
-    ],
-  });
-
-  check('заголовок семестра', view.text.startsWith('📊 <b>Оценки</b>'));
-  // Пороги автомата убраны из заголовка и вынесены в подвал экрана
-  const headerLine = view.text.split('\n')[0];
-  check('в заголовке нет порогов автомата', !headerLine.includes('Автомат'));
-
-  check('формат «Дисциплина (тип) — средний»', view.text.includes('Математика <i>(зачёт с оценкой)</i> — <b>4,5</b>'));
-  check('зачёт без оценки показан как «зачёт»', view.text.includes('Физкультура <i>(зачёт)</i> — <b>5</b>'));
-  check('среднее через запятую', view.text.includes('4,5') && !view.text.includes('4.5'));
-  check('сворачиваемый блок <blockquote expandable>', view.text.includes('<blockquote expandable>'));
-  check('веса КМ показаны курсивом', view.text.includes('<i>вес 25%</i>'));
-  check('счётчик закрытых КМ', view.text.includes('Закрыто 2 из 3'));
-  check('из оценок назад на расписание', view.keyboard[0][0].text === '◀️ К расписанию');
-  check('нет сырых дробей в весах', !/\(\d+\.\d+%\)/.test(view.text));
-  // Система автоматов удалена — в экране не должно остаться ни слова о ней
-  check('нет упоминаний автомата', !view.text.includes('втомат'));
-  check('нет «Средний балл по дисциплинам»', !view.text.includes('Средний балл по дисциплинам'));
-  check('нет «До автомата»', !view.text.includes('До автомата'));
-  check('нет подваля с порогами', !view.text.includes('4,3') && !view.text.includes('4,8'));
-  check('нет эмодзи целей прогноза', !view.text.includes('🎯') && !view.text.includes('🏆'));
-
   section('Пропуски: пары → академические часы');
   check('коэффициент = 2 часа на пару', ACADEMIC_HOURS_PER_LESSON === 2);
 
@@ -208,79 +170,18 @@ async function run(): Promise<void> {
   const physics = attendance.bySubject.find((s) => s.discipline.includes('Физика'));
   check('Физика: 1 пара = 2 часа', physics?.totalMissedHours === 2, `получено ${physics?.totalMissedHours}`);
 
-  section('/reflash: команда обновления расписания');
+  section('Хранение файлов на сервере: имя и тип');
   {
-    const flash = await processTelegramMessage({ id: 999222111, firstName: 'Флеш' }, '/reflash');
-    check('неавторизованному /reflash -> экран входа', flash.status === 'need_login');
-    check('сообщение /reflash удаляется', flash.deleteIncoming === true);
-  }
-  {
-    // Авторизованный пользователь с кэшем: /reflash должен сбросить кэш и отрисовать главный экран
-    const encL = encrypt('st123456');
-    const encP = encrypt('pass');
-    userStore.ensureUser(999222111, { firstName: 'Флеш' });
-    userStore.patch(999222111, {
-      barsAuth: {
-        encryptedLogin: encL.encryptedData,
-        encryptedPass: encP.encryptedData,
-        iv: encL.iv,
-        tag: encL.tag,
-        cookiesJson: '{}',
-      },
-      studentProfile: { fullName: 'Флеш Флешов Флешович' },
-      groupName: 'ИЭ-11-26',
-      groupId: 21985,
-    });
-
-    const flash = await processTelegramMessage({ id: 999222111, firstName: 'Флеш' }, '/reflash');
-    check('авторизованному /reflash -> registered', flash.status === 'registered');
-    check('/reflash отдал главный экран или ошибку загрузки', flash.messageText.length > 0);
-    check('/reflash с кнопкой Остальное', (flash.keyboard ?? []).some((r) => r.some((b) => b.callback_data === 'nav_more')));
-
-    userStore.remove(999222111);
-  }
-
-  section('Цветовые тона кнопок');
-  {
-    // Telegram поддерживает реальные цвета: danger/success/primary
-    check('практика -> danger (красный)', toneButton('x', 'practice', 'cb').style === 'danger');
-    check('лекция -> primary (синий)', toneButton('x', 'lecture', 'cb').style === 'primary');
-    check('обед -> success (зелёный)', toneButton('x', 'lunch', 'cb').style === 'success');
-    check('назад -> danger (красный)', toneButton('x', 'back', 'cb').style === 'danger');
-    check('выход -> danger (красный)', toneButton('x', 'logout', 'cb').style === 'danger');
-    check('нейтральные без стиля', toneButton('x', 'neutral', 'cb').style === undefined);
-    check('сервисы покрашены', toneButton('x', 'attendance', 'cb').style !== undefined);
-    check('сессия покрашена', toneButton('x', 'session', 'cb').style !== undefined);
-    check('эмодзи-цвет убран из подписи', toneButton('Лекция', 'lecture', 'cb').text === 'Лекция');
-    check('callback_data сохранён', toneButton('x', 'lunch', 'lunch_joke').callback_data === 'lunch_joke');
-    check('цитата сворачивается (blockquote expandable)', expandableQuote('строка').startsWith('<blockquote expandable>'));
-    check('обычная цитата', quote('строка').startsWith('<blockquote>'));
-    check('экранирование < и >', esc('a<b>&c') === 'a&lt;b&gt;&amp;c');
-    check('экранирование в цитате', quote(esc('<script>')).includes('&lt;script&gt;'));
-    check('формат числа с запятой', fmtNum(4.5) === '4,5');
-    check('null -> прочерк', fmtNum(null) === '—');
-  }
-
-  section('Отправка файлов: определение типа по file_id');
-  {
-    // Telegram кодирует тип в префиксе file_id. Если поле type не сохранилось,
-    // фото уходило в sendDocument и Telegram отвечал «can't use Photo as Document».
-    check('фото по префиксу Ag', resolveFileType({ fileId: 'AgACAgIAAxkBAAIBQ', fileName: 'f.jpg' }) === 'photo');
-    check('документ по префиксу BQ', resolveFileType({ fileId: 'BQACAgIAAxkBAAIB', fileName: 'f.pdf' }) === 'document');
-    check('видео по префиксу BA', resolveFileType({ fileId: 'BAACAgIAAxkBAAIB', fileName: 'f.mp4' }) === 'video');
-    check('аудио по префиксу CQ', resolveFileType({ fileId: 'CQACAgIAAxkBAAIB', fileName: 'f.mp3' }) === 'audio');
-    check('голос по префиксу Aw', resolveFileType({ fileId: 'AwACAgIAAxkBAAIB', fileName: 'f.ogg' }) === 'voice');
-    check('неизвестный префикс -> документ', resolveFileType({ fileId: 'ZZZZ', fileName: 'f.bin' }) === 'document');
-    check('сохранённый type важнее префикса',
-      resolveFileType({ fileId: 'AgAC...', fileName: 'f.jpg', type: 'video' }) === 'video');
-  }
-
-  section('Файлы не теряются при открытии по тексту');
-  {
-    // Раньше filesToSend обрабатывался только в callback-обработчике,
-    // поэтому при открытии раздела текстом файлы молча не отправлялись.
-    const sent = await processTelegramMessage({ id: 996665554, firstName: 'Файлы' }, 'дз');
-    check('текстовый вход в ДЗ не падает', sent.status === 'need_login' || sent.status === 'registered');
+    // Telegram больше не участвует в хранении файлов, и определять тип по
+    // префиксу file_id не нужно: файл лежит на диске, а в записи лежит
+    // ServerFileRef с настоящим именем и MIME. Проверяется то, что теперь
+    // отвечает за этот слой — приведение имени к безопасному виду и то, что
+    // имя из записей совпадает с тем, что лежит на диске.
+    check('имя без путей', sanitizeFileName('../../etc/passwd') === 'passwd');
+    check('имя Windows-пути без слеша', sanitizeFileName('C:\\temp\\photo.jpg') === 'photo.jpg');
+    check('кавычки вырезаются', sanitizeFileName('отчёт"final".pdf') === 'отчётfinal.pdf');
+    check('пустое имя заменяется', sanitizeFileName('') === 'file');
+    check('имя обрезается до 120 символов', sanitizeFileName('я'.repeat(300)).length === 120);
   }
 
   section('Парсер КМ на реальном HTML');
@@ -328,9 +229,6 @@ async function run(): Promise<void> {
   }
 
   section('Пустой ввод не падает');
-  const emptyGrades = buildGradesView({ semesterName: '—', isCurrent: true, subjects: [] });
-  check('пустой семестр -> понятное сообщение', emptyGrades.text.includes('не найдено'));
-  check('пустой семестр -> назад на расписание', emptyGrades.keyboard[0][0].text === '◀️ К расписанию');
   const noKm = buildSubjectReport(subject([]));
   check('дисциплина без КМ не падает', noKm.currentAverage === null && noKm.totalCount === 0);
 

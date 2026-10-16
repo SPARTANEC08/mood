@@ -1,4 +1,14 @@
-import { JsonStore } from '../utils/jsonStore.ts';
+import { randomUUID } from 'node:crypto';
+
+import { JsonDocument } from '../utils/jsonStore.ts';
+import { computeBarsLoginHash } from '../utils/barsLoginHash.ts';
+import {
+  emptyDocument,
+  nowIso,
+  reindex,
+  resolveUserId,
+  type UsersDocument,
+} from './userStore/indexes.ts';
 
 /**
  * Состояние машины онбординга через БАРС МЭИ.
@@ -30,6 +40,20 @@ export interface BarsAuthData {
 }
 
 /**
+ * Сессия OWA (веб-почта mail.mpei.ru/owa).
+ *
+ * Хранится ОТДЕЛЬНО от `barsAuth`: это другая сессия другого сервиса, и её
+ * истечение/сброс не должны затрагивать БАРС (и наоборот). Креды те же (логин
+ * БАРС), но cookie-сессия своя.
+ */
+export interface OwaAuthData {
+  /** cookies OWA в формате tough-cookie toJSON (строка). */
+  cookiesJson: string;
+  /** Момент сохранения (мс) — для TTL/диагностики. */
+  savedAt: number;
+}
+
+/**
  * Профиль студента, извлеченный из личного кабинета БАРС.
  */
 export interface StudentProfile {
@@ -48,8 +72,50 @@ export interface TempAuthData {
   stepTokens?: Record<string, string>;
 }
 
-export interface TelegramUser {
-  telegramId: number;
+/**
+ * Активный PWA-токен.
+ *
+ * Хранится только хэш: сам токен живёт в localStorage телефона, и в базе он
+ * лежать не должен — иначе утечка файла даёт готовые сессии. Хэш нужен, чтобы
+ * отозвать конкретный токен (выход) и убрать просроченные.
+ */
+export interface PwaTokenRecord {
+  tokenHash: string;
+  createdAt: string;
+  expiresAt: string;
+  lastUsedAt?: string;
+}
+
+/**
+ * Запись пользователя.
+ *
+ * Ключ — userId, а не telegramId, потому что человек может пользоваться
+ * приложением вообще без Telegram: PWA вход идёт по логину БАРС, и телеграм у
+ * такого пользователя может быть чужим или отсутствовать совсем. userId
+ * выдаётся при первом входе где угодно и дальше не меняется.
+ *
+ * telegramId опционален: он есть только у тех, кто подключил уведомления.
+ * Значение null означает «была привязка, теперь её нет» — в отличие от
+ * отсутствующего поля, которое означает «привязки не было никогда». Различие
+ * нужно для переезда между аккаунтами: снять старую привязку и записать новую
+ * должна одна и та же операция, а раз она одна — состояния неразличимы и не
+ * нужны. В индексе byTelegramId null не попадает (см. reindex).
+ */
+export interface StoredUser {
+  userId: string;
+  /** sha256 от нормализованного логина БАРС — общая точка для бота и PWA */
+  barsLoginHash: string;
+  /** Telegram-аккаунт, подключённый к уведомлениям. null = отвязан. */
+  telegramId?: number | null;
+  /**
+   * Присылать ли уведомления в Telegram.
+   *
+   * Не флаг «включены», а флаг согласия: уведомления идут всем, кто привязан,
+   * кроме тех, кто их явно выключил (false). Отсутствие поля — обычное
+   * состояние, оно равносильно true, иначе каждый новый пользователь молчал бы
+   * до первого открытия профиля.
+   */
+  notificationsEnabled?: boolean;
   firstName: string;
   lastName?: string;
   username?: string;
@@ -58,13 +124,12 @@ export interface TelegramUser {
   /** ID группы на ts.mpei.ru (заполняется автоматически из БАРС) */
   groupId?: number;
   faculty?: string;
-  registeredAt: string;
-  /** ID единственного "главного" сообщения бота в чате */
-  mainMessageId?: number;
-  /** Нижняя клавиатура (ДЗ / Важное) уже отправлена */
-  replyKeyboardSent?: boolean;
+  createdAt: string;
+  updatedAt: string;
   /** Данные доступа к БАРС МЭИ (зашифрованные) */
   barsAuth?: BarsAuthData;
+  /** Сессия веб-почты OWA (cookies), отдельно от БАРС */
+  owaAuth?: OwaAuthData;
   /** ФИО и номер зачётной книжки */
   studentProfile?: StudentProfile;
   /** Текущий шаг входа в БАРС */
@@ -73,62 +138,156 @@ export interface TelegramUser {
   tempAuthData?: TempAuthData;
   /** Дата последнего успешного входа */
   barsAuthedAt?: string;
+  /** Активные PWA-токены (только хэши) */
+  pwaTokens?: PwaTokenRecord[];
+  /** Подписки на push — место зарезервировано, чтобы не ломать формат */
+  pushSubscriptions?: unknown[];
 }
-
-const store = new JsonStore<TelegramUser>('users.json');
-
-// Для незарегистрированных пользователей держим ID главного сообщения в памяти
-const pendingMainMessageIds = new Map<number, number>();
-// Временные сообщения с файлами, которые удаляются при следующем действии
-const transientMessageIds = new Map<number, number[]>();
 
 /**
- * Удаляет ключи с неопределенным значением, чтобы не затирать существующие данные в JSON.
+ * Файл users.json: записи и индексы (см. userStore/indexes.ts).
  */
-function compact<T extends object>(value: T): Partial<T> {
-  const out: Partial<T> = {};
-  for (const [key, val] of Object.entries(value)) {
-    if (val !== undefined) {
-      (out as Record<string, unknown>)[key] = val;
-    }
-  }
-  return out;
+const document = new JsonDocument<UsersDocument>('users.json');
+
+function read(): UsersDocument {
+  const doc = document.read();
+  // Форма может быть старой (плоская карта telegramId → запись) или пустой:
+  // приводим к новой на чтении, чтобы один неудачный запуск не ломал бот.
+  if (!doc || typeof doc !== 'object') return emptyDocument();
+
+  if (!doc.users || !doc.index) return emptyDocument();
+
+  doc.index.byTelegramId ??= {};
+  doc.index.byBarsLoginHash ??= {};
+
+  return doc;
 }
 
+/** Пишет документ и оба индекса одной атомарной операцией. */
+function commit(doc: UsersDocument): void {
+  document.stage(doc);
+  document.save();
+}
+
+/**
+ * Пользователь в коде бота.
+ *
+ * Отличие от StoredUser одно: telegramId обязателен. Запись, найденная по
+ * Telegram ID, всегда его содержит, и боту незачем везде проверять на
+ * undefined — он физически не работает с записями, у которых нет телеграма.
+ */
+export type TelegramUser = StoredUser & { telegramId: number };
+
+function lookup(key: number | string): StoredUser | undefined {
+  const doc = read();
+  const userId = resolveUserId(doc, key);
+  return userId ? doc.users[userId] : undefined;
+}
+
+function getUser(key: number): TelegramUser | undefined;
+function getUser(key: string): StoredUser | undefined;
+function getUser(key: number | string): StoredUser | undefined {
+  const user = lookup(key);
+  if (user && typeof key === 'number') return user as TelegramUser;
+  return user;
+}
+
+/**
+ * Основное хранилище пользователей.
+ *
+ * Методы, где первым аргументом стоит telegramId, оставлены по привычному для
+ * бота виду: бот знает только Telegram ID, а userId он получает через индекс.
+ * Всё внутри работает с userId — то есть с той же записью, к которой приходит
+ * PWA по своему токену.
+ */
 export const userStore = {
-  get(telegramId: number): TelegramUser | undefined {
-    return store.get(telegramId);
+  // ── чтение ──────────────────────────────────────────────────────────────
+
+  /** По userId — так приходит PWA. */
+  getByUserId(userId: string): StoredUser | undefined {
+    return read().users[userId];
+  },
+
+  /** По Telegram ID (бот) или userId (PWA). */
+  get: getUser,
+
+  /** По хэшу логина БАРС — мост между ботом и PWA. */
+  getByBarsLoginHash(barsLoginHash: string): StoredUser | undefined {
+    const doc = read();
+    const userId = doc.index.byBarsLoginHash[barsLoginHash];
+    return userId ? doc.users[userId] : undefined;
+  },
+
+  /** По самому логину: хэш считается здесь же. */
+  getByBarsLogin(login: string): StoredUser | undefined {
+    return this.getByBarsLoginHash(computeBarsLoginHash(login));
+  },
+
+  all(): StoredUser[] {
+    return Object.values(read().users);
+  },
+
+  // ── создание и запись ────────────────────────────────────────────────────
+
+  /**
+   * Создаёт запись пользователя.
+   *
+   * userId выдаётся здесь и больше не меняется: это и есть личность человека
+   * для обоих клиентов.
+   */
+  create(init: {
+    barsLoginHash: string;
+    telegramId?: number;
+    firstName?: string;
+  }): StoredUser {
+    const doc = read();
+
+    const user: StoredUser = {
+      userId: randomUUID(),
+      barsLoginHash: init.barsLoginHash,
+      telegramId: init.telegramId,
+      firstName: init.firstName ?? 'Студент',
+      pwaTokens: [],
+      pushSubscriptions: [],
+      createdAt: nowIso(),
+      updatedAt: nowIso(),
+    };
+
+    doc.users[user.userId] = user;
+    reindex(doc);
+    commit(doc);
+
+    return user as TelegramUser;
   },
 
   /**
-   * Создаёт или полностью обновляет запись пользователя.
+   * Запись целиком: поля с `undefined` удаляются, остальные перезаписываются.
    */
-  save(user: TelegramUser): void {
-    const prev = store.get(user.telegramId);
-    const base: TelegramUser = prev ?? { ...user };
+  save(user: StoredUser): void {
+    const doc = read();
 
-    const next = { ...base } as Record<string, unknown>;
+    const next = { ...(doc.users[user.userId] ?? {}), ...user } as Record<string, unknown>;
     for (const [key, value] of Object.entries(user)) {
-      if (value === undefined) {
-        delete next[key];
-      } else {
-        next[key] = value;
-      }
+      if (value === undefined) delete next[key];
     }
 
-    next.mainMessageId =
-      user.mainMessageId ?? prev?.mainMessageId ?? pendingMainMessageIds.get(user.telegramId);
+    next.userId = user.userId;
+    next.updatedAt = nowIso();
 
-    store.set(user.telegramId, next as unknown as TelegramUser);
+    doc.users[user.userId] = next as unknown as StoredUser;
+    reindex(doc);
+    commit(doc);
   },
 
   /**
    * Точечное обновление полей пользователя.
    * Явно переданный `undefined` удаляет поле (например, сброс tempAuthData).
    */
-  patch(telegramId: number, patch: Partial<TelegramUser>): TelegramUser | undefined {
-    const prev = store.get(telegramId);
-    if (!prev) return undefined;
+  patch(key: number | string, patch: Partial<StoredUser>): StoredUser | undefined {
+    const doc = read();
+    const userId = resolveUserId(doc, key);
+    const prev = userId ? doc.users[userId] : undefined;
+    if (!userId || !prev) return undefined;
 
     const next = { ...prev } as Record<string, unknown>;
     for (const [key, value] of Object.entries(patch)) {
@@ -139,91 +298,248 @@ export const userStore = {
       }
     }
 
-    store.set(telegramId, next as unknown as TelegramUser);
-    return next as unknown as TelegramUser;
+    next.updatedAt = nowIso();
+
+    doc.users[userId] = next as unknown as StoredUser;
+    // Индексы пересобираются только когда меняются ключевые поля: точечные
+    // обновления (отметка токена, флаг уведомлений, креды) их не трогают, и
+    // лишний проход по всем записям на каждую операцию не нужен.
+    if ('telegramId' in patch || 'barsLoginHash' in patch) reindex(doc);
+    commit(doc);
+
+    return next as unknown as StoredUser;
   },
 
   /**
-   * Создает минимальную запись пользователя, если её ещё нет.
+   * Точечное обновление записи по userId.
+   *
+   * Обёртка над patch, существующая ради читаемости вызова: patch принимает
+   * `number | string`, и в коде привязки Telegram то и дело передаётся то
+   * telegramId, то userId. Перепутать их молча нельзя, потому что оба — числа
+   * рядом с собой, а resolveUserId трактует их по-разному.
    */
-  ensureUser(telegramId: number, init: Partial<TelegramUser>): TelegramUser {
-    const prev = store.get(telegramId);
-    if (prev) return prev;
+  patchByUserId(userId: string, patch: Partial<StoredUser>): StoredUser | undefined {
+    return this.patch(userId, patch);
+  },
 
-    const created = {
-      ...compact(init),
+  /**
+   * Запись по Telegram ID.
+   *
+   * Возвращает undefined и для «не привязан», и для «привязка снята»: обе
+   * ситуации означают одно и то же — уведомления этому чату не уходят.
+   */
+  findUserByTelegramId(telegramId: number): StoredUser | undefined {
+    return getUser(telegramId);
+  },
+
+  /**
+   * Запись по Telegram ID, создаётся при необходимости.
+   *
+   * Создавать заранее нечем: без хэша логина БАРС она всё равно не связана ни с
+   * одним аккаунтом, поэтому настоящая личность появляется только при
+   * успешном входе.
+   */
+  ensureByTelegramId(telegramId: number, init: Partial<StoredUser>): StoredUser {
+    const existing = getUser(telegramId);
+    if (existing) return existing;
+
+    const doc = read();
+    const user: StoredUser = {
+      userId: randomUUID(),
+      // Пустой хэш означает «зарегистрирован в Telegram, но БАРС ещё не входили».
+      // Он не попадает в индекс: иначе два разных человека с пустым хэшем
+      // сочлись бы одним пользователем.
+      barsLoginHash: '',
       telegramId,
       firstName: init.firstName ?? 'Студент',
-      registeredAt: init.registeredAt ?? new Date().toISOString(),
-    } as TelegramUser;
+      lastName: init.lastName,
+      username: init.username,
+      pwaTokens: [],
+      pushSubscriptions: [],
+      createdAt: nowIso(),
+      updatedAt: nowIso(),
+    };
 
-    store.set(telegramId, created);
-    return created;
+    doc.users[user.userId] = user;
+    reindex(doc);
+    commit(doc);
+
+    return user;
+  },
+
+  /** Прежнее имя ensureByTelegramId: вызывается из бота. */
+  ensureUser(telegramId: number, init: Partial<StoredUser>): TelegramUser {
+    return this.ensureByTelegramId(telegramId, init) as TelegramUser;
   },
 
   /**
-   * Полностью удаляет запись пользователя.
+   * Удаляет запись целиком.
+   *
+   * Принимается и userId, и Telegram ID — тем же правилом, что и остальные
+   * методы: бот знает только Telegram ID, а вызывающий код не должен помнить,
+   * какой у него ключ.
+   *
+   * Пользоваться надо осторожно: вместе с записью теряется привязка к БАРС,
+   * и следующий вход выдаст новый userId — то есть прежние ДЗ перестанут быть
+   * его. Для «выйти из аккаунта» есть logoutBarsAccount.
    */
-  remove(telegramId: number): TelegramUser | undefined {
-    pendingMainMessageIds.delete(telegramId);
-    transientMessageIds.delete(telegramId);
-    return store.delete(telegramId);
-  },
+  remove(key: number | string): StoredUser | undefined {
+    const doc = read();
+    const userId = resolveUserId(doc, key);
+    const removed = userId ? doc.users[userId] : undefined;
+    if (!userId || !removed) return undefined;
 
-  /**
-   * Все записи пользователей (включая неавторизованных).
-   */
-  all(): TelegramUser[] {
-    return store.values();
+    delete doc.users[userId];
+    reindex(doc);
+    commit(doc);
+
+    return removed;
   },
 
   /**
    * Полностью удаляет данные авторизации БАРС (вход заново).
+   *
+   * Запись и userId остаются: иначе человек, забывший пароль, потерял бы ещё и
+   * все свои ДЗ, а при следующем входе получил бы новый userId — то есть
+   * прежние записи перестали бы быть его.
    */
-  clearAuth(telegramId: number): void {
-    const prev = store.get(telegramId);
-    if (!prev) return;
-    const next: TelegramUser = { ...prev };
-    delete next.barsAuth;
-    delete next.studentProfile;
-    delete next.barsAuthedAt;
-    next.authState = 'AWAIT_LOGIN';
-    next.tempAuthData = undefined;
-    store.set(telegramId, next);
+  clearAuth(key: number | string): void {
+    const userId = resolveUserId(read(), key);
+    if (!userId) return;
+
+    this.patch(userId, {
+      barsAuth: undefined,
+      owaAuth: undefined,
+      studentProfile: undefined,
+      barsAuthedAt: undefined,
+      groupId: undefined,
+      faculty: undefined,
+      authState: 'AWAIT_LOGIN',
+      tempAuthData: undefined,
+    });
   },
 
-  getMainMessageId(telegramId: number): number | undefined {
-    return store.get(telegramId)?.mainMessageId ?? pendingMainMessageIds.get(telegramId);
+  /** Сохраняет cookie-сессию OWA (после успешного входа/перелогина). */
+  setOwaAuth(key: number | string, cookiesJson: string): StoredUser | undefined {
+    const userId = resolveUserId(read(), key);
+    if (!userId) return undefined;
+    return this.patch(userId, { owaAuth: { cookiesJson, savedAt: Date.now() } });
   },
 
-  setMainMessageId(telegramId: number, messageId: number): void {
-    pendingMainMessageIds.set(telegramId, messageId);
-    const user = store.get(telegramId);
-    if (user && user.mainMessageId !== messageId) store.set(telegramId, { ...user, mainMessageId: messageId });
+  /** Забывает сессию OWA (протухла/недействительна). БАРС не трогает. */
+  clearOwaAuth(key: number | string): void {
+    const userId = resolveUserId(read(), key);
+    if (!userId) return;
+    this.patch(userId, { owaAuth: undefined });
   },
 
-  markReplyKeyboardSent(telegramId: number): void {
-    const user = store.get(telegramId);
-    if (user) store.set(telegramId, { ...user, replyKeyboardSent: true });
+  /**
+   * Выход из аккаунта БАРС в боте.
+   *
+   * Отличие от clearAuth — здесь исчезает и Telegram-привязка, чтобы завершить
+   * использование аккаунта в боте. Для входа в PWA отвязывать Telegram больше
+   * не требуется: оба клиента могут использовать одну запись.
+   *
+   * Сама запись и userId остаются: иначе, войдя в PWA, человек получил бы
+   * новый userId и не увидел бы своих ДЗ.
+   */
+  logoutBarsAccount(key: number | string): void {
+    const userId = resolveUserId(read(), key);
+    if (!userId) return;
+
+    this.patch(userId, {
+      telegramId: undefined,
+      barsAuth: undefined,
+      owaAuth: undefined,
+      studentProfile: undefined,
+      barsAuthedAt: undefined,
+      groupId: undefined,
+      faculty: undefined,
+      authState: 'AWAIT_LOGIN',
+      tempAuthData: undefined,
+    });
   },
 
-  addTransientMessage(telegramId: number, messageId: number): void {
-    const list = transientMessageIds.get(telegramId) ?? [];
-    list.push(messageId);
-    transientMessageIds.set(telegramId, list);
+  // ── PWA-токены ──────────────────────────────────────────────────────────
+
+  /** Выдача токена: хэш кладётся в запись, сам токен уходит клиенту. */
+  addToken(key: number | string, tokenHash: string, expiresAt: Date): StoredUser | undefined {
+    const user = lookup(key);
+    if (!user) return undefined;
+    const userId = user.userId;
+
+    const tokens = (user.pwaTokens ?? []).filter((t) => t.tokenHash !== tokenHash);
+    tokens.push({
+      tokenHash,
+      createdAt: nowIso(),
+      expiresAt: expiresAt.toISOString(),
+    });
+
+    return this.patch(userId, { pwaTokens: tokens });
   },
 
-  takeTransientMessages(telegramId: number): number[] {
-    const list = transientMessageIds.get(telegramId) ?? [];
-    transientMessageIds.delete(telegramId);
-    return list;
+  revokeToken(key: number | string, tokenHash: string): void {
+    const user = lookup(key);
+    if (!user) return;
+    const userId = user.userId;
+
+    this.patch(userId, {
+      pwaTokens: (user.pwaTokens ?? []).filter((t) => t.tokenHash !== tokenHash),
+    });
+  },
+
+  /** Есть ли такой токен и не истёк ли он. */
+  hasToken(key: number | string, tokenHash: string, now: Date = new Date()): boolean {
+    const user = lookup(key);
+    if (!user) return false;
+
+    const token = (user.pwaTokens ?? []).find((t) => t.tokenHash === tokenHash);
+    if (!token) return false;
+
+    return Date.parse(token.expiresAt) > now.getTime();
+  },
+
+  /** Отметка «токеном пользовались» — чтобы видеть живые сессии. */
+  touchToken(key: number | string, tokenHash: string): void {
+    const user = lookup(key);
+    if (!user) return;
+    const userId = user.userId;
+
+    this.patch(userId, {
+      pwaTokens: (user.pwaTokens ?? []).map((t) =>
+        t.tokenHash === tokenHash ? { ...t, lastUsedAt: nowIso() } : t,
+      ),
+    });
+  },
+
+  /** Убирает просроченные токены — вызывается при выдаче нового. */
+  pruneTokens(key: number | string, now: Date = new Date()): void {
+    const user = lookup(key);
+    if (!user) return;
+    const userId = user.userId;
+
+    const tokens = (user.pwaTokens ?? []);
+    const alive = tokens.filter((t) => Date.parse(t.expiresAt) > now.getTime());
+    if (alive.length === tokens.length) return;
+
+    this.patch(userId, { pwaTokens: alive });
+  },
+
+  /** Сбрасывает базу целиком. Используется только скриптом сброса и тестами. */
+  reset(): void {
+    document.replace(emptyDocument());
+  },
+
+  /** Путь к файлу — нужен скрипту сброса базы. */
+  get filePath(): string {
+    return document.path;
   },
 };
 
 /**
  * Авторизован ли пользователь в БАРС МЭИ (есть ли зашифрованные данные и профиль).
  */
-export function isBarsAuthorized(user: TelegramUser | undefined): user is TelegramUser {
+export function isBarsAuthorized(user: StoredUser | undefined): user is StoredUser {
   if (!user) return false;
   return Boolean(user.barsAuth && user.studentProfile?.fullName);
 }
@@ -231,7 +547,7 @@ export function isBarsAuthorized(user: TelegramUser | undefined): user is Telegr
 /**
  * Готов ли пользователь к показу расписания (авторизация + найдена группа на ts.mpei.ru).
  */
-export function isScheduleReady(user: TelegramUser | undefined): user is TelegramUser {
+export function isScheduleReady(user: StoredUser | undefined): user is StoredUser {
   if (!isBarsAuthorized(user)) return false;
   return typeof user.groupId === 'number' && user.groupId > 0;
 }

@@ -210,7 +210,8 @@ export async function getGroupSchedule(
   // Холодный слой: данные с сервера свежие, но страницу давно не открывали.
   // Разбор пропускаем — самый дорогой шаг на круге.
   if (cached && state && nowMs - state.fetchedAt < COLD_TTL_MS) {
-    touch(groupId, cached);
+    // byHot.set и обновляет hotAt, и переставляет ключ в конец (LRU touch):
+    // отдельный touch() перед ним был бы лишней перезаписью той же записи.
     byHot.set(groupId, { ...cached, hotAt: nowMs });
     return cached.schedule;
   }

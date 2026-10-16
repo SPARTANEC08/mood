@@ -27,7 +27,14 @@ import {
   resetSchedule,
 } from '../src/services/notifications/pollSchedule.js';
 
-const TEST_ID = 998_777_666;
+/**
+ * Тестовый пользователь.
+ *
+ * Telegram ID и userId — разные идентификаторы с разными типами: бот знает
+ * только первый, а хранилище снимков и график опроса работают по второму.
+ * Тест держит обе величины, потому что проверяет ровно эту связку.
+ */
+const TEST_TELEGRAM_ID = 998_777_666;
 
 let passed = 0;
 let failed = 0;
@@ -149,12 +156,22 @@ async function run(): Promise<void> {
     prev,
     baseSnapshot({
       gradesHash: { ...prev.gradesHash },
-      lastSeenMailUid: 150,
+      lastSeenMailUid: 103,
       ordersCount: 5,
       scholarshipStatus: 'нет',
     }),
+    {
+      mails: [
+        { uid: 100, date: new Date(), from: 'Старое письмо', subject: 'Старое', hasAttachments: false, isSeen: true },
+        { uid: 101, date: new Date(), from: 'Деканат', subject: 'Новое письмо 1', hasAttachments: false, isSeen: false },
+        { uid: 102, date: new Date(), from: 'Преподаватель', subject: 'Новое письмо 2', hasAttachments: true, isSeen: false },
+        { uid: 103, date: new Date(), from: 'Библиотека', subject: 'Новое письмо 3', hasAttachments: false, isSeen: false },
+      ],
+    },
   );
   check('новый mail UID -> событие mail', mailEvent.length === 1 && mailEvent[0].kind === 'mail');
+  check('дифф содержит три письма с новыми UID', mailEvent[0]?.lines.length === 3);
+  check('старое письмо не попало в уведомление', mailEvent[0]?.lines.every((line) => !line.includes('Старое')) === true);
 
   const orderEvent = diffSnapshots(
     prev,
@@ -217,8 +234,9 @@ async function run(): Promise<void> {
   section('Хранилище снимков');
   const encLogin = encrypt('st123456');
   const encPass = encrypt('pass');
-  userStore.ensureUser(TEST_ID, { firstName: 'Тест' });
-  userStore.patch(TEST_ID, {
+  const testUser = userStore.ensureUser(TEST_TELEGRAM_ID, { firstName: 'Тест' });
+  const TEST_ID = testUser.userId;
+  userStore.patch(TEST_TELEGRAM_ID, {
     barsAuth: {
       encryptedLogin: encLogin.encryptedData,
       encryptedPass: encPass.encryptedData,
@@ -230,7 +248,11 @@ async function run(): Promise<void> {
     groupName: 'ИЭ-11-26',
     groupId: 21985,
   });
-  check('пользователь авторизован в тесте', Boolean(userStore.get(TEST_ID)?.barsAuth));
+  check(
+    'пользователь авторизован в тесте',
+    Boolean(userStore.getByUserId(TEST_ID)?.barsAuth),
+  );
+  check('бот находит того же человека по Telegram ID', userStore.get(TEST_TELEGRAM_ID)?.userId === TEST_ID);
 
   snapshotStore.save(TEST_ID, baseSnapshot({ gradesHash: { A_КТ1: 1 } }));
   check('снимок сохранён', snapshotStore.get(TEST_ID)?.gradesHash['A_КТ1'] === 1);
@@ -239,10 +261,10 @@ async function run(): Promise<void> {
   check('снимок удалён', snapshotStore.get(TEST_ID) === undefined);
 
   userStore.remove(TEST_ID);
-  check('пользователь удалён', userStore.get(TEST_ID) === undefined);
+  check('пользователь удалён', userStore.getByUserId(TEST_ID) === undefined);
 
   section('График частот опроса');
-  const sid = 555_000_111;
+  const sid = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
   resetSchedule();
 
   check('первый круг: пора опросить всё', dueSources(sid).length === 3);

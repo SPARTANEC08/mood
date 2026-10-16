@@ -1,6 +1,7 @@
 import { BarsClient } from './barsClient.js';
 import { parseGradesPage, type SemesterGrades } from './parsers/gradesParser.js';
 import { parseAttendancePage, type AttendanceSummary } from './parsers/attendanceParser.js';
+import { parseScorePage, type RatingSummary } from './parsers/ratingParser.js';
 import {
   parseOrders,
   parseScholarship,
@@ -100,6 +101,26 @@ export class BarsScraper {
       : '/bars_web/ST_LIB/BookCopy/ListStudent__BookCopy';
     const $ = await client.getHtml(targetUrl);
     return parseLibrary($);
+  }
+
+  /**
+   * Загружает внутривузовский рейтинг со страницы «Оценки».
+   *
+   * Раньше данные брались из раздела «Рейтинг» (ST_PartN1…N6), где БАРС
+   * отдавал в каждом разделе один и тот же общий балл — разбивки по видам
+   * деятельности там фактически нет. Страница «Оценки» (ST_LK/Score/ListScore)
+   * даёт полную таблицу: учебный, научно-инновационный, общественный,
+   * культурно-творческий, спортивный, дисциплинарный и комплексный, каждый
+   * двумя значениями — «общий» и «за семестр».
+   */
+  public async getRating(): Promise<RatingSummary> {
+    const client = await this.getClient();
+    const studentId = this.getStudentId();
+    const targetUrl = studentId
+      ? `/bars_web/ST_LK/Score/ListScore?studentID=${studentId}`
+      : '/bars_web/ST_LK/Score/ListScore';
+    const $ = await client.getHtml(targetUrl);
+    return parseScorePage($);
   }
 }
 

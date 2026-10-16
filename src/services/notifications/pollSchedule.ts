@@ -64,24 +64,24 @@ export const DORMANT_MULTIPLIER = 18;
  * один раз заново, что к тому же нужно — состояние БАРС могло устареть,
  * пока бот лежал.
  */
-const lastChecked = new Map<number, Partial<Record<Source, number>>>();
+const lastChecked = new Map<string, Partial<Record<Source, number>>>();
 
 /** Когда пользователь последний раз пользовался ботом, в памяти процесса. */
-const lastActivity = new Map<number, number>();
+const lastActivity = new Map<string, number>();
 
 /**
  * Помечает пользователя активным. Вызывается из botEngine на каждом апдейте.
  */
-export function markActive(telegramId: number, now: Date = new Date()): void {
-  lastActivity.set(telegramId, now.getTime());
+export function markActive(userId: string, now: Date = new Date()): void {
+  lastActivity.set(userId, now.getTime());
 }
 
 /**
  * Интервал для конкретного пользователя и источника с учётом активности.
  */
-export function intervalFor(telegramId: number, source: Source, now: Date = new Date()): number {
+export function intervalFor(userId: string, source: Source, now: Date = new Date()): number {
   const base = BASE_INTERVAL_MS[source];
-  const seen = lastActivity.get(telegramId);
+  const seen = lastActivity.get(userId);
 
   // Активность известна только из текущего процесса. Неизвестна — считаем активным,
   // чтобы не понижать частоту у пользователя, который просто перезапустил VPS.
@@ -95,37 +95,37 @@ export function intervalFor(telegramId: number, source: Source, now: Date = new 
  * Пора ли опрашивать источник: прошло ли достаточно времени с прошлой проверки.
  * Первый вызов всегда «пора» — иначе новый пользователь не получит уведомлений.
  */
-export function isDue(telegramId: number, source: Source, now: Date = new Date()): boolean {
-  const last = lastChecked.get(telegramId)?.[source];
+export function isDue(userId: string, source: Source, now: Date = new Date()): boolean {
+  const last = lastChecked.get(userId)?.[source];
   if (last === undefined) return true;
-  return now.getTime() - last >= intervalFor(telegramId, source, now);
+  return now.getTime() - last >= intervalFor(userId, source, now);
 }
 
 /**
  * Какие источники нужно опросить на этом круге.
  */
-export function dueSources(telegramId: number, now: Date = new Date()): Source[] {
-  return (['mail', 'grades', 'info'] as Source[]).filter((s) => isDue(telegramId, s, now));
+export function dueSources(userId: string, now: Date = new Date()): Source[] {
+  return (['mail', 'grades', 'info'] as Source[]).filter((s) => isDue(userId, s, now));
 }
 
 /**
  * Отмечает источник как только что проверенный.
  */
-export function markChecked(telegramId: number, sources: Source[], now: Date = new Date()): void {
-  const entry = lastChecked.get(telegramId) ?? {};
+export function markChecked(userId: string, sources: Source[], now: Date = new Date()): void {
+  const entry = lastChecked.get(userId) ?? {};
   for (const source of sources) {
     entry[source] = now.getTime();
   }
-  lastChecked.set(telegramId, entry);
+  lastChecked.set(userId, entry);
 }
 
 /**
  * Забывает график пользователя: после сброса авторизации в БАРС
  * следующая проверка должна быть немедленной.
  */
-export function forget(telegramId: number): void {
-  lastChecked.delete(telegramId);
-  lastActivity.delete(telegramId);
+export function forget(userId: string): void {
+  lastChecked.delete(userId);
+  lastActivity.delete(userId);
 }
 
 /**

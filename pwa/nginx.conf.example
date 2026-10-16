@@ -1,0 +1,155 @@
+# Полный пример server-блока для веб-версии Hub (PWA).
+#
+# Сценарий A: всё на VPS за nginx. Статика отдаётся из /var/www/hub-pwa,
+# /api проксируется на Fastify, который крутится в том же процессе, что и бот.
+#
+# Самостоятельных новых юнитов не появляется: API поднимает бот, если в .env
+# задан API_PORT. Единственное, что нужно этому конфигу, — правильно проксировать
+# /api и отдать sw.js без кэша.
+#
+# Установка:
+#   sudo mkdir -p /var/www/hub-pwa
+#   sudo rsync -a --delete pwa/dist/ /var/www/hub-pwa/
+#   sudo cp pwa/nginx.conf.example /etc/nginx/sites-available/hub-pwa
+#   sudo ln -s /etc/nginx/sites-available/hub-pwa /etc/nginx/sites-enabled/
+#   sudo nginx -t && sudo systemctl reload nginx
+#
+# rsync, а не `cp -r dist/*`: манифест сборки лежит в pwa/dist/.vite/, скрыт от
+# шаблона `*` и на сервер не попадает. Оболочка Service Worker без него
+# остаётся без бандлов, и установленное приложение на слабой сети открывается
+# белым экраном.
+#
+# Сертификат (если его ещё нет):
+#   sudo certbot --nginx -d pwa.example.com
+#
+# Без своего домена можно временно обойтись sslip.io: имя <IP с дефисами>.sslip.io
+# резолвится в сам IP, и Let's Encrypt выдаёт на него сертификат через webroot:
+#   sudo certbot certonly --webroot -w /var/www/html \
+#     -d 203-0-113-10.sslip.io --agree-tos --register-unsafely-without-email
+# Для sslip.io/Nginx-direct нужен домен в PWA_URL (см. .env). Подробный runbook —
+# deploy/README-direct.md.
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name pwa.example.com;
+
+    # ACME-challenge должен остаться на HTTP: certbot продлевает сертификат
+    # именно так, и редирект на HTTPS здесь его бы сломал.
+    location /.well-known/acme-challenge/ {
+        root /var/www/html;
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+server {
+    # http2 — отдельной директивой: параметр `http2` у `listen` устарел и в
+    # nginx 1.25+ даёт предупреждение при проверке конфига.
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    http2 on;
+    server_name pwa.example.com;
+
+    # Пути выдаёт certbot --nginx. Без --nginx укажите их руками:
+    #   ssl_certificate     /etc/letsencrypt/live/pwa.example.com/fullchain.pem;
+    #   ssl_certificate_key /etc/letsencrypt/live/pwa.example.com/privkey.pem;
+    ssl_certificate     /etc/letsencrypt/live/pwa.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/pwa.example.com/privkey.pem;
+
+    root /var/www/hub-pwa;
+    index index.html;
+
+    # Потолок загрузки: без него nginx отклонит файл больше 1 МБ (свой дефолт
+    # client_max_body_size 1m) ещё до того, как запрос дойдёт до API, хотя
+    # приложение разрешает файлы до 20 МБ (MAX_FILE_SIZE_BYTES в fileStore.ts).
+    client_max_body_size 22m;
+
+    # ── Статика ─────────────────────────────────────────────────────────────
+    # Хешированные имена файлов из /assets/ меняются при каждой сборке, поэтому
+    # год в кэше безопасен: новое имя — новая запись, старое никто не запросит.
+    location /assets/ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+        access_log off;
+    }
+
+    # Иконки не хешируются и перезаписываются при обновлении, поэтому месяц.
+    location /icons/ {
+        expires 30d;
+        add_header Cache-Control "public";
+        access_log off;
+    }
+
+    # ── Service Worker ──────────────────────────────────────────────────────
+    # Два заголовка, и оба обязательны:
+    #   Cache-Control no-cache — иначе браузер месяц не увидит новый sw.js и
+    #     приложение останется на старой версии (у нас в sw.js есть skipWaiting,
+    #     но он не сработает, если файл не перекачивается);
+    #   Service-Worker-Allowed / — нужен, если sw.js когда-нибудь окажется не в
+    #     корне. Сейчас он в корне, и заголовок просто снимает вопрос на будущее.
+    location = /sw.js {
+        add_header Service-Worker-Allowed "/";
+        add_header Cache-Control "no-cache, no-store, must-revalidate";
+        access_log off;
+    }
+
+    # index.html — всегда свежий, иначе после деплоя откроется старый бандл.
+    location = /index.html {
+        add_header Cache-Control "no-cache, must-revalidate";
+    }
+
+    # ── API ─────────────────────────────────────────────────────────────────
+    # /api/ обслуживает Fastify из процесса бота. 120 с — не формальность:
+    # /api/mail ходит в IMAP, а /api/bars/grades — в БАРС, и оба умеют visить
+    # дольше стандартных 60 с. Ставить меньше — значит рвать живые соединения.
+    location /api/ {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        proxy_read_timeout 120s;
+        proxy_send_timeout 120s;
+
+        # Ошибки API не должны подменяться офлайн-заглушкой nginx: клиент
+        # различает 503 «сервер недоступен» и 404 «маршрута нет» и показывает
+        # разные подсказки.
+        proxy_intercept_errors off;
+    }
+
+    # ── Всё остальное ───────────────────────────────────────────────────────
+    # SPA-fallback: приложение живёт по адресу '/', и любой неизвестный путь
+    # должен отдавать index.html, а не 404. Здесь это безопасно — API вынесен
+    # выше отдельным блоком.
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    # robots.txt закрывает PWA от индексации: отдавать персональные данные по
+    # адресу, который может попасть в выдачу, незачем.
+    location = /robots.txt {
+        add_header Cache-Control "public, max-age=3600";
+    }
+
+    gzip on;
+    gzip_types text/plain text/css application/javascript application/json image/svg+xml application/manifest+json;
+    gzip_min_length 1024;
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# Если фронтенд живёт на другом домене, а API — на своём (вариант «раздельно»),
+# добавьте второй server-блок и НЕ меняйте PWA_URL: CORS на API добавляет адрес
+# сам из PWA_URL в .env (см. src/server/index.ts).
+#
+#   PWA_URL=https://pwa.example.com          # веб-версия с иконки
+#
+# Адрес обязательно HTTPS: Safari не регистрирует Service Worker на http:// —
+# без HTTPS PWA просто не установится с домашнего экрана.
+#

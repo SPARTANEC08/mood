@@ -106,6 +106,24 @@ export class BarsAuth {
     const savePath = options.saveSessionPath || path.join(process.cwd(), '.bars-session-debug.json');
     const step = (msg: string) => onStep?.(msg);
 
+    /**
+     * Файл сессии содержит валидные cookie, поэтому права закрываются явно (0600),
+     * а для временных файлов ещё и O_EXCL — без этого сессию читает любой
+     * локальный пользователь из общего /tmp.
+     */
+    const saveSession = async (data: SavedSessionData): Promise<void> => {
+      await fs.writeFile(savePath, JSON.stringify(data, null, 2), {
+        encoding: 'utf-8',
+        mode: 0o600,
+        flag: 'wx',
+      }).catch(async (err: unknown) => {
+        // 'wx' падает, если файл уже есть — перезаписываем с теми же правами.
+        const code = (err as NodeJS.ErrnoException)?.code;
+        if (code !== 'EEXIST') throw err;
+        await fs.writeFile(savePath, JSON.stringify(data, null, 2), { encoding: 'utf-8', mode: 0o600 });
+      });
+    };
+
     const axiosInst: AxiosInstance = client.getAxiosInstance();
     const startUrl = `${client.baseUrl}/bars_web/`;
 
@@ -126,7 +144,7 @@ export class BarsAuth {
         finalUrl: getFinalUrl,
         cookies: client.getJar().toJSON(),
       };
-      await fs.writeFile(savePath, JSON.stringify(sessionData, null, 2), 'utf-8');
+      await saveSession(sessionData);
       client.setSavedSession(sessionData);
       return { success: true, studentInfo, finalUrl: getFinalUrl, sessionData };
     }
@@ -188,7 +206,7 @@ export class BarsAuth {
         finalUrl: postFinalUrl,
         cookies: client.getJar().toJSON(),
       };
-      await fs.writeFile(savePath, JSON.stringify(sessionData, null, 2), 'utf-8');
+      await saveSession(sessionData);
       client.setSavedSession(sessionData);
       return { success: true, studentInfo, finalUrl: postFinalUrl, sessionData };
     }
@@ -282,7 +300,7 @@ export class BarsAuth {
       cookies: client.getJar().toJSON(),
     };
 
-    await fs.writeFile(savePath, JSON.stringify(sessionData, null, 2), 'utf-8');
+    await saveSession(sessionData);
     client.setSavedSession(sessionData);
 
     return {

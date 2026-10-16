@@ -3,6 +3,7 @@ import { BarsScraper } from './barsScraper.js';
 import type { SemesterGrades } from './parsers/gradesParser.js';
 import type { AttendanceSummary } from './parsers/attendanceParser.js';
 import type { OrderItem, ScholarshipInfo, LibraryBook } from './parsers/studentInfoParser.js';
+import { safeErrorMessage } from '../../bot/format.ts';
 
 export interface StudentProfileData {
   fio: string;
@@ -105,7 +106,7 @@ export class BarsService {
     if (gradesRes.status === 'fulfilled') {
       grades = gradesRes.value;
     } else {
-      const err = gradesRes.reason instanceof Error ? gradesRes.reason.message : String(gradesRes.reason);
+      const err = safeErrorMessage(gradesRes.reason);
       warnings.push(`Не удалось загрузить успеваемость: ${err}`);
       console.warn(`[BarsService] Ошибка выгрузки оценок: ${err}`);
       grades = {
@@ -120,7 +121,7 @@ export class BarsService {
     if (attendanceRes.status === 'fulfilled') {
       attendance = attendanceRes.value;
     } else {
-      const err = attendanceRes.reason instanceof Error ? attendanceRes.reason.message : String(attendanceRes.reason);
+      const err = safeErrorMessage(attendanceRes.reason);
       warnings.push(`Не удалось загрузить посещаемость: ${err}`);
       console.warn(`[BarsService] Ошибка выгрузки посещаемости: ${err}`);
       attendance = {
@@ -139,7 +140,7 @@ export class BarsService {
     if (ordersRes.status === 'fulfilled') {
       orders = ordersRes.value;
     } else {
-      const err = ordersRes.reason instanceof Error ? ordersRes.reason.message : String(ordersRes.reason);
+      const err = safeErrorMessage(ordersRes.reason);
       warnings.push(`Не удалось загрузить приказы: ${err}`);
       console.warn(`[BarsService] Ошибка выгрузки приказов: ${err}`);
       orders = [];
@@ -150,7 +151,7 @@ export class BarsService {
     if (scholarshipRes.status === 'fulfilled') {
       scholarship = scholarshipRes.value;
     } else {
-      const err = scholarshipRes.reason instanceof Error ? scholarshipRes.reason.message : String(scholarshipRes.reason);
+      const err = safeErrorMessage(scholarshipRes.reason);
       warnings.push(`Не удалось загрузить данные о стипендии: ${err}`);
       console.warn(`[BarsService] Ошибка выгрузки стипендии: ${err}`);
       scholarship = {
@@ -163,7 +164,7 @@ export class BarsService {
     if (libraryRes.status === 'fulfilled') {
       libraryBooks = libraryRes.value;
     } else {
-      const err = libraryRes.reason instanceof Error ? libraryRes.reason.message : String(libraryRes.reason);
+      const err = safeErrorMessage(libraryRes.reason);
       warnings.push(`Не удалось загрузить библиотечные книги: ${err}`);
       console.warn(`[BarsService] Ошибка выгрузки библиотеки: ${err}`);
       libraryBooks = [];

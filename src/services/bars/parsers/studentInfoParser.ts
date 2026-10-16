@@ -1,5 +1,7 @@
 import * as cheerio from 'cheerio';
 
+import { cleanText } from './shared.ts';
+
 export interface OrderItem {
   number: string;
   date: string;
@@ -20,17 +22,6 @@ export interface LibraryBook {
   issueDate: string;   // Дата выдачи
   dueDate: string;     // Срок сдачи
   isOverdue: boolean;  // Просрочена ли книга
-}
-
-/**
- * Очищает текст от &nbsp;, неразрывных пробелов и множественных пробельных символов.
- */
-function cleanText(text: string): string {
-  return text
-    .replace(/&nbsp;/g, ' ')
-    .replace(/\u00a0/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
 }
 
 /**

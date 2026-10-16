@@ -1,5 +1,7 @@
 import * as cheerio from 'cheerio';
 
+import { cleanText } from './shared.ts';
+
 /**
  * Контрольное мероприятие (КМ) — это реальная единица оценивания в МЭИ.
  * У каждого КМ есть вес в процентах; сумма весов по дисциплине равна 100%.
@@ -47,14 +49,6 @@ export interface SemesterGrades {
   semesterName: string;
   isCurrent: boolean;
   subjects: SubjectGrade[];
-}
-
-function cleanText(text: string): string {
-  return text
-    .replace(/&nbsp;/g, ' ')
-    .replace(/\u00a0/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
 }
 
 function parseScore(val: string): number | null {
@@ -194,8 +188,7 @@ export function parseGradesPage($: cheerio.CheerioAPI): SemesterGrades {
 
       // «Балл текущего контроля:» — средневзвешенный по весам КМ
       if (rowText.includes('Балл текущего контроля:')) {
-        const t = $(tr).find('td');
-        const value = t.length > 0 ? parseScore($(t[t.length - 1]).text()) : null;
+        const value = tds.length > 0 ? parseScore($(tds[tds.length - 1]).text()) : null;
         if (value !== null) totalScore = value;
         return;
       }
@@ -203,8 +196,7 @@ export function parseGradesPage($: cheerio.CheerioAPI): SemesterGrades {
       // «Контрольная неделя №N» — срез, а не КМ
       if (rowText.includes('Контрольная неделя №')) {
         const numMatch = rowText.match(/№\s*(\d+)/);
-        const t = $(tr).find('td');
-        const value = t.length > 0 ? parseScore($(t[t.length - 1]).text()) : null;
+        const value = tds.length > 0 ? parseScore($(tds[tds.length - 1]).text()) : null;
         weekScores.push({
           week: numMatch ? Number.parseInt(numMatch[1], 10) : weekScores.length + 1,
           score: value,
@@ -214,8 +206,7 @@ export function parseGradesPage($: cheerio.CheerioAPI): SemesterGrades {
 
       // «Итоговая оценка:»
       if (rowText.includes('Итоговая оценка:')) {
-        const t = $(tr).find('td');
-        const value = cleanText($(t[t.length - 1]).text() ?? '');
+        const value = cleanText($(tds[tds.length - 1]).text() ?? '');
         if (value && value !== '-' && value !== '—') {
           finalGrade = value;
         }

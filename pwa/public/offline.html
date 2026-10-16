@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Нет сети — Hub</title>
+    <style>
+      /*
+       * Оформление вынесено в атрибуты, чтобы страница была полностью
+       * автономной: она обязана открыться из кэша Service Worker, когда
+       * никакие внешние ресурсы недоступны. Тема — системная, та же
+       * логика, что и в приложении.
+       */
+      :root {
+        color-scheme: light dark;
+        --bg: #f2f2f7;
+        --fg: #000;
+        --muted: rgba(60, 60, 67, 0.6);
+        --surface: #fff;
+      }
+
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #000;
+          --fg: #fff;
+          --muted: rgba(235, 235, 245, 0.6);
+          --surface: #1c1c1e;
+        }
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: var(--bg);
+        color: var(--fg);
+        font: 400 16px/1.4 -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      .wrap {
+        display: flex;
+        min-height: 100%;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+        padding: 24px calc(24px + env(safe-area-inset-right)) calc(24px + env(safe-area-inset-bottom));
+        text-align: center;
+      }
+
+      .icon {
+        font-size: 44px;
+        line-height: 1;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 20px;
+        font-weight: 600;
+      }
+
+      p {
+        margin: 0;
+        max-width: 32ch;
+        color: var(--muted);
+        font-size: 15px;
+      }
+
+      button {
+        margin-top: 8px;
+        appearance: none;
+        border: 0;
+        border-radius: 14px;
+        padding: 12px 20px;
+        background: #6d4aff;
+        color: #fff;
+        font: 600 16px/1 -apple-system, system-ui, sans-serif;
+        cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="icon" aria-hidden="true">📡</div>
+      <h1>Нет сети</h1>
+      <p>Откройте приложение, когда появится подключение. Последнее загруженное расписание доступно и сейчас.</p>
+      <button type="button" onclick="location.reload()">Попробовать снова</button>
+    </div>
+  </body>
+</html>

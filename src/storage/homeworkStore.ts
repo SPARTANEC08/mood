@@ -1,20 +1,7 @@
 import { JsonStore } from '../utils/jsonStore.ts';
+import type { ServerFileRef } from './fileStore.ts';
 
 export type LessonKindType = 'lecture' | 'practice' | 'lab';
-
-export type TelegramFileType = 'photo' | 'document' | 'video' | 'audio' | 'voice' | 'animation';
-
-export interface TelegramFileRef {
-  fileId: string;
-  fileUniqueId?: string;
-  fileName: string;
-  fileSize?: number;
-  mimeType?: string;
-  /** Тип медиа в Telegram — нужен, чтобы отправить файл правильным методом */
-  type?: TelegramFileType;
-  /** ID сообщения с этим файлом в канале-хранилище */
-  channelMessageId?: number;
-}
 
 export interface HomeworkRecord {
   id: string;
@@ -27,12 +14,11 @@ export interface HomeworkRecord {
   lessonNumber?: number;
   timeStart?: string;
   text: string;
-  files: TelegramFileRef[];
-  authorId?: number;
+  files: ServerFileRef[];
+  /** userId автора: идентификатор общий для бота и PWA. */
+  authorId?: string;
   authorName?: string;
   createdAt: string;
-  /** Все сообщения этой записи в канале-хранилище (заголовок + файлы) */
-  channelMessageIds?: number[];
 }
 
 const store = new JsonStore<HomeworkRecord>('homework.json');
@@ -52,6 +38,25 @@ export const homeworkStore = {
     return store.get(id);
   },
 
+  /**
+   * ДЗ по ID, но только если оно принадлежит указанной группе.
+   *
+   * Глобальный get(id) отдавал запись любой группы по угаданному callback_data,
+   * а вместе с ней и file_id файлов для отправки в чат. Пустая группа не имеет
+   * доступа ни к чему: иначе записи с незаполненным groupName видели бы все.
+   */
+  getForGroupAndId(groupName: string, id: string): HomeworkRecord | undefined {
+    if (!groupName.trim()) return undefined;
+    const hw = store.get(id);
+    return hw && sameGroup(hw.groupName, groupName) ? hw : undefined;
+  },
+
+  /** Удаление ДЗ, если оно принадлежит указанной группе. */
+  deleteForGroupAndId(groupName: string, id: string): HomeworkRecord | undefined {
+    if (!this.getForGroupAndId(groupName, id)) return undefined;
+    return store.delete(id);
+  },
+
   save(record: HomeworkRecord): void {
     store.set(record.id, record);
   },
@@ -60,19 +65,22 @@ export const homeworkStore = {
     return store.delete(id);
   },
 
-  setChannelMessages(id: string, channelMessageIds: number[], files: TelegramFileRef[]): void {
-    const rec = store.get(id);
-    if (!rec) return;
-    store.set(id, { ...rec, channelMessageIds, files });
-  },
-
   /** Все записи ДЗ */
   all(): HomeworkRecord[] {
     return store.values();
   },
 
+  /** ДЗ группы — для поиска привязанных к записям файлов. */
+  getForGroup(groupName: string): HomeworkRecord[] {
+    if (!groupName.trim()) return [];
+    return store.values().filter((hw) => sameGroup(hw.groupName, groupName));
+  },
+
   /** ДЗ группы начиная с указанной даты, по порядку занятий */
   getUpcoming(groupName: string, fromRawDate: string): HomeworkRecord[] {
+    // Пустая группа не видит ничего: иначе записи с незаполненным groupName
+    // достались бы любому, у кого группа ещё не подтянулась.
+    if (!groupName.trim()) return [];
     return store
       .values()
       .filter((hw) => sameGroup(hw.groupName, groupName) && hw.targetDate >= fromRawDate)
@@ -81,6 +89,7 @@ export const homeworkStore = {
 
   /** ДЗ, привязанные к конкретной паре */
   getForSlot(groupName: string, rawDate: string, lessonNumber: number, disciplines: string[]): HomeworkRecord[] {
+    if (!groupName.trim()) return [];
     const discs = disciplines.map((d) => d.toLowerCase());
     return store
       .values()
@@ -94,3 +103,5 @@ export const homeworkStore = {
       .sort(byDateAndLesson);
   },
 };
+
+export type { ServerFileRef };

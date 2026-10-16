@@ -4,7 +4,7 @@
  *
  * Запуск:
  *   npx tsx scripts/test-notifier-live.ts            — список кандидатов
- *   npx tsx scripts/test-notifier-live.ts <telegramId>
+ *   npx tsx scripts/test-notifier-live.ts <telegramId|userId>
  */
 
 import 'dotenv/config';
@@ -13,16 +13,26 @@ import { checkUserNow, isWithinActiveWindow } from '../src/services/notification
 import { isBarsAuthorized, userStore } from '../src/storage/userStore.js';
 import { snapshotStore } from '../src/storage/snapshotStore.js';
 
-function authorizedUsers(): number[] {
-  return userStore.all().filter(isBarsAuthorized).map((u) => u.telegramId);
+/**
+ * Кого проверять по умолчанию.
+ *
+ * Только те, у кого есть Telegram: уведомления ходят в чат, и для PWA-пользователя
+ * без Telegram отправлять некуда — он увидит изменения в самом приложении.
+ */
+function authorizedUsers(): string[] {
+  return userStore
+    .all()
+    .filter((u) => isBarsAuthorized(u) && u.telegramId !== undefined)
+    .map((u) => u.userId);
 }
 
 async function run(): Promise<void> {
   const rawId = process.argv[2];
-  const ids = rawId ? [Number(rawId)] : authorizedUsers();
+  // Аргументом может быть и Telegram ID, и userId: хранилище принимает оба.
+  const ids: string[] = rawId ? [rawId] : authorizedUsers();
 
   if (ids.length === 0) {
-    console.log('❌ Нет авторизованных в БАРС пользователей.');
+    console.log('❌ Нет авторизованных в БАРС пользователей с Telegram.');
     console.log('   Проверка входа: npm run test:auth');
     return;
   }
@@ -40,9 +50,11 @@ async function run(): Promise<void> {
       continue;
     }
 
-    const snapshot = snapshotStore.get(id);
+    const snapshot = snapshotStore.get(user.userId);
     console.log('------------------------------------------------------');
-    console.log(`👤 ${user.studentProfile?.fullName ?? user.firstName} (${id})`);
+    console.log(`👤 ${user.studentProfile?.fullName ?? user.firstName}`);
+    console.log(`   userId: ${user.userId}`);
+    console.log(`   Telegram: ${user.telegramId ?? 'нет — только PWA'}`);
     console.log(`   Группа: ${user.groupName ?? '—'}`);
     console.log(
       `   Снимок: ${snapshot ? `есть, от ${snapshot.lastCheckedAt}` : 'отсутствует (baseline)'}`,

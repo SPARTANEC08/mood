@@ -33,7 +33,7 @@ export interface FetchMessagesOptions {
  * Краткая карточка письма — только метаданные из IMAP ENVELOPE и BODYSTRUCTURE.
  *
  * Тело письма при этом не скачивается. Нужна там, где требуется лишь понять,
- * что письмо новое: отправитель, тема, дата и наличие вложений.
+ * что письмо новое: отправитель, тема, дата, наличие вложений и прочитано ли оно.
  */
 export interface OsepMessageBrief {
   uid: number;
@@ -41,4 +41,5 @@ export interface OsepMessageBrief {
   from: string;
   subject: string;
   hasAttachments: boolean;
+  isSeen: boolean;
 }

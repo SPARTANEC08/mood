@@ -1,4 +1,4 @@
-# Telegram-бот расписания НИУ МЭИ (Zbot)
+# Telegram-бот расписания НИУ МЭИ (Hub)
 
 Telegram-бот для студентов НИУ МЭИ (ts.mpei.ru) с расписанием, домашними заданиями и важными объявлениями.
 
@@ -26,7 +26,7 @@ Telegram-бот для студентов НИУ МЭИ (ts.mpei.ru) с расп
 
 ```env
 # Токен бота от @BotFather
-TELEGRAM_BOT_TOKEN=123456789:ABCdefGHIjklMNOpqrSTUvwxYZ
+TELEGRAM_BOT_TOKEN=replace-with-token-from-BotFather
 
 # ID закрытого канала-хранилища (где бот является админом)
 TELEGRAM_STORAGE_CHANNEL_ID=-1001234567890

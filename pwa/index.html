@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <!--
+      viewport-fit=cover обязателен и здесь: в standalone-режиме на iPhone
+      контент иначе уезжает под вырез и домашнюю индикацию, потому что
+      env(safe-area-inset-*) без него возвращает нули.
+
+      maximum-scale и user-scalable=no запрещают масштабирование интерфейса
+      щипком: приложение ведёт себя как нативное, случайный зум не «разъезжает»
+      вёрстку. Просмотр файлов — исключение: там свой зум (жестами для картинки
+      и кнопками для PDF), и блокировка на него не распространяется (см.
+      lib/env.ts и data-hub-file-viewer во вьюере).
+    -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
+    />
+    <meta name="description" content="Hub — расписание, задания, оценки и почта НИУ МЭИ" />
+
+    <!-- PWA-манифест: имя, иконки, standalone-режим -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+
+    <!--
+      iOS не читает манифест для иконки на экране «домой» и запуска с иконки —
+      он берёт только эти мета-теги. Без них «На экран Домой» добавит белую
+      иконку-заглушку, а приложение откроется с адресной строкой.
+    -->
+    <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Hub" />
+
+    <meta name="theme-color" content="#F2F2F7" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)" />
+    <!-- color-scheme до CSS и JS: системные контролы и фон совпадают с темой
+         с самого первого кадра, без вспышки светлого. -->
+    <meta name="color-scheme" content="light dark" />
+
+    <!--
+      Критический фон и стартовый splash прямо в документе.
+
+      Стили приложения приезжают вместе с бандлом (styles.css), а он — это
+      отдельный запрос. До его применения <body> оставался белым: на медленной
+      сети и при холодном старте пользователь видел белый экран. Здесь фон
+      задан инлайново и повторяет --app-bg, поэтому первый кадр сразу в теме.
+
+      Splash — тот же фон плюс лёгкий индикатор: он виден, только пока React не
+      смонтировался, и снимается из App (см. pwa/src/App.tsx). Если скрипт вообще
+      не загрузился, остаётся тематический фон, а не белизна.
+    -->
+    <style>
+      html,
+      body {
+        margin: 0;
+        background: #f2f2f7;
+        color-scheme: light dark;
+      }
+      @media (prefers-color-scheme: dark) {
+        html,
+        body {
+          background: #000;
+        }
+      }
+      #hub-splash {
+        position: fixed;
+        inset: 0;
+        z-index: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #f2f2f7;
+      }
+      @media (prefers-color-scheme: dark) {
+        #hub-splash {
+          background: #000;
+        }
+      }
+      #hub-splash::after {
+        content: '';
+        width: 26px;
+        height: 26px;
+        border-radius: 9999px;
+        border: 3px solid rgba(109, 74, 255, 0.25);
+        border-top-color: #6d4aff;
+        animation: hub-splash-spin 0.9s linear infinite;
+      }
+      @media (prefers-color-scheme: dark) {
+        #hub-splash::after {
+          border-color: rgba(139, 92, 255, 0.25);
+          border-top-color: #8b5cff;
+        }
+      }
+      @keyframes hub-splash-spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #hub-splash::after {
+          animation: none;
+        }
+      }
+    </style>
+
+    <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png" />
+    <!-- ICO последним: браузер берёт первую подходящую иконку, поэтому он
+         нужен только там, где PNG не принимают. -->
+    <link rel="icon" href="/icons/favicon.ico" sizes="32x32" />
+
+    <title>Hub — расписание МЭИ</title>
+  </head>
+  <body>
+    <div id="hub-splash" aria-hidden="true"></div>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

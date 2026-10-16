@@ -1,8 +1,15 @@
 /**
- * Разовый сброс базы пользователей Zbot.
+ * Разовый сброс базы пользователей Hub (без ДЗ, объявлений и файлов).
  *
  * - Бэкапит текущий data/users.json в data/users.backup.json
- * - Перезаписывает data/users.json пустым объектом {}
+ * - Перезаписывает файл пустой формой НОВОЙ схемы
+ *
+ * Формат изменился вместе с ключом пользователя: теперь записи лежат под
+ * userId (UUID), а рядом два индекса — по Telegram ID и по хэшу логина БАРС.
+ * Запись `{}` больше не читается как база, поэтому пишется полная форма.
+ *
+ * Для полного сброса вместе с ДЗ и файлами есть scripts/reset-db.ts
+ * (npm run reset:db).
  *
  * Запуск: npm run reset:users
  */
@@ -16,8 +23,12 @@ const BACKUP_FILE = path.join(DATA_DIR, 'users.backup.json');
 
 function countUsers(file: string): number {
   try {
-    const parsed = JSON.parse(fs.readFileSync(file, 'utf-8')) as Record<string, unknown>;
-    return Object.keys(parsed).length;
+    const parsed = JSON.parse(fs.readFileSync(file, 'utf-8')) as {
+      users?: Record<string, unknown>;
+    };
+    // Файл мог остаться в старой форме (плоская карта telegramId -> запись),
+    // поэтому при отсутствии поля users считаются верхнеуровневые ключи.
+    return Object.keys(parsed.users ?? parsed).length;
   } catch {
     return 0;
   }
@@ -39,8 +50,15 @@ async function resetUsers(): Promise<void> {
     console.log('ℹ️  Файл data/users.json не найден — бэкап не создается.');
   }
 
-  fs.writeFileSync(USERS_FILE, JSON.stringify({}, null, 2), 'utf-8');
-  console.log('🧹 База пользователей очищена: data/users.json = {}');
+  // Пустая форма новой схемы: записи и оба индекса обязаны присутствовать,
+  // иначе userStore посчитает файл пустым документом и перезапишет его сам.
+  const empty = {
+    users: {},
+    index: { byTelegramId: {}, byBarsLoginHash: {} },
+  };
+
+  fs.writeFileSync(USERS_FILE, `${JSON.stringify(empty, null, 2)}\n`, { mode: 0o600 });
+  console.log('🧹 База пользователей очищена: data/users.json — новая пустая схема');
   console.log('ℹ️  Теперь каждый, кто напишет боту, пройдёт вход через БАРС МЭИ.');
 }
 
