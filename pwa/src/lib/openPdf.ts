@@ -96,12 +96,28 @@ export async function openPdf(file: PdfFile): Promise<PdfOpenOutcome> {
     };
   }
 
-  // iOS: и в Safari, и в установленном приложении надёжнее открыть PDF по
-  // публичной inline-ссылке. window.open в standalone часто отдаёт пустой лист
-  // Safari, а PDF в нём не рисуется. По тапу Safari откроет документ своим
-  // просмотрщиком (с «Поделиться» и закрытием).
+  // iOS: открываем сразу, без промежуточного листа. Окно просим синхронно
+  // внутри тапа — иначе Safari сочтёт его popup-ом и заблокирует, — а адрес
+  // подставляем, когда сервер выдал публичную inline-ссылку.
   if (isIOS()) {
-    return { kind: 'fallback', url: await pdfShareUrl(file.fileId), download: false };
+    const viewer = window.open('about:blank', '_blank');
+    if (!viewer) {
+      // Safari всё-таки заблокировал окно: отдаём ссылку, чтобы открыть вручную.
+      return { kind: 'fallback', url: await pdfShareUrl(file.fileId), download: false };
+    }
+
+    try {
+      viewer.opener = null;
+      viewer.location.replace(await pdfShareUrl(file.fileId));
+      return { kind: 'system' };
+    } catch (err) {
+      try {
+        viewer.close();
+      } catch {
+        // закрыть чужое окно браузер может запретить — это не важно
+      }
+      throw err;
+    }
   }
 
   // Остальные standalone-браузеры: выводим себя из PWA навигацией.
