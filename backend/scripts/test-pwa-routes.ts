@@ -383,6 +383,61 @@ console.log('\n— Изоляция групп: чужой id в PATCH/DELETE �
   check('одногруппник видит canEdit=false', gammaItem?.canEdit === false, JSON.stringify(gammaItem));
 }
 
+console.log('\n— Уведомления в приложении —');
+{
+  const { announcementStore } = await import('../../db/storage/announcementStore.ts');
+  const first = announcementStore.create('Первое объявление', 100000001);
+  const second = announcementStore.create('Второе объявление', 100000001);
+
+  // Отдельный пользователь с входом в БАРС: объявления только для таких.
+  const barred = userStore.create({ barsLoginHash: computeBarsLoginHash('announce-test') });
+  userStore.patch(barred.userId, {
+    barsAuth: {
+      encryptedLogin: 'x', encryptedPass: 'x', iv: 'x', tag: 'x',
+      ivPass: 'x', tagPass: 'x', cookiesJson: '{}', savedAt: new Date().toISOString(),
+    },
+    studentProfile: { fullName: 'Тест Объявлений', groupName: 'ИЭ-11-26' },
+  });
+  const { token: barredToken } = issuePwaToken(barred.userId);
+  userStore.addToken(barred.userId, hashToken(barredToken), new Date(Date.now() + 86_400_000));
+
+  // Без входа в БАРС объявления не отдаём: это правило сервера.
+  const noBars = await app.inject({ method: 'GET', url: '/api/announcements/next', headers: auth(token) });
+  check('next без входа в БАРС → 401', noBars.statusCode === 401, String(noBars.statusCode));
+  check(
+    'next без входа в БАРС: bars_login_required',
+    noBars.json<{ error?: string }>().error === 'bars_login_required',
+    JSON.stringify(noBars.json()),
+  );
+
+  const next1 = await app.inject({ method: 'GET', url: '/api/announcements/next', headers: auth(barredToken) });
+  check('GET /api/announcements/next → 200', next1.statusCode === 200, String(next1.statusCode));
+  check(
+    'первое объявление в очереди',
+    next1.json<{ item?: { id?: string } }>().item?.id === first.id,
+    JSON.stringify(next1.json()),
+  );
+
+  const dismiss = await app.inject({
+    method: 'POST',
+    url: `/api/announcements/${first.id}/dismiss`,
+    headers: auth(barredToken),
+  });
+  check('POST dismiss → 200', dismiss.statusCode === 200, String(dismiss.statusCode));
+
+  const next2 = await app.inject({ method: 'GET', url: '/api/announcements/next', headers: auth(barredToken) });
+  check(
+    'после закрытия выдаётся следующее',
+    next2.json<{ item?: { id?: string } }>().item?.id === second.id,
+    JSON.stringify(next2.json()),
+  );
+
+  const anonymous = await app.inject({ method: 'GET', url: '/api/announcements/next' });
+  check('next без токена → 401', anonymous.statusCode === 401, String(anonymous.statusCode));
+
+  announcementStore.reset();
+}
+
 console.log('\n— Отзыв токена —');
 {
   const logout = await app.inject({ method: 'POST', url: '/api/auth/logout', headers: auth(token) });

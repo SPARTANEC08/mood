@@ -372,3 +372,15 @@ export interface ApiError {
   /** true = клиенту нужно предложить вход в БАРС через бота. */
   needBarsLogin: boolean;
 }
+
+/** Объявление админа, которое показывается модальным окном в приложении. */
+export interface AppAnnouncement {
+  id: string;
+  text: string;
+  createdAt: string;
+}
+
+/** Ответ GET /api/announcements/next. */
+export interface NextAnnouncementResponse {
+  item: AppAnnouncement | null;
+}

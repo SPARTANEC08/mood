@@ -22,6 +22,7 @@ import type {
   ServerFileRef,
   UpdateHomeworkBody,
   UpdateImportantBody,
+  NextAnnouncementResponse,
 } from '@/types/api';
 import {
   deleteFile,
@@ -157,6 +158,14 @@ export const api = {
    */
   notificationsState: () =>
     request<{ telegramId: number | null; notificationsEnabled: boolean }>('/notifications/state'),
+
+  // ── объявления внутри приложения ─────────────────────────────────────────
+  /** Следующее непрочитанное объявление (очередь админа) или null. */
+  announcementNext: () => request<NextAnnouncementResponse>('/announcements/next'),
+
+  /** «Закрыть»: объявление больше не показывается этому пользователю. */
+  dismissAnnouncement: (id: string) =>
+    request<{ ok: true }>(`/announcements/${encodeURIComponent(id)}/dismiss`, { method: 'POST' }),
 };
 
 export type Api = typeof api;

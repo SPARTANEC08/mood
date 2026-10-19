@@ -23,6 +23,7 @@ import { registerHomeworkRoutes } from './routes/homework.ts';
 import { registerImportantRoutes } from './routes/important.ts';
 import { registerFileRoutes } from './routes/files.ts';
 import { registerNotificationRoutes } from './routes/notifications.ts';
+import { registerAnnouncementRoutes } from './routes/announcements.ts';
 import { registerDevRoutes } from './routes/dev.ts';
 import { setupActivityTracking } from './devStats.ts';
 import { GroupNotReadyError } from './routes/studentContext.ts';
@@ -271,6 +272,7 @@ export async function buildServer(): Promise<FastifyInstance> {
   await registerImportantRoutes(app);
   await registerFileRoutes(app);
   await registerNotificationRoutes(app);
+  registerAnnouncementRoutes(app);
   await registerDevRoutes(app);
 
   return app;

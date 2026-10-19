@@ -19,6 +19,7 @@ import { useCallback, useEffect, useState } from 'react';
 
 import { TabBar, type TabId } from '@/components/TabBar';
 import { TelegramPrompt } from '@/components/TelegramPrompt';
+import { AnnouncementGate } from '@/components/AnnouncementGate';
 import { ErrorState } from '@/components/ui';
 import { clearPwaToken, SIGNED_OUT_EVENT } from '@/auth';
 import { ApiError, api } from '@/lib/api';
@@ -150,6 +151,9 @@ export function ScheduleApp({ onReLogin }: { onReLogin: () => void }) {
         userId={bootstrap.profile.userId}
         telegramId={bootstrap.profile.telegramId}
       />
+
+      {/* Объявления админа: только для авторизованных в БАРС. */}
+      <AnnouncementGate />
     </DataProvider>
   );
 }

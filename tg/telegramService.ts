@@ -266,7 +266,7 @@ export async function initTelegramBot(): Promise<void> {
       // Долгие действия: ответить на callback сразу, иначе Telegram крутит
       // спиннер и обрывает его через несколько секунд. Результат придёт
       // правкой сообщения.
-      const longAction = data === 'admin_mail_yes' || data === 'broadcast_send';
+      const longAction = data === 'admin_mail_yes' || data.startsWith('broadcast_send');
       if (longAction) {
         try {
           await ctx.answerCallbackQuery();

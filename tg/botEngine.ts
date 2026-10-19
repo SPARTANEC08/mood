@@ -20,6 +20,7 @@ import {
   removeAdmin,
 } from '../db/storage/adminsStore.ts';
 import { userStore, type StoredUser } from '../db/storage/userStore.ts';
+import { announcementStore } from '../db/storage/announcementStore.ts';
 import { isNotifierCycleRunning, runCycleForced } from '../backend/services/notifications/barsNotifier.ts';
 import {
   buildAdminAddConfirmView,
@@ -332,27 +333,46 @@ export async function processTelegramCallback(
     return adminMenuResult();
   }
 
-  if (data === 'broadcast_send') {
+  if (data.startsWith('broadcast_send')) {
+    const target = data.split(':')[1] ?? '';
     const flow = getFlow(sender.id);
     if (flow?.kind !== 'broadcast_text' || !flow.data) {
       return { view: buildAdminMenu(), toast: 'Черновик рассылки потерян — начни заново' };
     }
-    if (!deps.broadcast) {
-      return { view: buildAdminMenu(), toast: 'Рассылка недоступна' };
+    if (!['tg', 'app', 'both'].includes(target)) {
+      return { view: buildAdminMenu(), toast: 'Неизвестный канал рассылки' };
     }
-    if (isNotifierCycleRunning()) {
+    if (target !== 'app' && !deps.broadcast) {
+      return { view: buildAdminMenu(), toast: 'Рассылка в Telegram недоступна' };
+    }
+    if (target !== 'app' && isNotifierCycleRunning()) {
       return { view: buildAdminMenu(), toast: 'Сейчас идёт обновление — попробуй позже' };
     }
 
     const text = flow.data;
     clearFlow(sender.id);
-    const result = await broadcastText(text, userStore.all(), deps.broadcast, {
-      onError: (telegramId, error) => {
-        // Адресат и причина — иначе «Ошибок: M» не отвечает на вопрос «кому и почему».
-        console.warn(`[Broadcast] не доставлено ${telegramId}: ${safeErrorMessage(error)}`);
-      },
-    });
-    return { view: buildBroadcastResultView(result.sent, result.failed, result.skipped) };
+
+    // Приложение: объявление становится в очередь и всплывёт у авторизованных.
+    const appQueued = target === 'app' || target === 'both';
+    if (appQueued) announcementStore.create(text, sender.id);
+
+    // Telegram: только привязанным, с паузами от бана.
+    let sent = 0;
+    let failed = 0;
+    let skipped = 0;
+    if (target !== 'app' && deps.broadcast) {
+      const result = await broadcastText(text, userStore.all(), deps.broadcast, {
+        onError: (telegramId, error) => {
+          // Адресат и причина — иначе «Ошибок: M» не отвечает на вопрос «кому и почему».
+          console.warn(`[Broadcast] не доставлено ${telegramId}: ${safeErrorMessage(error)}`);
+        },
+      });
+      sent = result.sent;
+      failed = result.failed;
+      skipped = result.skipped;
+    }
+
+    return { view: buildBroadcastResultView(sent, failed, skipped, appQueued) };
   }
 
   if (data === 'admin_add') {

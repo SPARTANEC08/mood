@@ -185,7 +185,7 @@ export function buildBroadcastPromptView(): BotViewResult {
   };
 }
 
-/** Превью рассылки: ровно то, что увидят пользователи, плюс подтверждение. */
+/** Превью рассылки: ровно то, что увидят пользователи, плюс выбор канала. */
 export function buildBroadcastPreviewView(text: string): BotViewResult {
   return {
     text: joinBlocks([
@@ -194,23 +194,32 @@ export function buildBroadcastPreviewView(text: string): BotViewResult {
       RULE,
       esc(text),
       RULE,
-      i('Отправка — всем, у кого привязан Telegram.'),
+      i('В Telegram — привязанным к боту.'),
+      i('В приложение — всем авторизованным в БАРС (очередь уведомлений).'),
     ]),
     keyboard: [
-      [btn('✅ Отправить всем', 'broadcast_send', 'success'), btn('✕ Отмена', 'admin_broadcast_cancel')],
-      [btn('✕ Закрыть', 'msg_close')],
+      [btn('📨 В Telegram', 'broadcast_send:tg', 'primary')],
+      [btn('📱 В приложение', 'broadcast_send:app', 'primary')],
+      [btn('📨📱 Везде', 'broadcast_send:both', 'success')],
+      [btn('✕ Отмена', 'admin_broadcast_cancel')],
     ],
   };
 }
 
 /** Итог рассылки. */
-export function buildBroadcastResultView(sent: number, failed: number, skipped: number): BotViewResult {
+export function buildBroadcastResultView(
+  sent: number,
+  failed: number,
+  skipped: number,
+  appQueued = false,
+): BotViewResult {
   return {
     text: joinBlocks([
       `✅ ${b('Рассылка завершена')}`,
-      `Отправлено: ${b(String(sent))}`,
+      `В Telegram отправлено: ${b(String(sent))}`,
       `Ошибок: ${b(String(failed))}`,
       skipped > 0 ? `Пропущено (нет Telegram): ${b(String(skipped))}` : '',
+      appQueued ? `В приложение: ${b('добавлено в очередь')}` : '',
       failed > 0 ? '' : undefined,
       failed > 0
         ? i('Ошибки — это заблокировавшие бота, удалённые аккаунты или очищенные чаты. Подробности в журнале сервиса.')
