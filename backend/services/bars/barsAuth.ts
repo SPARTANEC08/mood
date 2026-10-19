@@ -110,21 +110,20 @@ const MENU_TITLES = new Set([
 ]);
 
 /**
- * Личный кабинет студента, а не служебное меню БАРС.
+ * Похож ли профиль на студенческий.
  *
  * БАРС пускает и аккаунты без студенческого профиля (например, сотрудника или
  * общего пользователя): после входа такой аккаунт оказывается на `/Auth/Menu`,
- * где вместо ФИО в хлебных крошках стоит «Главная», а группы нет вовсе.
- * Раньше это считалось успешным входом, и в базе появлялся пользователь
- * «Главная» с группой «Не удалось извлечь номер группы».
+ * где вместо ФИО в хлебных крошках стоит «Главная», а группы нет вовсе. Раньше
+ * из этого создавалась запись «Главная» с группой «Не удалось извлечь номер
+ * группы».
  *
- * Признак настоящего кабинета — студенческий URL, номер группы или ФИО,
- * отличное от названия раздела меню.
+ * Проверка применяется только при СОЗДАНИИ записи: существующего студента
+ * внезапно неудачный разбор страницы не должен выкидывать из аккаунта. И она
+ * намеренно не бросает исключение внутри BarsAuth — иначе ошибка проверки
+ * выглядела бы для человека как «код 2FA не подошёл».
  */
-export function isStudentDashboard(finalUrl: string, $: cheerio.CheerioAPI, info: StudentInfo): boolean {
-  const u = finalUrl.toLowerCase();
-  if (u.includes('/st_study/') || u.includes('studentid=')) return true;
-
+export function looksLikeStudentProfile(info: StudentInfo): boolean {
   if (info.studyCard?.trim()) return true;
   if (/^[А-ЯЁa-zA-Z]{1,5}-\d{2}-\d{2}$/i.test(info.groupName.trim())) return true;
 
@@ -135,15 +134,6 @@ export function isStudentDashboard(finalUrl: string, $: cheerio.CheerioAPI, info
   if (MENU_TITLES.has(name.toLowerCase())) return false;
   // У ФИО в БАРС всегда есть фамилия и имя, а у пункта меню — одно слово.
   return name.split(/\s+/).length >= 2;
-}
-
-/** Отказ, если вход открыл служебное меню, а не кабинет студента. */
-function assertStudentAccount(finalUrl: string, $: cheerio.CheerioAPI, info: StudentInfo): void {
-  if (isStudentDashboard(finalUrl, $, info)) return;
-
-  throw new Error(
-    'Этот аккаунт БАРС не является личным кабинетом студента (нет ФИО и номера группы). Войдите студенческим логином.',
-  );
 }
 
 /**
@@ -188,7 +178,6 @@ export class BarsAuth {
     // Проверяем, возможно уже авторизованы
     if (isDashboardPage(getFinalUrl, $get)) {
       const studentInfo = client.extractStudentInfo($get);
-      assertStudentAccount(getFinalUrl, $get, studentInfo);
       const sessionData: SavedSessionData = {
         savedAt: new Date().toISOString(),
         fio: studentInfo.studentName,
@@ -251,7 +240,6 @@ export class BarsAuth {
     if (!is2fa && isDashboardPage(postFinalUrl, $post)) {
       step('Авторизация выполнена успешно (без 2FA).');
       const studentInfo = client.extractStudentInfo($post);
-      assertStudentAccount(postFinalUrl, $post, studentInfo);
       const sessionData: SavedSessionData = {
         savedAt: new Date().toISOString(),
         fio: studentInfo.studentName,
@@ -345,7 +333,6 @@ export class BarsAuth {
     }
 
     const studentInfo = client.extractStudentInfo($verify);
-    assertStudentAccount(verifyFinalUrl, $verify, studentInfo);
     const sessionData: SavedSessionData = {
       savedAt: new Date().toISOString(),
       fio: studentInfo.studentName,

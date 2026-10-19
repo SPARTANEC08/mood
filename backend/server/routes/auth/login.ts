@@ -18,6 +18,7 @@ import path from 'node:path';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 
 import { forgetBarsClient, forgetBarsSessionValid } from '../../../services/bars/barsServiceFactory.ts';
+import { looksLikeStudentProfile } from '../../../services/bars/barsAuth.ts';
 import { safeErrorMessage } from '../../../../tg/format.ts';
 import { searchGroupOnMpei } from '../../../parser/mpeiApi.ts';
 import { BarsClient } from '../../../services/bars/barsClient.ts';
@@ -54,6 +55,28 @@ const LOGIN_ATTEMPT_TIMEOUT_MS = 45_000;
 
 const pendingLogins = new Map<string, PendingLogin>();
 const PENDING_TTL_MS = 10 * 60 * 1000;
+
+/**
+ * Сколько времени повторный вход переиспользует уже начатую 2FA-попытку.
+ *
+ * Каждый новый логин — это новая сессия БАРС и новое СМС. Если человек жмёт
+ * «Войти» ещё раз (или приложение повторяет запрос), новая СМС инвалидирует
+ * предыдущий код, и вход выглядит как «код не подошёл». Поэтому в этом окне
+ * возвращаем ту же попытку, а не открываем новую сессию.
+ */
+const PENDING_REUSE_MS = 2 * 60 * 1000;
+
+/** Незавершённая 2FA-попытка того же человека, которую можно продолжить. */
+function findReusableAttempt(owner: string, barsLoginHash: string): PendingLogin | undefined {
+  const now = Date.now();
+  for (const entry of pendingLogins.values()) {
+    if (entry.owner !== owner || entry.barsLoginHash !== barsLoginHash) continue;
+    if (entry.settled || !entry.needs2fa) continue;
+    if (now - entry.createdAt > PENDING_REUSE_MS) continue;
+    return entry;
+  }
+  return undefined;
+}
 
 /** Убирает протукшие попытки: иначе память растёт с каждым неудачным входом. */
 function sweepPending(): void {
@@ -105,11 +128,14 @@ function startLoginAttempt(
   });
 
   const entry: PendingLogin = {
+    challengeId,
     login: credentials.login,
     password: credentials.password,
     barsLoginHash: computeBarsLoginHash(credentials.login),
     owner: clientKey(request),
     createdAt: Date.now(),
+    needs2fa: false,
+    settled: false,
     resolveCode,
     loginPromise: null as unknown as Promise<BarsLoginResult>,
   };
@@ -121,6 +147,7 @@ function startLoginAttempt(
     // с флагом 'wx', и общий отладочный файл на все попытки конфликтовал бы.
     saveSessionPath: sessionFile(challengeId),
     on2FACodeNeeded: async () => {
+      entry.needs2fa = true;
       markTwoFactor();
       return codePromise;
     },
@@ -129,8 +156,14 @@ function startLoginAttempt(
   pendingLogins.set(challengeId, entry);
 
   const done: Promise<LoginOutcome> = entry.loginPromise.then(
-    (result) => ({ kind: 'done', result }) as LoginOutcome,
-    (error: unknown) => ({ kind: 'error', error }) as LoginOutcome,
+    (result) => {
+      entry.settled = true;
+      return { kind: 'done', result } as LoginOutcome;
+    },
+    (error: unknown) => {
+      entry.settled = true;
+      return { kind: 'error', error } as LoginOutcome;
+    },
   );
 
   // Пока жив только флаг «нужен код», промис входа не трогаем: он продолжает
@@ -160,15 +193,24 @@ function awaitOutcomeWithDeadline(
 
   if (remaining === 0) return Promise.resolve(logTimeout());
 
-  return Promise.race([
-    done,
-    twoFactor,
-    new Promise<LoginOutcome>((resolve) => {
-      const timer = setTimeout(() => resolve(logTimeout()), remaining);
-      // unref: таймер ожидания не должен удерживать процесс от завершения.
-      timer.unref?.();
-    }),
-  ]);
+  return new Promise<LoginOutcome>((resolve) => {
+    let settled = false;
+    const finish = (outcome: LoginOutcome): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(outcome);
+    };
+
+    const timer = setTimeout(() => finish(logTimeout()), remaining);
+    // unref: таймер ожидания не должен удерживать процесс от завершения.
+    timer.unref?.();
+
+    // Таймер снимаем, когда исход уже известен: иначе через 45 секунд в журнал
+    // попадало «БАРС не ответил», хотя вход давно попросил код или завершился.
+    void done.then(finish);
+    void twoFactor.then(finish);
+  });
 }
 
 function logTimeout(): LoginOutcome {
@@ -206,6 +248,14 @@ async function performLogin(
   }
 
   const existing = userStore.getByBarsLoginHash(barsLoginHash);
+
+  // Повторный вход, пока предыдущая попытка ждёт код: продолжаем её, иначе
+  // новая СМС инвалидирует уже отправленный код (см. PENDING_REUSE_MS).
+  const reusable = findReusableAttempt(owner, barsLoginHash);
+  if (reusable) {
+    console.log('[Auth] повторный вход: продолжаем уже начатую 2FA-попытку');
+    return { need2fa: true, challengeId: reusable.challengeId };
+  }
 
   const challengeId = crypto.randomUUID();
   const client = new BarsClient();
@@ -294,10 +344,15 @@ async function finishTwoFactorLogin(challengeId: string, code: string, platform:
   try {
     result = await entry.loginPromise;
   } catch (err: unknown) {
+    const reason = safeErrorMessage(err);
+    console.warn(`[Auth] 2FA не подтверждён: ${reason}`);
+    // Не называем любую ошибку «код не подошёл»: сетевой сбой или отказ БАРС
+    // человеку нужно видеть как есть, иначе он вводит заведомо верный код снова.
+    const wrongCode = /неверный код/i.test(reason);
     throw new AuthError(
-      `Код не подошёл: ${safeErrorMessage(err)}`,
+      wrongCode ? 'Код не подошёл. Попробуйте ещё раз.' : reason,
       401,
-      'invalid_credentials',
+      wrongCode ? 'invalid_credentials' : 'login_failed',
     );
   } finally {
     await cleanupSessionFile(challengeId);
@@ -353,6 +408,19 @@ async function completeRegistration(input: {
 
   const fullName = studentInfo.studentName?.trim() || 'Студент';
   const barsGroupName = studentInfo.groupName?.trim() || '';
+  const profileOk = looksLikeStudentProfile(studentInfo);
+
+  // Новый аккаунт без студенческого профиля не заводим: БАРС пускает и
+  // служебные/нестуденческие логины, из которых раньше появлялись записи
+  // «Главная» с группой-заглушкой. Существующего человека при этом не трогаем:
+  // разовый сбой разбора страницы не должен выкидывать его из аккаунта.
+  if (!existing && !profileOk) {
+    throw new AuthError(
+      'Этот аккаунт БАРС не похож на студенческий: не удалось определить ФИО и группу. Войдите студенческим логином.',
+      403,
+      'not_a_student',
+    );
+  }
 
   // Группа нужна для расписания: без неё показывать нечего.
   let groupId: number | undefined;
@@ -382,7 +450,7 @@ async function completeRegistration(input: {
   const encPass = encrypt(password);
 
   const patch: Partial<StoredUser> = {
-    firstName: fullName.split(' ')[0] || undefined,
+    firstName: profileOk ? fullName.split(' ')[0] || undefined : existing?.firstName,
     barsAuth: {
       encryptedLogin: encLogin.encryptedData,
       encryptedPass: encPass.encryptedData,
@@ -396,14 +464,20 @@ async function completeRegistration(input: {
       }),
       savedAt: sessionData.savedAt ?? new Date().toISOString(),
     },
-    studentProfile: {
-      fullName,
-      recordBookNumber: studentInfo.studyCard,
-      groupName: barsGroupName || undefined,
-    },
-    groupName,
-    groupId,
-    faculty,
+    // Плохой разбор страницы не должен затирать нормальный профиль: сохраняем
+    // прежние ФИО/группу, но креды и сессию обновляем — вход-то состоялся.
+    ...(profileOk
+      ? {
+          studentProfile: {
+            fullName,
+            recordBookNumber: studentInfo.studyCard,
+            groupName: barsGroupName || undefined,
+          },
+          groupName: groupName ?? existing?.groupName,
+          groupId: groupId ?? existing?.groupId,
+          faculty: faculty ?? existing?.faculty,
+        }
+      : {}),
     authState: null,
     tempAuthData: undefined,
     barsAuthedAt: new Date().toISOString(),

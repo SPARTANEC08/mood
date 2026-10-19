@@ -13,12 +13,18 @@ import type { SavedSessionData, StudentInfo } from '../../../services/bars/barsC
  * процесса: код подтверждения живёт минуты и переживать перезапуск не должен.
  */
 export interface PendingLogin {
+  /** Ключ этой попытки в pendingLogins; он же challengeId для клиента. */
+  challengeId: string;
   login: string;
   password: string;
   barsLoginHash: string;
   /** Ключ ограничителя: адрес клиента, начавшего вход. */
   owner: string;
   createdAt: number;
+  /** БАРС уже попросил код: попытку можно переиспользовать при повторном входе. */
+  needs2fa: boolean;
+  /** Вход завершился (успехом или ошибкой); переиспользовать нельзя. */
+  settled: boolean;
   /** Разрешает ожидание кода внутри BarsAuth. */
   resolveCode: (code: string) => void;
   /** Промис входа, запущенный в момент создания записи. */
