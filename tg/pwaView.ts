@@ -63,6 +63,7 @@ export function getPwaUrl(): string | null {
 
 export const CHANNEL_URL = 'https://t.me/mood_mpei';
 export const SUPPORT_URL = 'https://t.me/mood_mpei_sup';
+export const GITHUB_URL = 'https://github.com/SPARTANEC08/mood';
 
 function appLink(): string {
   const url = getPwaUrl();
@@ -75,7 +76,11 @@ function appButtonRow(): InlineButton[] {
 }
 
 function supportRow(): InlineButton[] {
-  return [urlBtn('📣 Канал', CHANNEL_URL), urlBtn('💬 Поддержка', SUPPORT_URL)];
+  return [
+    urlBtn('📣 Канал', CHANNEL_URL),
+    urlBtn('💬 Поддержка', SUPPORT_URL),
+    urlBtn('🐙 GitHub', GITHUB_URL),
+  ];
 }
 
 /**

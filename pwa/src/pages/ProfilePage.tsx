@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import {
   BookOpen,
   CircleCheck,
+  GitBranch,
   GraduationCap,
   LogOut,
   Mail,
@@ -330,6 +331,20 @@ export function ProfilePage({ profile }: { profile: BootstrapResponse }) {
               <span className="min-w-0 flex-1">
                 <span className="block text-[14px] font-medium">Telegram-канал Mood</span>
                 <span className="block text-[12px] text-[var(--text-tertiary)]">@mood_mpei</span>
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                haptic('light');
+                openLink('https://github.com/SPARTANEC08/mood');
+              }}
+              className="pressable flex w-full items-center gap-3 px-4 py-3 text-left active:pressable-active"
+            >
+              <GitBranch size={18} className="shrink-0" style={{ color: 'var(--accent)' }} aria-hidden />
+              <span className="min-w-0 flex-1">
+                <span className="block text-[14px] font-medium">Исходный код на GitHub</span>
+                <span className="block text-[12px] text-[var(--text-tertiary)]">SPARTANEC08/mood</span>
               </span>
             </button>
           </Card>
