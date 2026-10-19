@@ -291,11 +291,24 @@ export async function downloadFile(fileId: string, fileName: string, mimeType?: 
 export interface FileShareLink {
   path: string;
   expiresAt: number;
+  disposition?: 'inline' | 'attachment';
 }
 
-/** Создаёт короткоживущую inline-ссылку для браузерного PDF-просмотрщика. */
-export function createFileShareLink(fileId: string): Promise<FileShareLink> {
-  return request<FileShareLink>(`/files/${encodeURIComponent(fileId)}/share`, { method: 'POST' });
+/**
+ * Создаёт короткоживущую ссылку на файл.
+ *
+ * `download: true` — публичная ссылка на скачивание (attachment). Нужна Android:
+ * PDF в TWA/Custom Tab не рисуется, а по attachment системный браузер скачивает
+ * файл и открывает его своим просмотрщиком.
+ */
+export function createFileShareLink(
+  fileId: string,
+  options: { download?: boolean } = {},
+): Promise<FileShareLink> {
+  return request<FileShareLink>(`/files/${encodeURIComponent(fileId)}/share`, {
+    method: 'POST',
+    body: options.download ? { download: true } : {},
+  });
 }
 
 export async function openFileInSystemViewer(fileId: string): Promise<void> {

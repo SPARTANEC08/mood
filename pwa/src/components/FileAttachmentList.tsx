@@ -5,7 +5,7 @@ import { FileThumbnail } from '@/components/FilePreview';
 import { BottomSheet } from '@/components/ui';
 import { InAppBrowser } from '@/components/InAppBrowser';
 import { api } from '@/lib/api';
-import { openPdf, pdfOpenErrorText, pdfShareUrl } from '@/lib/openPdf';
+import { openPdf, pdfOpenErrorText } from '@/lib/openPdf';
 import { haptic } from '@/lib/env';
 import { cn } from '@/lib/cn';
 import type { ServerFileRef } from '@/types/api';
@@ -94,6 +94,8 @@ export function FileAttachmentList({
   const [pdfFallback, setPdfFallback] = useState<{
     file: ServerFileRef;
     url: string | null;
+    /** Android/TWA: intent-ссылка в системный Chrome. */
+    externalUrl?: string;
     error?: string;
   } | null>(null);
 
@@ -109,8 +111,8 @@ export function FileAttachmentList({
 
       try {
         const outcome = await openPdf(file);
-        if (outcome === 'fallback') {
-          setPdfFallback({ file, url: await pdfShareUrl(file.fileId) });
+        if (outcome.kind === 'fallback') {
+          setPdfFallback({ file, url: outcome.url ?? null, externalUrl: outcome.externalUrl });
         }
       } catch (err: unknown) {
         setPdfFallback({ file, url: null, error: pdfOpenErrorText(err) });
@@ -208,8 +210,8 @@ export function FileAttachmentList({
         footer={
           pdfFallback?.url ? (
             <a
-              href={pdfFallback.url}
-              target="_blank"
+              href={pdfFallback.externalUrl ?? pdfFallback.url}
+              target={pdfFallback.externalUrl ? undefined : '_blank'}
               rel="noopener noreferrer"
               onClick={() => {
                 haptic('light');
@@ -218,7 +220,7 @@ export function FileAttachmentList({
               className="pressable block w-full rounded-[14px] py-3 text-center text-[17px] font-semibold text-white active:pressable-active"
               style={{ background: 'var(--accent)' }}
             >
-              Открыть в браузере
+              Скачать PDF
             </a>
           ) : (
             <button
@@ -241,7 +243,7 @@ export function FileAttachmentList({
         <p className="text-[14px] leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
           {pdfFallback?.error ??
             (pdfFallback?.url
-              ? `«${pdfFallback.file.originalName}» откроется в браузере: там документ покажет системный просмотрщик с кнопкой «Поделиться».`
+              ? `«${pdfFallback.file.originalName}» откроется в браузере: там документ скачается и покажется системным просмотрщиком.`
               : 'Документ можно скачать и открыть в системном просмотрщике.')}
         </p>
       </BottomSheet>

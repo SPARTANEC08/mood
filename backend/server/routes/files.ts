@@ -252,14 +252,20 @@ interface ShareEntry {
   fileId: string;
   expiresAt: number;
   usesLeft: number;
+  /** inline — показать в просмотрщике; attachment — скачать файл. */
+  disposition: 'inline' | 'attachment';
 }
 
 const shareTokens = new Map<string, ShareEntry>();
 
-function createShareToken(userId: string, fileId: string): { token: string; expiresAt: number } {
+function createShareToken(
+  userId: string,
+  fileId: string,
+  disposition: 'inline' | 'attachment',
+): { token: string; expiresAt: number } {
   const token = randomUUID();
   const expiresAt = Date.now() + SHARE_TTL_MS;
-  shareTokens.set(token, { userId, fileId, expiresAt, usesLeft: SHARE_MAX_USES });
+  shareTokens.set(token, { userId, fileId, expiresAt, usesLeft: SHARE_MAX_USES, disposition });
   return { token, expiresAt };
 }
 
@@ -300,14 +306,19 @@ export async function registerFileRoutes(app: FastifyInstance): Promise<void> {
   app.post('/api/files/:fileId/share', async (request, reply) => {
     const student = requireUser(request);
     const { fileId } = request.params as { fileId: string };
+    // download=1 — публичная ссылка на скачивание (Content-Disposition: attachment).
+    // Нужна Android: PDF в TWA/Chrome Custom Tab не рисуется, а по attachment
+    // системный браузер скачивает файл и открывает его своим просмотрщиком.
+    const body = (request.body ?? {}) as { download?: unknown };
+    const disposition = body.download === true ? 'attachment' : 'inline';
 
     const found = await getFile(student.userId, fileId);
     if (!found) {
       return reply.code(404).send({ error: 'not_found', message: 'Файл не найден.' });
     }
 
-    const { token, expiresAt } = createShareToken(student.userId, fileId);
-    return reply.send({ path: `/api/files/share/${token}`, expiresAt });
+    const { token, expiresAt } = createShareToken(student.userId, fileId, disposition);
+    return reply.send({ path: `/api/files/share/${token}`, expiresAt, disposition });
   });
 
   /**
@@ -335,7 +346,7 @@ export async function registerFileRoutes(app: FastifyInstance): Promise<void> {
         .send('Файл больше недоступен.');
     }
 
-    return sendFile(reply, found, 'inline', request.headers.range);
+    return sendFile(reply, found, entry.disposition, request.headers.range);
   });
 
   /**

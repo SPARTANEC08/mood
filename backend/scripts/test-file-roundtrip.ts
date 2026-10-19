@@ -225,6 +225,31 @@ const shareGone = await app.inject({
 });
 check('мёртвая share-ссылка → 410', shareGone.statusCode === 410, String(shareGone.statusCode));
 
+// ── 3c. share-ссылка на скачивание (Android: PDF в TWA не рисуется) ──────────
+{
+  const downloadRes = await app.inject({
+    method: 'POST',
+    url: `/api/files/${fileRef.fileId}/share`,
+    headers: auth,
+    payload: { download: true },
+  });
+  check('POST /:fileId/share с download → 200', downloadRes.statusCode === 200, String(downloadRes.statusCode));
+
+  const downloadPath = downloadRes.json<{ path?: string; disposition?: string }>().path;
+  check('share возвращает disposition=attachment', downloadRes.json<{ disposition?: string }>().disposition === 'attachment');
+
+  if (typeof downloadPath === 'string') {
+    const file = await app.inject({ method: 'GET', url: downloadPath });
+    check('download-share без токена → 200', file.statusCode === 200, String(file.statusCode));
+    check(
+      'download-share отдаётся attachment',
+      String(file.headers['content-disposition'] ?? '').startsWith('attachment'),
+      String(file.headers['content-disposition']),
+    );
+    check('download-share содержимое совпадает', file.rawPayload.equals(CONTENT));
+  }
+}
+
 // ── 4. привязка к записи ДЗ ───────────────────────────────────────────────────
 userStore.patch(userId, { groupName: 'ИЭ-11-26' });
 homeworkStore.save({

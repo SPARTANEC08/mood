@@ -12,61 +12,107 @@
  *
  * Файлы лежат за авторизацией (`X-PWA-Token`), а браузер при открытии ссылки
  * заголовков не шлёт. Поэтому берём у сервера КОРОТКОЖИВУЮ подписанную ссылку
- * (`/api/files/share/:token`): она отдаёт файл с `Content-Type: application/pdf`,
- * `Content-Disposition: inline` и поддержкой Range, без токена в заголовке — и
- * токен при этом в URL не попадает (в самой ссылке случайный одноразовый ключ).
+ * (`/api/files/share/:token`): она отдаёт файл без токена в заголовке — и токен
+ * при этом в URL не попадает (в самой ссылке случайный одноразовый ключ).
  *
- * ── Про окна ────────────────────────────────────────────────────────────────
+ * ── Android ─────────────────────────────────────────────────────────────────
+ *
+ * В Android-приложении (TWA) и в Custom Tab PDF не открывается вообще: Chrome
+ * не рисует документ внутри вкладки, а `window.open` уходит в Custom Tab. Хуже
+ * того, TWA не умеет скачивать файлы. Поэтому на Android мы не пытаемся открыть
+ * PDF «в приложении», а показываем публичную ссылку на скачивание
+ * (`Content-Disposition: attachment`) и в TWA подменяем её на intent-ссылку,
+ * которая принудительно открывает системный Chrome: он скачает файл и откроет
+ * его своим просмотрщиком.
+ *
+ * ── iOS ─────────────────────────────────────────────────────────────────────
  *
  * iOS разрешает открыть новое окно только СИНХРОННО внутри тапа: если сначала
  * сходить за ссылкой, а потом звать `window.open`, Safari сочтёт это popup-ом и
  * заблокирует. Поэтому окно просим сразу (`about:blank`), а адрес подставляем в
- * него, когда ссылка пришла — так делает и штатный Safari, и установленное
- * приложение (там это системный лист Safari с «Готово»/«Поделиться»).
+ * него, когда ссылка пришла.
  */
 
 import { api } from '@/lib/api';
 import { isIOS, isStandalone } from '@/lib/env';
 
-export type PdfOpenOutcome = 'system' | 'fallback';
+export interface PdfOpenOutcome {
+  kind: 'system' | 'fallback';
+  /** Публичная ссылка на файл (для показа человеку). */
+  url?: string;
+  /** Куда вести ссылку на Android в TWA: intent в системный Chrome. */
+  externalUrl?: string;
+}
 
 interface PdfFile {
   fileId: string;
   originalName: string;
 }
 
+function isAndroid(): boolean {
+  return /Android/i.test(window.navigator.userAgent || '');
+}
+
 /** Абсолютный адрес подписанной ссылки на файл. */
-export async function pdfShareUrl(fileId: string): Promise<string> {
-  const { path } = await api.createFileShareLink(fileId);
+export async function pdfShareUrl(fileId: string, download = false): Promise<string> {
+  const { path } = await api.createFileShareLink(fileId, { download });
   return new URL(path, window.location.origin).href;
 }
 
 /**
- * Открывает PDF в системном просмотрщике.
+ * Intent-ссылка, открывающая URL в системном Chrome.
  *
- * Возвращает `fallback`, если окно открыть не удалось (браузер запретил или это
- * TWA): вызывающий показывает понятную ссылку, которую можно нажать самому.
+ * Из TWA обычная навигация остаётся внутри приложения, а `intent://` Chrome
+ * передаёт системе: Android запускает браузер как отдельное приложение. Если
+ * Chrome не установлен, сработает `browser_fallback_url` — та же https-ссылка.
+ */
+export function androidBrowserIntent(url: string): string {
+  try {
+    const parsed = new URL(url);
+    const encodedFallback = encodeURIComponent(url);
+    return `intent://${parsed.host}${parsed.pathname}${parsed.search}#Intent;scheme=${parsed.protocol.replace(':', '')};package=com.android.chrome;S.browser_fallback_url=${encodedFallback};end`;
+  } catch {
+    return url;
+  }
+}
+
+/**
+ * Открывает PDF.
+ *
+ * Возвращает `fallback` с публичной ссылкой, если открыть сам не смог: вызывающий
+ * показывает кнопку, которую человек нажмёт руками.
  */
 export async function openPdf(file: PdfFile): Promise<PdfOpenOutcome> {
-  // Установленное приложение на Android — это TWA. window.open уходит в Custom
-  // Tab, который PDF не рисует, поэтому выводим себя из области TWA навигацией:
-  // тогда документ откроет Chrome целиком, со своим просмотрщиком.
+  // Android: никакого window.open — показываем публичную ссылку на скачивание.
+  if (isAndroid()) {
+    const url = await pdfShareUrl(file.fileId, true);
+    return {
+      kind: 'fallback',
+      url,
+      externalUrl: isStandalone() ? androidBrowserIntent(url) : undefined,
+    };
+  }
+
+  // Установленное приложение на Android — это TWA (обработано выше). Здесь —
+  // остальные standalone-браузеры: выводим себя из PWA навигацией.
   if (isStandalone() && !isIOS()) {
     const url = await pdfShareUrl(file.fileId);
     const opened = window.open(url, '_blank', 'noopener');
     if (!opened) window.location.href = url;
-    return 'system';
+    return { kind: 'system' };
   }
 
   // iOS (и Safari, и установленное приложение) и обычный браузер: окно просим
   // синхронно, внутри тапа — иначе iOS его блокирует.
   const viewer = window.open('about:blank', '_blank');
-  if (!viewer) return 'fallback';
+  if (!viewer) {
+    return { kind: 'fallback', url: await pdfShareUrl(file.fileId) };
+  }
 
   try {
     viewer.opener = null;
     viewer.location.replace(await pdfShareUrl(file.fileId));
-    return 'system';
+    return { kind: 'system' };
   } catch (err) {
     // Ссылку не выдали (сеть/сессия) — закрываем пустое окно и отдаём ошибку
     // наверх: пустая вкладка на экране хуже сообщения.
