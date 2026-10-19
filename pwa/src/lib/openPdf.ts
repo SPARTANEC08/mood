@@ -42,6 +42,8 @@ export interface PdfOpenOutcome {
   url?: string;
   /** Куда вести ссылку на Android в TWA: intent в системный Chrome. */
   externalUrl?: string;
+  /** Ссылка отдаёт файл как attachment (Android): кнопка «Скачать». */
+  download?: boolean;
 }
 
 interface PdfFile {
@@ -90,20 +92,28 @@ export async function openPdf(file: PdfFile): Promise<PdfOpenOutcome> {
       kind: 'fallback',
       url,
       externalUrl: isStandalone() ? androidBrowserIntent(url) : undefined,
+      download: true,
     };
   }
 
-  // Установленное приложение на Android — это TWA (обработано выше). Здесь —
-  // остальные standalone-браузеры: выводим себя из PWA навигацией.
-  if (isStandalone() && !isIOS()) {
+  // iOS: и в Safari, и в установленном приложении надёжнее открыть PDF по
+  // публичной inline-ссылке. window.open в standalone часто отдаёт пустой лист
+  // Safari, а PDF в нём не рисуется. По тапу Safari откроет документ своим
+  // просмотрщиком (с «Поделиться» и закрытием).
+  if (isIOS()) {
+    return { kind: 'fallback', url: await pdfShareUrl(file.fileId), download: false };
+  }
+
+  // Остальные standalone-браузеры: выводим себя из PWA навигацией.
+  if (isStandalone()) {
     const url = await pdfShareUrl(file.fileId);
     const opened = window.open(url, '_blank', 'noopener');
     if (!opened) window.location.href = url;
     return { kind: 'system' };
   }
 
-  // iOS (и Safari, и установленное приложение) и обычный браузер: окно просим
-  // синхронно, внутри тапа — иначе iOS его блокирует.
+  // Обычный браузер на десктопе: окно просим синхронно, внутри тапа — иначе
+  // браузер сочтёт его popup-ом и заблокирует.
   const viewer = window.open('about:blank', '_blank');
   if (!viewer) {
     return { kind: 'fallback', url: await pdfShareUrl(file.fileId) };

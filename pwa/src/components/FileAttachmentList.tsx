@@ -96,6 +96,8 @@ export function FileAttachmentList({
     url: string | null;
     /** Android/TWA: intent-ссылка в системный Chrome. */
     externalUrl?: string;
+    /** true — ссылка скачивает файл (Android), иначе открывает (iOS). */
+    download?: boolean;
     error?: string;
   } | null>(null);
 
@@ -112,7 +114,12 @@ export function FileAttachmentList({
       try {
         const outcome = await openPdf(file);
         if (outcome.kind === 'fallback') {
-          setPdfFallback({ file, url: outcome.url ?? null, externalUrl: outcome.externalUrl });
+          setPdfFallback({
+            file,
+            url: outcome.url ?? null,
+            externalUrl: outcome.externalUrl,
+            download: outcome.download,
+          });
         }
       } catch (err: unknown) {
         setPdfFallback({ file, url: null, error: pdfOpenErrorText(err) });
@@ -220,7 +227,7 @@ export function FileAttachmentList({
               className="pressable block w-full rounded-[14px] py-3 text-center text-[17px] font-semibold text-white active:pressable-active"
               style={{ background: 'var(--accent)' }}
             >
-              Скачать PDF
+              {pdfFallback.download ? 'Скачать PDF' : 'Открыть PDF'}
             </a>
           ) : (
             <button
@@ -243,7 +250,9 @@ export function FileAttachmentList({
         <p className="text-[14px] leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
           {pdfFallback?.error ??
             (pdfFallback?.url
-              ? `«${pdfFallback.file.originalName}» откроется в браузере: там документ скачается и покажется системным просмотрщиком.`
+              ? pdfFallback.download
+                ? `«${pdfFallback.file.originalName}» скачается в «Загрузки» и откроется системным просмотрщиком.`
+                : `«${pdfFallback.file.originalName}» откроется в браузере: там документ покажет системный просмотрщик с кнопкой «Поделиться».`
               : 'Документ можно скачать и открыть в системном просмотрщике.')}
         </p>
       </BottomSheet>
