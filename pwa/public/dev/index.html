@@ -1,492 +1,237 @@
 <!doctype html>
 <html lang="ru">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="robots" content="noindex, nofollow" />
-    <meta name="color-scheme" content="dark" />
-    <title>HUB · СТАТИСТИКА</title>
-    <style>
-      :root {
-        --bg: #0f0f14;
-        --surface: #1a1a22;
-        --surface-2: #21212b;
-        --border: #2a2a36;
-        --text: #ececf2;
-        --muted: #8b8b9c;
-        --accent: #8b5cf6;
-        --accent-light: #a78bfa;
-        --accent-dark: #6d28d9;
-        --accent-line: #c4b5fd;
-        --good: #34d399;
-        --danger: #f87171;
-        --radius: 14px;
-        --shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex, nofollow" />
+<meta name="color-scheme" content="dark" />
+<title>MOOD · СТАТИСТИКА</title>
+<script src="/theme-init.js"></script>
+<style>
+  :root{
+    --bg:#0f0f14; --surface:#1a1a22; --border:#2a2a36; --text:#ececf2; --muted:#8b8b9c;
+    --accent:#8b5cf6; --good:#34d399; --warn:#fbbf24; --radius:12px;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+    font:14px/1.45 -apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif}
+  .wrap{max-width:860px;margin:0 auto;padding:20px 16px 48px}
+  header{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+  h1{font-size:19px;margin:0}
+  .muted{color:var(--muted);font-size:12.5px}
+  h2{font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin:26px 0 10px}
+  .grid{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px}
+  .k{font-size:12px;color:var(--muted)}
+  .v{font-size:24px;font-weight:600;margin-top:4px;font-variant-numeric:tabular-nums}
+  .hint{font-size:11.5px;color:var(--muted);margin-top:3px}
+  .chart{display:flex;align-items:flex-end;gap:3px;height:96px;background:var(--surface);
+    border:1px solid var(--border);border-radius:var(--radius);padding:10px}
+  .chart i{flex:1;background:var(--accent);border-radius:3px 3px 0 0;min-height:2px}
+  .labels{display:flex;gap:3px;margin-top:4px;font-size:10px;color:var(--muted)}
+  .labels span{flex:1;text-align:center}
+  .bar{display:flex;height:10px;border-radius:5px;overflow:hidden;margin-top:10px;background:var(--bg)}
+  .bar i{display:block;min-width:2px}
+  .bar .ios{background:#60b0ff} .bar .android{background:#7ed957} .bar .web{background:var(--accent)} .bar .unknown{background:#4b4b5a}
+  table{width:100%;border-collapse:collapse;background:var(--surface);border:1px solid var(--border);
+    border-radius:var(--radius);overflow:hidden}
+  th,td{padding:8px 10px;text-align:left;border-top:1px solid var(--border);font-size:13px;vertical-align:top}
+  th{color:var(--muted);font-weight:500;font-size:11.5px;text-transform:uppercase;letter-spacing:.03em;border-top:0}
+  th.num,td.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .ok{color:var(--good)} .warn{color:var(--warn)} .off{color:var(--muted)}
+  .hidden{display:none}
+  .token{max-width:430px;margin:70px auto;background:var(--surface);border:1px solid var(--border);
+    border-radius:var(--radius);padding:24px}
+  .token input{width:100%;font:inherit;padding:11px 12px;border-radius:11px;border:1px solid var(--border);
+    background:var(--bg);color:var(--text);margin-bottom:12px}
+  button{font:inherit;cursor:pointer}
+  .primary{width:100%;padding:11px;border:0;border-radius:11px;background:var(--accent);color:#fff;font-weight:600}
+  .err{color:#f87171;font-size:13px;min-height:18px;margin-top:8px}
+  .foot{margin-top:26px;color:var(--muted);font-size:12px}
+</style>
+</head>
+<body>
+<div id="auth" class="token hidden">
+  <h1>MOOD · СТАТИСТИКА</h1>
+  <p class="muted">Страница закрыта токеном. Вставьте токен (или откройте ссылку вида <code>/dev/#ТОКЕН</code>).</p>
+  <input id="tokenInput" type="password" placeholder="DEV_STATS_TOKEN" autocomplete="off" />
+  <button class="primary" id="tokenSave">Открыть</button>
+  <div class="err" id="authErr"></div>
+</div>
+
+<div id="app" class="wrap hidden">
+  <header>
+    <h1>MOOD · СТАТИСТИКА</h1>
+    <span class="muted" id="updated"></span>
+  </header>
+  <p class="muted" id="windowLine"></p>
+
+  <h2>Сейчас</h2>
+  <div class="grid" id="nowGrid"></div>
+
+  <h2>За 24 часа</h2>
+  <div class="grid" id="dayGrid"></div>
+
+  <h2>Платформы</h2>
+  <div class="grid" id="platformGrid"></div>
+  <div class="bar" id="platformBar"></div>
+
+  <h2>Запросы по часам</h2>
+  <div class="chart" id="chart"></div>
+  <div class="labels" id="chartLabels"></div>
+
+  <h2>ДЗ и «Важное»</h2>
+  <div class="grid" id="contentGrid"></div>
+
+  <h2 id="filesTitle">Файлы</h2>
+  <table><thead><tr><th>Пользователь</th><th class="num">Файлов</th><th class="num">Размер</th><th class="num">Последняя загрузка</th></tr></thead><tbody id="filesBody"></tbody></table>
+
+  <h2 id="sessionsTitle">Сессии БАРС</h2>
+  <table><thead><tr><th>Пользователь</th><th class="num">Последний заход</th><th>БАРС</th><th>ТГ</th><th>Уведы</th></tr></thead><tbody id="sessionsBody"></tbody></table>
+
+  <div class="err" id="err"></div>
+  <p class="foot">Срез за последние 24 часа. Обновляется при открытии и по кнопке ниже.</p>
+  <button class="primary" id="reload" style="max-width:220px">Перечитать</button>
+</div>
+
+<script>
+  var TOKEN_KEY = 'mood_dev_token';
+  var $ = function (id) { return document.getElementById(id); };
+  var state = { token: '' };
+
+  function esc(v) {
+    return String(v == null ? '' : v)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+  var MONTHS = ['янв','фев','мар','апр','мая','июн','июл','авг','сен','окт','ноя','дек'];
+
+  /** «19.10, 14:32» по Москве. */
+  function stamp(ms) {
+    if (!ms) return '—';
+    var d = new Date(ms + 3 * 3600 * 1000);
+    var p = function (n) { return (n < 10 ? '0' : '') + n; };
+    return p(d.getUTCDate()) + '.' + p(d.getUTCMonth() + 1) + ', ' + p(d.getUTCHours()) + ':' + p(d.getUTCMinutes());
+  }
+  function size(bytes) {
+    if (!bytes) return '0';
+    if (bytes < 1024 * 1024) return Math.max(1, Math.round(bytes / 1024)) + ' КБ';
+    return (bytes / 1024 / 1024).toFixed(1).replace('.', ',') + ' МБ';
+  }
+  function tile(k, v, hint) {
+    return '<div class="card"><div class="k">' + esc(k) + '</div><div class="v">' + esc(v) + '</div>' +
+      (hint ? '<div class="hint">' + esc(hint) + '</div>' : '') + '</div>';
+  }
+
+  /** Эмодзи платформы: та же раскладка, что в backend/utils/platform.ts. */
+  function platformEmoji(platform) {
+    return platform === 'ios' ? '🍏' : platform === 'android' ? '🤖' : platform === 'web' ? '🌐' : '❓';
+  }
+
+  function render(data) {
+    var w = data.window, files = data.files;
+
+    $('updated').textContent = 'снято ' + data.moscowNow.date + ' ' + data.moscowNow.time + ' МСК';
+    $('windowLine').textContent = '24 часа: ' + stamp(data.windowStart) + ' — ' + stamp(data.windowEnd) + ' МСК';
+
+    $('nowGrid').innerHTML =
+      tile('Активных сессий БАРС', data.current.barsSessions) +
+      tile('Онлайн (±5 мин)', data.current.online);
+
+    $('dayGrid').innerHTML =
+      tile('Запросов', w.requests) +
+      tile('Заходов в приложение', w.visits) +
+      tile('Максимум онлайна', w.maxOnline, 'окно 5 минут') +
+      tile('Новых сессий БАРС', w.newBarsSessions, 'уникальных людей');
+
+    var p = data.platforms || { ios: 0, android: 0, web: 0, unknown: 0 };
+    var pTotal = p.ios + p.android + p.web + p.unknown;
+    $('platformGrid').innerHTML =
+      tile('🍏 iOS', p.ios) +
+      tile('🤖 Android', p.android) +
+      tile('🌐 Web', p.web) +
+      tile('❓ Неизвестно', p.unknown);
+    $('platformBar').innerHTML = pTotal
+      ? ['ios', 'android', 'web', 'unknown'].map(function (key) {
+          var width = Math.round((p[key] / pTotal) * 100);
+          return width ? '<i class="' + key + '" style="width:' + width + '%" title="' + key + ': ' + p[key] + '"></i>' : '';
+        }).join('')
+      : '';
+
+    var hours = data.requestsByHour || [];
+    var max = Math.max.apply(null, [1].concat(hours.map(function (h) { return h.value; })));
+    $('chart').innerHTML = hours.map(function (h) {
+      var height = Math.round((h.value / max) * 100);
+      return '<i style="height:' + height + '%" title="' + esc(h.label) + ' — ' + h.value + '"></i>';
+    }).join('');
+    $('chartLabels').innerHTML = hours.map(function (h) {
+      return '<span>' + esc(String(h.label).slice(0, 2)) + '</span>';
+    }).join('');
+
+    $('contentGrid').innerHTML =
+      tile('ДЗ создано / удалено', w.homework.created + ' / ' + w.homework.deleted, 'всего сейчас: ' + w.homework.total) +
+      tile('Важное создано / удалено', w.important.created + ' / ' + w.important.deleted, 'всего сейчас: ' + w.important.total);
+
+    $('filesTitle').textContent = 'Файлы · ' + files.totalFiles + ' шт, ' + size(files.totalBytes);
+    $('filesBody').innerHTML = files.byUser.length
+      ? files.byUser.map(function (r) {
+          return '<tr><td>' + esc(r.name) + '<div class="hint">' + esc(r.group || '—') + '</div></td>' +
+            '<td class="num">' + r.files + '</td><td class="num">' + size(r.bytes) + '</td>' +
+            '<td class="num">' + stamp(r.lastUploadAt) + '</td></tr>';
+        }).join('')
+      : '<tr><td colspan="4" class="off">Файлов нет</td></tr>';
+
+    $('sessionsTitle').textContent = 'Сессии БАРС · ' + data.sessions.length;
+    $('sessionsBody').innerHTML = data.sessions.map(function (r) {
+      var bars = r.bars === 'active' ? '<span class="ok">активна</span>'
+        : r.bars === 'expired' ? '<span class="warn">истекла</span>' : '<span class="off">нет</span>';
+      return '<tr><td>' + platformEmoji(r.platform) + ' ' + esc(r.name) + '<div class="hint">' + esc(r.group || '—') + '</div></td>' +
+        '<td class="num">' + stamp(r.lastSeenAt) + '</td>' +
+        '<td>' + bars + '</td>' +
+        '<td>' + (r.telegram ? '<span class="ok">да</span>' : '<span class="off">нет</span>') + '</td>' +
+        '<td>' + (r.notifications ? '<span class="ok">вкл</span>' : '<span class="off">выкл</span>') + '</td></tr>';
+    }).join('');
+  }
+
+  async function load() {
+    $('err').textContent = '';
+    try {
+      var res = await fetch('/dev-api/stats', { headers: { 'X-Dev-Token': state.token }, cache: 'no-store' });
+      if (res.status === 401) {
+        localStorage.removeItem(TOKEN_KEY);
+        showAuth('Токен не подошёл.');
+        return;
       }
-      * { box-sizing: border-box; }
-      body {
-        margin: 0;
-        background: var(--bg);
-        color: var(--text);
-        font: 15px/1.5 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        padding: 18px 16px 72px;
-        -webkit-text-size-adjust: 100%;
-      }
-      .wrap { max-width: 1120px; margin: 0 auto; }
-      .muted { color: var(--muted); }
-      .hidden { display: none !important; }
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      var data = await res.json();
+      $('auth').classList.add('hidden');
+      $('app').classList.remove('hidden');
+      render(data);
+    } catch (err) {
+      $('err').textContent = 'Не удалось получить статистику: ' + (err && err.message ? err.message : err);
+    }
+  }
 
-      /* Шапка */
-      header { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-      h1 { font-size: 17px; margin: 0; font-weight: 800; letter-spacing: 0.06em; }
-      .updated { color: var(--muted); font-size: 12.5px; }
-      .spacer { flex: 1; }
-      .periods { display: inline-flex; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 3px; }
-      .periods button { border: none; background: transparent; color: var(--muted); padding: 5px 12px; border-radius: 8px; font: inherit; font-size: 13px; cursor: pointer; }
-      .periods button.active { background: var(--accent); color: #fff; }
-      .iconbtn { display: inline-flex; align-items: center; gap: 6px; background: var(--surface); border: 1px solid var(--border); color: var(--text); border-radius: 10px; padding: 7px 12px; cursor: pointer; font: inherit; font-size: 13px; }
-      .iconbtn:hover { border-color: var(--accent); }
-      .iconbtn svg { width: 15px; height: 15px; }
+  function showAuth(message) {
+    $('app').classList.add('hidden');
+    $('auth').classList.remove('hidden');
+    $('authErr').textContent = message || '';
+  }
 
-      /* Табы */
-      nav.tabs { position: sticky; top: 0; z-index: 5; display: flex; gap: 8px; overflow-x: auto; padding: 12px 0; margin: 6px 0 2px; background: linear-gradient(var(--bg) 70%, transparent); scrollbar-width: none; }
-      nav.tabs::-webkit-scrollbar { display: none; }
-      nav.tabs button { flex: 0 0 auto; background: var(--surface); border: 1px solid var(--border); color: var(--muted); border-radius: 999px; padding: 6px 14px; font: inherit; font-size: 13px; cursor: pointer; }
-      nav.tabs button:hover { border-color: var(--accent); }
-      nav.tabs button.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+  var fromHash = (location.hash || '').replace(/^#/, '').trim();
+  state.token = fromHash || localStorage.getItem(TOKEN_KEY) || '';
+  if (fromHash) { localStorage.setItem(TOKEN_KEY, fromHash); history.replaceState(null, '', '/dev/'); }
 
-      h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.09em; color: var(--accent-light); margin: 30px 0 12px; font-weight: 700; }
-      .grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
-      .grid.k2 { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
-      .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 15px 16px; box-shadow: var(--shadow); position: relative; }
-      .card .label { color: var(--muted); font-size: 12.5px; margin-bottom: 7px; }
-      .card .value { font-size: 30px; font-weight: 800; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
-      .card .hint { color: var(--muted); font-size: 12px; margin-top: 5px; min-height: 15px; }
-      .card .corner { position: absolute; top: 14px; right: 14px; color: var(--accent); }
-      .card .corner svg { width: 18px; height: 18px; }
-      .delta.up { color: var(--good); }
-      .delta.down { color: var(--danger); }
-      .delta.flat { color: var(--muted); }
-      .chart { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 6px 6px; box-shadow: var(--shadow); }
-      .chart svg { display: block; width: 100%; height: auto; }
-      .chart .bar:hover rect { fill: var(--accent-light); }
-      .cap { display: flex; gap: 16px; padding: 4px 14px 10px; color: var(--muted); font-size: 12.5px; flex-wrap: wrap; }
-      .cap b { color: var(--text); }
-      .bars-list { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; box-shadow: var(--shadow); display: grid; gap: 9px; }
-      .brow { display: grid; grid-template-columns: 140px 1fr 52px; gap: 10px; align-items: center; font-size: 13.5px; }
-      .brow .track { height: 9px; background: var(--surface-2); border-radius: 999px; overflow: hidden; }
-      .brow .fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--accent), var(--accent-light)); transition: width 0.2s; }
-      .brow .num { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
-      .two { display: grid; gap: 12px; grid-template-columns: 1fr; }
-      @media (min-width: 720px) { .two { grid-template-columns: 320px 1fr; } }
-      .donut-wrap { display: grid; grid-template-columns: 180px 1fr; gap: 14px; align-items: center; }
-      .legend { display: grid; gap: 8px; }
-      .legend .li { display: flex; align-items: center; gap: 8px; font-size: 13.5px; }
-      .legend .sw { width: 11px; height: 11px; border-radius: 3px; flex: 0 0 auto; }
-      .legend .pct { margin-left: auto; color: var(--muted); font-variant-numeric: tabular-nums; }
-      table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
-      .table-scroll { overflow-x: auto; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); }
-      th, td { text-align: left; padding: 10px 12px; white-space: nowrap; border-bottom: 1px solid var(--border); }
-      th { color: var(--muted); font-weight: 700; font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.05em; }
-      tr:last-child td { border-bottom: none; }
-      .st { display: inline-block; width: 9px; height: 9px; border-radius: 50%; }
-      .st.on { background: var(--good); }
-      .st.off { background: var(--muted); opacity: 0.35; }
-      .filters { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
-      .filters select, .filters input { font: inherit; font-size: 13px; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 10px; padding: 7px 10px; }
-      .filters input { min-width: 180px; }
-      .pager { display: flex; gap: 10px; align-items: center; justify-content: flex-end; margin-top: 10px; color: var(--muted); font-size: 13px; }
-      .ucards { display: grid; gap: 10px; }
-      .ucard { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; box-shadow: var(--shadow); font-size: 13.5px; }
-      @media (min-width: 720px) { .ucards { display: none; } }
-      @media (max-width: 719px) { .table-scroll { display: none; } .brow { grid-template-columns: 104px 1fr 44px; } }
-      .err { color: var(--danger); font-size: 13px; min-height: 18px; margin-top: 8px; }
-      .token-box { max-width: 430px; margin: 70px auto; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; box-shadow: var(--shadow); }
-      .token-box h1 { font-size: 17px; margin-bottom: 12px; }
-      .token-box input { width: 100%; font: inherit; padding: 11px 12px; border-radius: 11px; border: 1px solid var(--border); background: var(--bg); color: var(--text); margin-bottom: 12px; }
-      .conclusion { color: var(--muted); font-size: 13px; margin-top: 10px; }
-    </style>
-  </head>
-  <body>
-    <div id="auth" class="token-box hidden">
-      <h1>HUB · СТАТИСТИКА</h1>
-      <p class="muted" style="font-size: 13px">Страница закрыта токеном. Вставьте токен (или откройте ссылку вида <code>/dev/#ТОКЕН</code>).</p>
-      <input id="tokenInput" type="password" placeholder="DEV_STATS_TOKEN" autocomplete="off" />
-      <button class="iconbtn" id="tokenSave" style="width: 100%; justify-content: center">Открыть</button>
-      <div class="err" id="authErr"></div>
-    </div>
+  $('tokenSave').addEventListener('click', function () {
+    var value = $('tokenInput').value.trim();
+    if (!value) return;
+    state.token = value;
+    localStorage.setItem(TOKEN_KEY, value);
+    $('tokenInput').value = '';
+    load();
+  });
+  $('reload').addEventListener('click', load);
 
-    <div id="app" class="wrap hidden">
-      <header>
-        <h1>HUB · СТАТИСТИКА</h1>
-        <span class="spacer"></span>
-        <span class="updated" id="updated">…</span>
-        <span class="periods" id="periods">
-          <button data-period="24h">24ч</button>
-          <button data-period="7d" class="active">7д</button>
-          <button data-period="30d">30д</button>
-        </span>
-        <button class="iconbtn" id="refresh">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M3 21v-5h5"/></svg>
-          Обновить
-        </button>
-      </header>
-
-      <nav class="tabs" id="tabs">
-        <button data-target="b-now" class="active">Сейчас</button>
-        <button data-target="b-numbers">Цифры</button>
-        <button data-target="b-active">Активность</button>
-        <button data-target="b-sections">Разделы</button>
-        <button data-target="b-users">Пользователи</button>
-        <button data-target="b-load">Нагрузка</button>
-        <button data-target="b-funnel">Воронка</button>
-        <button data-target="b-bars">БАРС</button>
-        <button data-target="b-content">Контент</button>
-      </nav>
-
-      <div class="err" id="err"></div>
-
-      <h2 id="b-now">Прямо сейчас</h2>
-      <div class="grid" id="nowGrid"></div>
-
-      <h2 id="b-numbers">Ключевые цифры</h2>
-      <div class="grid" id="numbersGrid"></div>
-
-      <h2 id="b-active">Активные пользователи · <span id="periodLabel">7</span> дней</h2>
-      <div class="chart" id="chartDau"></div>
-      <div class="cap" id="capDau"></div>
-
-      <h2>Запросы · <span id="periodLabel2">7</span> дней</h2>
-      <div class="chart bar" id="chartReq"></div>
-      <div class="cap" id="capReq"></div>
-
-      <h2>Активность по часам (МСК, 30 дней)</h2>
-      <div class="chart" id="chartHours"></div>
-      <div class="cap"><span>высота и цвет — число запросов в этот час; подписи 0, 6, 12, 18, 23</span></div>
-
-      <h2 id="b-sections">Запросы по разделам (30 дней)</h2>
-      <div class="card two" id="sections"></div>
-
-      <h2 id="b-users">Пользователи</h2>
-      <div class="filters">
-        <select id="fGroup"><option value="">Все группы</option></select>
-        <select id="fBars"><option value="">БАРС: все</option><option value="live">живые</option><option value="expired">истёкшие</option></select>
-        <select id="fTg"><option value="">Telegram: все</option><option value="yes">есть</option><option value="no">нет</option></select>
-        <input id="fSearch" type="search" placeholder="Поиск по ФИО" />
-      </div>
-      <div class="table-scroll">
-        <table>
-          <thead><tr><th>ФИО</th><th>Группа</th><th>Регистрация</th><th>Активность</th><th>БАРС</th><th>Telegram</th><th>Уведомления</th></tr></thead>
-          <tbody id="usersBody"></tbody>
-        </table>
-      </div>
-      <div class="ucards" id="usersCards"></div>
-      <div class="pager">
-        <span id="usersMeta"></span>
-        <button class="iconbtn" id="prevPage">←</button>
-        <button class="iconbtn" id="nextPage">→</button>
-      </div>
-
-      <h2 id="b-load">Нагрузка на ВПС</h2>
-      <div class="grid" id="loadGrid"></div>
-
-      <h2 id="b-funnel">Воронка</h2>
-      <div class="bars-list" id="funnel"></div>
-      <div class="conclusion" id="funnelNote"></div>
-
-      <h2 id="b-bars">БАРС</h2>
-      <div class="grid" id="barsGrid"></div>
-      <div class="chart" id="barsErrors" style="margin-top:12px"></div>
-
-      <h2 id="b-content">Контент</h2>
-      <div class="grid" id="contentGrid"></div>
-      <div class="two" style="margin-top:12px">
-        <div class="card" id="filesKind"></div>
-        <div class="bars-list" id="homeworkGroups"></div>
-      </div>
-      <div class="bars-list" id="filesTop" style="margin-top:12px"></div>
-    </div>
-
-    <script>
-      (function () {
-        var TOKEN_KEY = 'hub_dev_token';
-        var CAT_LABELS = {
-          schedule: 'Расписание', homework: 'Задания', important: 'Важное', bars: 'Оценки',
-          mail: 'Почта', files: 'Файлы', bootstrap: 'Запуск', notifications: 'Уведомления',
-          auth: 'Вход', other: 'Прочее',
-        };
-        var DONUT_COLORS = ['#8b5cf6', '#a78bfa', '#7c3aed', '#c4b5fd', '#6d28d9', '#4c1d95'];
-        var state = { period: '7d', offset: 0, limit: 50, data: null };
-
-        var el = function (id) { return document.getElementById(id); };
-        function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
-        function fmtDay(d) { var p = String(d).split('.'); return p.length === 3 ? p[2] + '.' + p[1] : d; }
-        function bytes(b) { if (!b) return '0 Б'; var u = ['Б', 'КБ', 'МБ', 'ГБ']; var i = Math.floor(Math.log(b) / Math.log(1024)); return (b / Math.pow(1024, i)).toFixed(i ? 1 : 0) + ' ' + u[i]; }
-        function rel(ts) { if (!ts) return '—'; var d = Date.now() - ts; if (d < 60000) return 'только что'; if (d < 3600000) return Math.floor(d / 60000) + ' мин назад'; if (d < 86400000) return Math.floor(d / 3600000) + ' ч назад'; return Math.floor(d / 86400000) + ' дн назад'; }
-        function delta(v, up) { if (!v) return '<span class="delta flat">±0</span>'; var c = up ? 'up' : 'down'; return '<span class="delta ' + c + '">' + (up ? '+' : '−') + Math.abs(v) + '</span>'; }
-
-        function icon(name) {
-          var p = {
-            users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/>',
-            activity: '<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>',
-            lock: '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
-            alert: '<path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
-          }[name] || '';
-          return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + p + '</svg>';
-        }
-
-        // ── Графики ──────────────────────────────────────────────────────────
-        function lineChart(points) {
-          var W = 780, H = 200, padL = 34, padR = 12, padT = 14, padB = 24, iw = W - padL - padR, ih = H - padT - padB;
-          var max = Math.max(1, Math.max.apply(null, points.map(function (p) { return p.value; })));
-          var n = points.length, x = function (i) { return padL + (n <= 1 ? iw / 2 : i * iw / (n - 1)); }, y = function (v) { return padT + ih - (v / max) * ih; };
-          var line = points.map(function (p, i) { return (i ? 'L' : 'M') + x(i).toFixed(1) + ' ' + y(p.value).toFixed(1); }).join(' ');
-          var area = line + ' L' + x(n - 1).toFixed(1) + ' ' + (padT + ih) + ' L' + x(0).toFixed(1) + ' ' + (padT + ih) + ' Z';
-          var grid = '';
-          for (var g = 0; g <= 4; g++) { var gy = padT + ih * g / 4, gv = Math.round(max * (4 - g) / 4); grid += '<line x1="' + padL + '" y1="' + gy.toFixed(1) + '" x2="' + (W - padR) + '" y2="' + gy.toFixed(1) + '" stroke="#2a2a36"/><text x="' + (padL - 6) + '" y="' + (gy + 4).toFixed(1) + '" text-anchor="end" font-size="10" fill="#8b8b9c">' + gv + '</text>'; }
-          var step = Math.max(1, Math.ceil(n / 6)), labels = '';
-          points.forEach(function (p, i) { if (i % step === 0 || i === n - 1) labels += '<text x="' + x(i).toFixed(1) + '" y="' + (H - 6) + '" text-anchor="middle" font-size="10" fill="#8b8b9c">' + esc(fmtDay(p.label)) + '</text>'; });
-          return '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img"><defs><linearGradient id="area" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#8b5cf6" stop-opacity="0.28"/><stop offset="100%" stop-color="#8b5cf6" stop-opacity="0"/></linearGradient></defs>' + grid + '<path d="' + area + '" fill="url(#area)"/><polyline points="' + points.map(function (p, i) { return x(i).toFixed(1) + ',' + y(p.value).toFixed(1); }).join(' ') + '" fill="none" stroke="#8b5cf6" stroke-width="2" stroke-linejoin="round"/></svg>';
-        }
-        function barChart(values, labels) {
-          var W = 780, H = 180, padL = 30, padR = 10, padT = 10, padB = 24, iw = W - padL - padR, ih = H - padT - padB;
-          var max = Math.max(1, Math.max.apply(null, values.concat([1]))), bw = iw / values.length, out = '';
-          values.forEach(function (v, i) {
-            var h = (v / max) * ih, bx = padL + i * bw + bw * 0.15;
-            out += '<rect x="' + bx.toFixed(1) + '" y="' + (padT + ih - h).toFixed(1) + '" width="' + (bw * 0.7).toFixed(1) + '" height="' + Math.max(h, v > 0 ? 2 : 0).toFixed(1) + '" rx="3" fill="#8b5cf6"><title>' + esc(fmtDay(labels[i])) + ': ' + v + '</title></rect>';
-            if (i % Math.max(1, Math.ceil(values.length / 6)) === 0) out += '<text x="' + (padL + i * bw + bw / 2).toFixed(1) + '" y="' + (H - 6) + '" text-anchor="middle" font-size="10" fill="#8b8b9c">' + esc(fmtDay(labels[i])) + '</text>';
-          });
-          return '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img">' + out + '</svg>';
-        }
-        function hoursChart(hours) {
-          var W = 780, H = 150, padL = 26, padR = 10, padT = 10, padB = 22, iw = W - padL - padR, ih = H - padT - padB, bw = iw / 24;
-          var max = Math.max(1, Math.max.apply(null, hours.concat([1])));
-          var color = function (v) { var t = v / max; var r = Math.round(0x6d + (0xc4 - 0x6d) * t), g = Math.round(0x28 + (0xb5 - 0x28) * t), b = Math.round(0xd9 + (0xfd - 0xd9) * t); return 'rgb(' + r + ',' + g + ',' + b + ')'; };
-          var out = '';
-          hours.forEach(function (v, i) {
-            var h = (v / max) * ih, bx = padL + i * bw + bw * 0.12;
-            out += '<rect x="' + bx.toFixed(1) + '" y="' + (padT + ih - h).toFixed(1) + '" width="' + (bw * 0.76).toFixed(1) + '" height="' + Math.max(h, v > 0 ? 2 : 0).toFixed(1) + '" rx="2" fill="' + color(v) + '"><title>' + i + ':00 — ' + v + '</title></rect>';
-            if ([0, 6, 12, 18, 23].indexOf(i) >= 0) out += '<text x="' + (padL + i * bw + bw / 2).toFixed(1) + '" y="' + (H - 6) + '" text-anchor="middle" font-size="10" fill="#8b8b9c">' + i + '</text>';
-          });
-          return '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img">' + out + '</svg>';
-        }
-        function donut(items) {
-          var total = items.reduce(function (a, b) { return a + b.value; }, 0) || 1;
-          var r = 54, c = 2 * Math.PI * r, off = 0, out = '<svg viewBox="0 0 140 140" style="width:180px;height:180px"><circle cx="70" cy="70" r="' + r + '" fill="none" stroke="#21212b" stroke-width="18"/>';
-          items.forEach(function (it, i) {
-            var frac = it.value / total, len = frac * c;
-            out += '<circle cx="70" cy="70" r="' + r + '" fill="none" stroke="' + DONUT_COLORS[i % DONUT_COLORS.length] + '" stroke-width="18" stroke-dasharray="' + len.toFixed(2) + ' ' + (c - len).toFixed(2) + '" stroke-dashoffset="' + (-off).toFixed(2) + '" transform="rotate(-90 70 70)"><title>' + esc(it.label) + ': ' + it.value + '</title></circle>';
-            off += len;
-          });
-          out += '<text x="70" y="66" text-anchor="middle" font-size="20" font-weight="700" fill="#ececf2">' + total + '</text><text x="70" y="84" text-anchor="middle" font-size="10" fill="#8b8b9c">всего</text></svg>';
-          return out;
-        }
-        function barsList(rows, unit) {
-          if (!rows.length) return '<div class="muted">нет данных</div>';
-          var max = Math.max(1, Math.max.apply(null, rows.map(function (r) { return r.value; })));
-          return rows.map(function (r) {
-            return '<div class="brow"><div>' + esc(r.label) + '</div><div class="track"><div class="fill" style="width:' + ((r.value / max) * 100).toFixed(1) + '%"></div></div><div class="num">' + r.value + (unit || '') + '</div></div>';
-          }).join('');
-        }
-
-        // ── Рендер ───────────────────────────────────────────────────────────
-        function render(d) {
-          state.data = d;
-          el('updated').textContent = 'Обновлено ' + new Date(d.generatedAt).toLocaleString('ru-RU') + ' МСК';
-
-          var on15 = (d.online.find(function (o) { return o.windowMinutes === 15; }) || { count: 0 }).count;
-          el('nowGrid').innerHTML =
-            kpi('Users', 'Пользователей онлайн (15 мин)', on15, '') +
-            kpi('activity', 'Запросов в минуту', d.requestsPerMinute, 'с начала суток') +
-            kpi('lock', 'Сессий БАРС живых', d.liveBarsSessions, '') +
-            errorsCard(d.errorsLastHour);
-
-          var wkey = { '24h': 'd1', '7d': 'd7', '30d': 'd30' }[d.period] || 'd7';
-          var w = d.windows[wkey];
-          el('numbersGrid').innerHTML =
-            kpi(null, 'Всего пользователей', d.kpi.users, delta(w.newUsers, w.newUsers > 0) + ' за период') +
-            kpi(null, 'Новых за период', w.newUsers, '') +
-            kpi(null, 'Активных за период', w.activeUsers, w.requests + ' запросов') +
-            kpi(null, 'ДЗ создано за период', d.content.homeworkPeriod, 'всего ' + d.content.homeworkTotal) +
-            kpi(null, 'Файлов загружено', d.content.filesTotal, bytes(d.content.filesBytes)) +
-            kpi(null, 'Уведомлений за период', d.notifications.sent, '');
-
-          var pLabel = d.period === '24h' ? '24часа' : (d.period === '7d' ? '7' : '30');
-          el('periodLabel').textContent = pLabel; el('periodLabel2').textContent = pLabel;
-
-          var labels = d.series.map(function (s) { return s.label; });
-          el('chartDau').innerHTML = lineChart(d.series.map(function (s) { return { label: s.label, value: s.value }; }));
-          var vals = d.series.map(function (s) { return s.value; });
-          el('capDau').innerHTML = '<span>min <b>' + (vals.length ? Math.min.apply(null, vals) : 0) + '</b></span><span>avg <b>' + (vals.length ? (vals.reduce(function (a, b) { return a + b; }, 0) / vals.length).toFixed(1) : 0) + '</b></span><span>max <b>' + Math.max.apply(null, vals.concat([0])) + '</b></span>';
-          el('chartReq').innerHTML = barChart(d.series.map(function (s) { return s.requests; }), labels);
-          var rq = d.series.map(function (s) { return s.requests; });
-          el('capReq').innerHTML = '<span>сумма <b>' + rq.reduce(function (a, b) { return a + b; }, 0) + '</b></span><span>в среднем <b>' + (rq.length ? Math.round(rq.reduce(function (a, b) { return a + b; }, 0) / rq.length) : 0) + '</b></span>';
-          el('chartHours').innerHTML = hoursChart(d.hours);
-
-          var cats = d.categories.map(function (c, i) { return { label: CAT_LABELS[c.name] || c.name, value: c.value, color: DONUT_COLORS[i % DONUT_COLORS.length] }; });
-          el('sections').innerHTML = cats.length
-            ? '<div class="donut-wrap"><div>' + donut(cats) + '</div><div class="legend">' + cats.map(function (c) { var total = cats.reduce(function (a, b) { return a + b.value; }, 0) || 1; return '<div class="li"><span class="sw" style="background:' + c.color + '"></span>' + esc(c.label) + '<span class="pct">' + Math.round(c.value / total * 100) + '% · ' + c.value + '</span></div>'; }).join('') + '</div></div>'
-            : '<div class="muted" style="padding:6px">нет данных</div>';
-
-          renderBarsBlock(d);
-          renderLoad(d);
-          renderFunnel(d);
-          renderContent(d);
-          renderUsers();
-        }
-
-        function kpi(iconName, label, value, hint) {
-          return '<div class="card">' + (iconName ? '<span class="corner">' + icon(iconName) + '</span>' : '') + '<div class="label">' + esc(label) + '</div><div class="value">' + esc(value) + '</div><div class="hint">' + (hint || '') + '</div></div>';
-        }
-        function errorsCard(n) {
-          var color = n > 0 ? 'var(--danger)' : 'var(--good)';
-          return '<div class="card"><span class="corner">' + icon('alert') + '</span><div class="label">Ошибок 5xx за час</div><div class="value" style="color:' + color + '">' + n + '</div><div class="hint">' + (n > 0 ? 'проверить журнал' : 'всё чисто') + '</div></div>';
-        }
-
-        function renderBarsBlock(d) {
-          el('barsGrid').innerHTML =
-            kpi(null, 'Успешных входов (30 дней)', d.bars.logins, '') +
-            kpi(null, 'Истёкших сессий', d.bars.expired, '') +
-            kpi(null, 'С живой сессией', d.bars.live, '') +
-            kpi(null, 'Без сессии (истёкшие)', d.bars.stale, '');
-          var errs = d.bars.errorsBySection.map(function (e) { return { label: e.name, value: e.value }; });
-          el('barsErrors').innerHTML = errs.length
-            ? '<div class="cap" style="padding:6px 14px 0"><b>Ошибки БАРС по разделам (7 дней)</b></div>' + barsList(errs)
-            : '<div class="cap" style="padding:8px 14px"><span class="muted">Ошибок БАРС не зафиксировано</span></div>';
-        }
-
-        function renderLoad(d) {
-          var l = d.load;
-          var up = l.uptimeSec, upTxt = Math.floor(up / 86400) + ' д ' + Math.floor((up % 86400) / 3600) + ' ч';
-          el('loadGrid').innerHTML =
-            kpi(null, 'Аптайм процесса', upTxt, '') +
-            kpi(null, 'Память RSS / heap', l.rssMb + ' / ' + l.heapMb + ' МБ', '') +
-            kpi(null, 'Размер data/', bytes(l.dataBytes), 'раз в сутки / кэш 60с') +
-            kpi(null, 'Файлов на диске', l.filesOnDisk, '') +
-            kpi(null, 'Запросов 4xx / 5xx', l.status4xx + ' / ' + l.status5xx, 'с рестарта') +
-            kpi(null, 'Время ответа p50 / p95', l.latencyP50 + ' / ' + l.latencyP95 + ' мс', '') +
-            kpi(null, 'Снимков БАРС на диске', l.snapshots, '');
-        }
-
-        function renderFunnel(d) {
-          var rows = d.funnel;
-          el('funnel').innerHTML = rows.map(function (f) {
-            return '<div class="brow"><div>' + esc(f.step) + '</div><div class="track"><div class="fill" style="width:' + f.percent + '%"></div></div><div class="num">' + f.count + ' · ' + f.percent + '%</div></div>';
-          }).join('');
-          var worst = rows.map(function (f, i) { return { drop: i ? rows[i - 1].count - f.count : 0, step: f.step }; }).slice(1).sort(function (a, b) { return b.drop - a.drop; })[0];
-          el('funnelNote').textContent = worst && worst.drop > 0 ? 'Основной отвал — на шаге «' + worst.step + '» (−' + worst.drop + ').' : 'Отвала между шагами нет.';
-        }
-
-        function renderContent(d) {
-          var c = d.content;
-          el('contentGrid').innerHTML =
-            kpi(null, 'ДЗ всего / за период', c.homeworkTotal + ' / ' + c.homeworkPeriod, '') +
-            kpi(null, '«Важное» всего / за период', c.importantTotal + ' / ' + c.importantPeriod, '') +
-            kpi(null, 'Файлов / объём', c.filesTotal + ' / ' + bytes(c.filesBytes), 'средний ' + bytes(c.filesAvgBytes));
-          var kindLabels = { photo: 'Фото', pdf: 'PDF', other: 'Прочее' };
-          var kinds = c.filesByKind.filter(function (k) { return k.value > 0; }).map(function (k, i) { return { label: kindLabels[k.name] || k.name, value: k.value, color: DONUT_COLORS[i % DONUT_COLORS.length] }; });
-          el('filesKind').innerHTML = '<div class="label">Медиа: фото / PDF / прочее</div>' + (kinds.length ? '<div class="donut-wrap"><div>' + donut(kinds) + '</div><div class="legend">' + kinds.map(function (k) { return '<div class="li"><span class="sw" style="background:' + k.color + '"></span>' + esc(k.label) + '<span class="pct">' + k.value + '</span></div>'; }).join('') + '</div></div>' : '<div class="muted">файлов нет</div>');
-          el('homeworkGroups').innerHTML = '<div class="label" style="color:var(--muted);margin-bottom:4px">ДЗ по группам (период, топ-5)</div>' + barsList(c.homeworkByGroup.map(function (g) { return { label: g.group, value: g.value }; }));
-          el('filesTop').innerHTML = '<div class="label" style="color:var(--muted);margin-bottom:4px">Топ-5 файлов по размеру</div>' + (c.filesTop.length ? barsList(c.filesTop.map(function (f) { return { label: f.name, value: Math.round(f.bytes / 1024) }; }), ' КБ') : '<div class="muted">нет файлов</div>');
-        }
-
-        function renderUsers() {
-          var d = state.data; if (!d) return;
-          var rows = d.users.rows.slice();
-          var g = el('fGroup').value, b = el('fBars').value, t = el('fTg').value, q = el('fSearch').value.trim().toLowerCase();
-          rows = rows.filter(function (u) {
-            if (g && u.group !== g) return false;
-            if (b === 'live' && !u.barsAuthorized) return false;
-            if (b === 'expired' && u.barsAuthorized) return false;
-            if (t === 'yes' && !u.telegram) return false;
-            if (t === 'no' && u.telegram) return false;
-            if (q && u.name.toLowerCase().indexOf(q) < 0) return false;
-            return true;
-          });
-          var st = function (v) { return '<span class="st ' + (v ? 'on' : 'off') + '"></span>'; };
-          el('usersBody').innerHTML = rows.length ? rows.map(function (u) {
-            return '<tr><td>' + esc(u.name) + '</td><td class="' + (u.group ? '' : 'muted') + '">' + esc(u.group || '—') + '</td><td>' + esc(u.registeredAt ? fmtDay(u.registeredAt) : '—') + '</td><td>' + esc(rel(u.lastSeenAt)) + '</td><td>' + st(u.barsAuthorized) + '</td><td>' + (u.telegram ? st(true) : '<span class="muted">—</span>') + '</td><td>' + (u.notifications ? st(true) : '<span class="muted">—</span>') + '</td></tr>';
-          }).join('') : '<tr><td colspan="7" class="muted">нет</td></tr>';
-          el('usersCards').innerHTML = rows.length ? rows.map(function (u) {
-            return '<div class="ucard"><div style="font-weight:700">' + esc(u.name) + '</div><div class="muted">' + esc(u.group || '—') + ' · рег. ' + esc(u.registeredAt ? fmtDay(u.registeredAt) : '—') + ' · ' + esc(rel(u.lastSeenAt)) + '</div><div style="margin-top:5px">БАРС ' + st(u.barsAuthorized) + ' &nbsp; TG ' + (u.telegram ? st(true) : '—') + ' &nbsp; увед. ' + (u.notifications ? st(true) : '—') + '</div></div>';
-          }).join('') : '<div class="ucard muted">нет</div>';
-          el('usersMeta').textContent = 'Показано ' + d.users.rows.length + ' из ' + d.users.total;
-          el('prevPage').disabled = d.users.offset <= 0;
-          el('nextPage').disabled = d.users.offset + d.users.limit >= d.users.total;
-        }
-
-        // ── Загрузка ─────────────────────────────────────────────────────────
-        function showAuth(msg) { el('app').classList.add('hidden'); el('auth').classList.remove('hidden'); el('authErr').textContent = msg || ''; }
-
-        async function load() {
-          var token = localStorage.getItem(TOKEN_KEY) || '';
-          if (!token) return showAuth('');
-          try {
-            var url = '/dev-api/stats?period=' + encodeURIComponent(state.period) + '&usersOffset=' + state.offset + '&usersLimit=' + state.limit;
-            var res = await fetch(url, { headers: { 'X-Dev-Token': token } });
-            if (res.status === 401) return showAuth('Неверный токен доступа.');
-            if (res.status === 404) return showAuth('Статистика выключена: не задан DEV_STATS_TOKEN.');
-            if (!res.ok) throw new Error('HTTP ' + res.status);
-            var data = await res.json();
-            el('auth').classList.add('hidden'); el('app').classList.remove('hidden');
-            fillGroups(data.users.rows);
-            render(data);
-            el('err').textContent = '';
-          } catch (e) {
-            if (el('app').classList.contains('hidden')) return showAuth('Ошибка: ' + e.message);
-            el('err').textContent = 'Ошибка обновления: ' + e.message;
-          }
-        }
-
-        function fillGroups(rows) {
-          var sel = el('fGroup'); var cur = sel.value; var groups = {};
-          rows.forEach(function (u) { if (u.group) groups[u.group] = 1; });
-          if (state.data && state.data.totalsByGroup) state.data.totalsByGroup.forEach(function (g) { groups[g.group] = 1; });
-          var keys = Object.keys(groups).sort();
-          sel.innerHTML = '<option value="">Все группы</option>' + keys.map(function (k) { return '<option value="' + esc(k) + '">' + esc(k) + '</option>'; }).join('');
-          sel.value = cur;
-        }
-
-        function getTokenFromHash() {
-          var hash = location.hash.replace(/^#/, '').trim();
-          if (hash) { localStorage.setItem(TOKEN_KEY, hash); history.replaceState(null, '', location.pathname + location.search); }
-        }
-
-        // ── События ──────────────────────────────────────────────────────────
-        getTokenFromHash();
-        document.getElementById('tokenSave').addEventListener('click', function () {
-          var v = el('tokenInput').value.trim(); if (!v) return; localStorage.setItem(TOKEN_KEY, v); el('tokenInput').value = ''; load();
-        });
-        el('tokenInput').addEventListener('keydown', function (e) { if (e.key === 'Enter') el('tokenSave').click(); });
-        el('refresh').addEventListener('click', load);
-
-        el('periods').addEventListener('click', function (e) {
-          var btn = e.target.closest('button'); if (!btn) return;
-          state.period = btn.dataset.period; state.offset = 0;
-          [].forEach.call(el('periods').children, function (b) { b.classList.toggle('active', b === btn); });
-          load();
-        });
-
-        el('tabs').addEventListener('click', function (e) {
-          var btn = e.target.closest('button'); if (!btn) return;
-          var target = document.getElementById(btn.dataset.target);
-          if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-          [].forEach.call(el('tabs').children, function (b) { b.classList.toggle('active', b === btn); });
-        });
-
-        ['fGroup', 'fBars', 'fTg'].forEach(function (id) { el(id).addEventListener('change', renderUsers); });
-        el('fSearch').addEventListener('input', renderUsers);
-        el('prevPage').addEventListener('click', function () { state.offset = Math.max(0, state.offset - state.limit); load(); });
-        el('nextPage').addEventListener('click', function () { state.offset += state.limit; load(); });
-
-        var lastLoad = 0;
-        document.addEventListener('visibilitychange', function () {
-          if (document.visibilityState === 'visible' && Date.now() - lastLoad > 60000) { lastLoad = Date.now(); load(); }
-        });
-
-        lastLoad = Date.now();
-        load();
-      })();
-    </script>
-  </body>
+  if (state.token) load(); else showAuth('');
+</script>
+</body>
 </html>

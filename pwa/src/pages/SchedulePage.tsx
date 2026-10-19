@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { RefreshCw } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { Calendar, CalendarCheck, Info, TriangleAlert, X } from 'lucide-react';
 
 import { Header } from '@/components/TabBar';
 import { Page } from '@/components/Page';
@@ -7,6 +8,9 @@ import { EmptyState, ErrorState, SkeletonLesson } from '@/components/ui';
 import { api } from '@/lib/api';
 import { SubjectScreen } from './SubjectScreen';
 import { DayPager, WeekStrip } from '@/components/WeekStrip';
+import { CalendarModal } from '@/components/schedule/CalendarModal';
+import { RefreshIndicator } from '@/components/RefreshIndicator';
+import { PullIndicator, usePullToRefresh } from '@/components/PullToRefresh';
 import { LessonCard, LunchBreak } from '@/components/schedule/LessonCard';
 import {
   findLunchBreak,
@@ -16,25 +20,27 @@ import {
   toMoscowRaw,
 } from '@/components/schedule/helpers';
 import { useAppData } from '@/lib/dataContext';
-import { formatRawDate, parseRawDate } from '@/lib/dates';
+import { formatRawDate, formatTargetDate, parseRawDate } from '@/lib/dates';
 import { readLastDay, writeLastDay } from '@/lib/lastDay';
 import { perfLog } from '@/lib/perf';
 import type { ApiHomework, ApiSubjectGrade } from '@/types/api';
 import { haptic } from '@/lib/env';
 import type { ApiScheduleDay, ScheduleResponse } from '@/types/api';
 
-/** Ответ API на попытку обновления. */
+/**
+ * Ответ API на попытку обновления. `refreshing` живёт отдельно: его читает
+ * индикатор в шапке, а не состояние экрана.
+ */
 interface ScheduleState {
   data: ScheduleResponse | null;
   loading: boolean;
   error: string | null;
-  refreshing: boolean;
 }
 
 export function SchedulePage() {
   // Расписание берётся из общего кэша: оно грузится один раз при входе,
   // и переключение вкладок сеть больше не трогает.
-  const { userId, schedule, loading: cacheLoading, refreshing, error: cacheError, refresh } = useAppData();
+  const { userId, schedule, homework, loading: cacheLoading, refreshing, error: cacheError, refresh } = useAppData();
 
   // Замер первого кадра страницы: по нему видно, что расписание показано из
   // кэша (<100 мс), а не после сети. Снимается один раз, до отрисовки.
@@ -57,9 +63,8 @@ export function SchedulePage() {
       data: schedule,
       loading: cacheLoading,
       error: cacheError,
-      refreshing,
     }),
-    [schedule, cacheLoading, cacheError, refreshing],
+    [schedule, cacheLoading, cacheError],
   );
 
   // Выбранный день хранится как YYYY.MM.DD, а не индексом в неделе: индекс
@@ -79,66 +84,106 @@ export function SchedulePage() {
   );
   const [expandedHomework, setExpandedHomework] = useState<Set<string>>(new Set());
 
+  /**
+   * Счётчик «показать сегодняшний день». Растёт по кнопке «К сегодня»: DayPager
+   * по нему прокручивает активную страницу к началу, а смена дня свайпом
+   * позицию скролла по-прежнему не сбрасывает.
+   */
+  const [revealSignal, setRevealSignal] = useState(0);
+
+  /** Открыта модалка календаря. */
+  const [calendarOpen, setCalendarOpen] = useState(false);
+
+  /**
+   * Строка-сообщение над полосой дат.
+   *
+   * Два разных смысла в одном месте: ошибка обновления (жест не удался) и
+   * «расписание за эту дату ещё не загружено» после выбора в календаре. Оба
+   * показываются ТЕКСТОМ, а не пустым экраном или всплывашкой по центру.
+   */
+  const [notice, setNotice] = useState<{ tone: 'info' | 'error'; text: string } | null>(null);
+
+  /** Ошибка обновления гаснет сама: она про уже прошедший жест, не про состояние. */
+  useEffect(() => {
+    if (notice?.tone !== 'error') return;
+    const timer = window.setTimeout(() => setNotice(null), 6000);
+    return () => window.clearTimeout(timer);
+  }, [notice]);
+
+  /**
+   * Обновление по жесту.
+   *
+   * Форсит запрос (force=1) — иначе сервер отдал бы снимок кэша, и жест
+   * «обновил» бы экран теми же данными. Кэш и stale-while-revalidate при этом
+   * не отключаются: по завершении данные снова кладутся в общий кэш и в
+   * localStorage (см. refreshSchedule).
+   */
+  const pullRefresh = useCallback(async () => {
+    const message = await refresh();
+    if (message) setNotice({ tone: 'error', text: message });
+  }, [refresh]);
+
+  const pull = usePullToRefresh({ enabled: true, onRefresh: pullRefresh });
+
   /** Открытый предмет: тап по названию дисциплины в карточке пары. */
   const [openSubject, setOpenSubject] = useState<string | null>(null);
   /**
-   * Полные записи ДЗ, чтобы показать вложения прямо в карточке пары.
+   * Вложения карточки пары берутся из ОБЩЕГО списка ДЗ (context.homework).
    *
-   * В расписании к паре приклеены только метаданные задания (id, текст, автор и
-   * СКОЛЬКО файлов) — это дёшево и не тянет список вложений в каждый ответ
-   * расписания. Но человеку на расписании нужно то же самое, что и на экране
-   * предмета: увидеть фотографию задания и скачать её. Поэтому полные записи
-   * подгружаются отдельно, один раз, и живут в состоянии страницы.
+   * В расписании к паре приклеены только метаданные задания (id, текст, автор,
+   * СКОЛЬКО файлов) — это дёшево, и вложения не тянутся в каждый ответ
+   * расписания. Полные записи (с файлами) нужны, чтобы показать в карточке
+   * фотографию задания и дать её скачать.
+   *
+   * Раньше полный список грузился ОТДЕЛЬНО и один раз: по первой раскрытой
+   * карточке, с условием «если список пуст». Из-за этого обновление
+   * расписания приносило новое задание на другом дне (метаданные-то свежие),
+   * а вложений у него не было: полной записи в локальном списке не появлялось,
+   * и карточка навсегда застревала на «Файлы загружаются…». Теперь список
+   * один — общий: его обновляет и tier1 (старт и возврат в приложение), и
+   * reloadLists() внутри refreshSchedule, то есть жест обновления освежает
+   * вложения сразу на ВСЕХ днях, а не только на открытом.
    */
-  const [homeworkList, setHomeworkList] = useState<ApiHomework[]>([]);
-  const [homeworkFilesLoading, setHomeworkFilesLoading] = useState(false);
-
-  /** Просит полный список ДЗ, если он ещё не загружен. */
-  const ensureHomeworkFiles = useCallback(async () => {
-    if (homeworkList.length > 0 || homeworkFilesLoading) return;
-
-    setHomeworkFilesLoading(true);
-    try {
-      const res = await api.homework();
-      setHomeworkList(res.items);
-
-      // Сверка: у каждого задания, приклеенного к паре в расписании, должна
-      // быть полная запись в общем списке. Расписание отдаёт только метаданные
-      // (id, текст, автор, СКОЛЬКО файлов), поэтому вложения берутся отсюда.
-      // Если id не совпал — карточка не найдёт запись и покажет «Файлы
-      // загружаются…» вечно, и тап по файлу будет невозможен. Это единственное
-      // место, где расхождение видно сразу и целиком, поэтому оно логируется
-      // один раз после загрузки, а не на каждом тапе.
-      const loaded = new Set(res.items.map((item) => item.id));
-      const missing: string[] = [];
-      for (const day of schedule?.days ?? []) {
-        for (const slot of day.slots) {
-          for (const hw of slot.homework) {
-            if (!loaded.has(hw.id)) missing.push(hw.id);
-          }
-        }
-      }
-      if (missing.length > 0) {
-        console.warn(
-          '[SchedulePage] у заданий расписания нет полной записи, вложения не покажутся:',
-          missing,
-        );
-      }
-    } catch (err: unknown) {
-      // Не удалось — карточка покажет ДЗ без вложений. Раньше здесь был пустой
-      // catch: причина терялась, и «вложения не пришли» и «сервер упал» были
-      // одним и тем же молчанием.
-      console.error('[SchedulePage] не удалось загрузить список ДЗ:', err);
-    } finally {
-      setHomeworkFilesLoading(false);
-    }
-  }, [homeworkList.length, homeworkFilesLoading]);
-
   const homeworkById = useMemo(() => {
     const map = new Map<string, ApiHomework>();
-    for (const item of homeworkList) map.set(item.id, item);
+    for (const item of homework) map.set(item.id, item);
     return map;
-  }, [homeworkList]);
+  }, [homework]);
+
+  /**
+   * Сверка: у каждого задания, приклеенного к паре, должна быть полная запись
+   * в общем списке. Если id не совпал — карточка не найдёт запись и покажет
+   * «Файлы загружаются…» вечно, и тап по файлу будет невозможен. Логируется
+   * один раз на набор расхождений: перерисовок много, а расхождение — одно.
+   */
+  const mismatchLoggedRef = useRef('');
+  useEffect(() => {
+    const days = schedule?.days ?? [];
+    if (days.length === 0) return;
+
+    const loaded = new Set(homework.map((item) => item.id));
+    const missing: string[] = [];
+
+    for (const day of days) {
+      for (const slot of day.slots) {
+        for (const hw of slot.homework) {
+          if (!loaded.has(hw.id)) missing.push(hw.id);
+        }
+      }
+    }
+
+    const signature = [...missing].sort().join(',');
+    if (signature === mismatchLoggedRef.current) return;
+    mismatchLoggedRef.current = signature;
+
+    if (missing.length > 0) {
+      console.warn(
+        '[SchedulePage] у заданий расписания нет полной записи, вложения не покажутся:',
+        missing,
+      );
+    }
+  }, [schedule, homework]);
+
   const [subjectGrade, setSubjectGrade] = useState<ApiSubjectGrade | null>(null);
   const [isGradeLoading, setIsGradeLoading] = useState(false);
 
@@ -288,6 +333,67 @@ export function SchedulePage() {
   }, [state.data]);
 
   /**
+   * Даты с парами — для точек в календаре.
+   *
+   * Выходные дни в выгрузке есть (пустые), и без этого фильтра точка стояла бы
+   * у каждого дня семестра, то есть не значила бы ничего.
+   */
+  const lessonDays = useMemo(() => {
+    const set = new Set<string>();
+    for (const day of state.data?.days ?? []) {
+      if (day.slots.length > 0) set.add(day.rawDate);
+    }
+    return set;
+  }, [state.data]);
+
+  /**
+   * Кнопка «Сегодня» осмысленна, только когда сегодняшний день есть в выгрузке:
+   * иначе переходить некуда, и кнопка была бы обманом.
+   */
+  const todayInRange = minRaw !== null && maxRaw !== null && today >= minRaw && today <= maxRaw;
+
+  /** Показан уже сегодняшний день — «Сегодня» приглушается, но остаётся рабочей. */
+  const onToday = effectiveDate === today;
+
+  /** Переход к сегодняшнему дню: неделя переключается сама, лента — к началу. */
+  const goToday = useCallback(() => {
+    setNotice(null);
+    if (!todayInRange) return;
+
+    haptic('light');
+    chooseDay(today);
+    setRevealSignal((value) => value + 1);
+  }, [todayInRange, chooseDay, today]);
+
+  /**
+   * Выбор даты в календаре.
+   *
+   * Дата внутри выгрузки — обычный переход к дню. Дата за её пределами (до
+   * «−14 дней» или после «+90») не открывается пустой лентой: показываем
+   * пояснение с датой. Дотянуть окно нельзя — оно задано сервером, поэтому
+   * вместо кнопки «загрузить» предлагаем жест обновления.
+   */
+  const pickDate = useCallback(
+    (raw: string) => {
+      setCalendarOpen(false);
+      setNotice(null);
+
+      const loaded = minRaw !== null && maxRaw !== null && raw >= minRaw && raw <= maxRaw;
+      if (!loaded) {
+        setNotice({
+          tone: 'info',
+          text: `Расписание за ${formatTargetDate(raw)} ещё не загружено. Потяните список вниз, чтобы обновить.`,
+        });
+        return;
+      }
+
+      chooseDay(raw);
+      setRevealSignal((value) => value + 1);
+    },
+    [minRaw, maxRaw, chooseDay],
+  );
+
+  /**
    * Недели, доступные для листания полосой дат.
    *
    * Список строится от понедельника первой недели выгрузки до воскресенья
@@ -403,12 +509,6 @@ export function SchedulePage() {
       setSubjectGrade(null);
       setIsGradeLoading(true);
 
-      // ДЗ нужны сразу; при провале экран всё равно покажется — просто без них.
-      void api
-        .homework()
-        .then((res) => setHomeworkList(res.items))
-        .catch(() => undefined);
-
       try {
         const grades = await api.grades();
         const found = grades.subjects.find((s) => s.discipline === discipline) ?? null;
@@ -423,6 +523,16 @@ export function SchedulePage() {
   );
 
   /**
+   * Полные записи ДЗ по id.
+   *
+   * В ref — для обработчика раскрытия: сам колбэк обязан быть стабильным, иначе
+   * мемоизированные карточки пар будут перерисовываться на каждое обновление
+   * списка ДЗ (см. areLessonCardPropsEqual в LessonCard).
+   */
+  const homeworkByIdRef = useRef(homeworkById);
+  homeworkByIdRef.current = homeworkById;
+
+  /**
    * Раскрытие карточки ДЗ в ленте пары.
    */
   const toggleHomework = useCallback((id: string) => {
@@ -435,10 +545,10 @@ export function SchedulePage() {
     });
 
     // Диагностика вложений. По симптому «тап по файлу ничего не делает» сразу
-    // видно, в каком из трёх случаев мы: full === undefined — полная запись не
-    // подгрузилась (нет файлов в DOM, нажимать нечего); files.length === 0 —
-    // у записи нет файлов на сервере; files.length > 0 — не работает открытие.
-    const full = homeworkById.get(id);
+    // видно, в каком из трёх случаев мы: full === undefined — полной записи нет
+    // (нет файлов в DOM, нажимать нечего); files.length === 0 — у записи нет
+    // файлов на сервере; files.length > 0 — не работает открытие.
+    const full = homeworkByIdRef.current.get(id);
     console.log('[SchedulePage] раскрытие ДЗ', {
       id,
       found: Boolean(full),
@@ -447,11 +557,8 @@ export function SchedulePage() {
       firstFileId: full?.files?.[0]?.fileId ?? null,
     });
 
-    // Раскрытие задания — момент, когда человеку понадобятся его файлы.
-    // Досылаем полный список ДЗ здесь: он один на страницу, а не на каждую
-    // карточку, и повторные раскрытия уже ничего не ждут.
-    if (!expandedHomework.has(id)) void ensureHomeworkFiles();
-  }, [expandedHomework, ensureHomeworkFiles, homeworkById]);
+    // Догружать нечего: полный список ДЗ уже в общем кэше (см. homeworkById).
+  }, []);
 
   /**
    * Содержимое страницы дня.
@@ -514,7 +621,7 @@ export function SchedulePage() {
       <SubjectScreen
         discipline={openSubject}
         days={state.data?.days ?? []}
-        homework={homeworkList}
+        homework={homework}
         grade={subjectGrade}
         isGradeLoading={isGradeLoading}
         onBack={() => {
@@ -560,23 +667,97 @@ export function SchedulePage() {
           title="Расписание"
           large
           subtitle={group ? `Группа ${group}` : undefined}
+          // Кнопки «Обновить» здесь больше нет: обновление — жестом вниз по ленте
+          // (PullToRefresh). На освободившемся месте — переходы по датам.
           right={
-            <button
-              type="button"
-              aria-label="Обновить расписание"
-              onClick={() => {
-                haptic('light');
-                refresh();
-              }}
-              className="pressable rounded-full p-2 active:pressable-active"
-              style={{ color: 'var(--accent)' }}
-            >
-              <RefreshCw size={19} className={state.refreshing ? 'spinner' : undefined} aria-hidden />
-            </button>
+            <div className="flex items-center gap-1">
+              {/*
+                Индикатор фонового обновления. Расписание обновляется и само —
+                при возврате в приложение (visibilitychange, раз в 15 минут),
+                причём молча, без скелетонов. Раньше это было совсем не видно;
+                пока идёт жест, спиннер рисует сам pull-to-refresh.
+              */}
+              <RefreshIndicator active={refreshing && !pull.suppressBackground} />
+
+              <button
+                type="button"
+                aria-label="К сегодня"
+                disabled={!todayInRange}
+                onClick={goToday}
+                className="pressable flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[14px] font-semibold active:pressable-active disabled:opacity-40"
+                style={{
+                  background: onToday ? 'var(--separator-soft)' : 'var(--accent-soft)',
+                  color: onToday ? 'var(--text-secondary)' : 'var(--accent)',
+                }}
+              >
+                <CalendarCheck size={15} aria-hidden />
+                {/* На самых узких экранах подпись уходит, остаётся иконка с
+                    aria-label: заголовок «Расписание» не должен резаться. */}
+                <span className="hidden min-[360px]:inline">Сегодня</span>
+              </button>
+
+              <button
+                type="button"
+                aria-label="Открыть календарь"
+                aria-haspopup="dialog"
+                onClick={() => {
+                  haptic('light');
+                  setCalendarOpen(true);
+                }}
+                className="pressable rounded-full p-2 active:pressable-active"
+                style={{ color: 'var(--accent)' }}
+              >
+                <Calendar size={19} aria-hidden />
+              </button>
+            </div>
           }
         />
       }
     >
+      {/*
+        Сообщение над полосой дат: ошибка обновления или «эта дата ещё не
+        загружена». Отдельной строкой, а не всплывашкой по центру — оно не
+        закрывает ленту и не мешает продолжить работу.
+      */}
+      {notice ? (
+        <div className="shrink-0 px-4 pb-2">
+          <div
+            role={notice.tone === 'error' ? 'alert' : 'status'}
+            className="surface flex items-start gap-2 px-3 py-2.5"
+          >
+            {notice.tone === 'error' ? (
+              <TriangleAlert
+                size={15}
+                className="mt-0.5 shrink-0"
+                style={{ color: 'var(--danger)' }}
+                aria-hidden
+              />
+            ) : (
+              <Info
+                size={15}
+                className="mt-0.5 shrink-0"
+                style={{ color: 'var(--accent)' }}
+                aria-hidden
+              />
+            )}
+
+            <p className="min-w-0 flex-1 text-[13px] leading-snug text-[var(--text-secondary)]">
+              {notice.text}
+            </p>
+
+            <button
+              type="button"
+              aria-label="Скрыть сообщение"
+              onClick={() => setNotice(null)}
+              className="pressable -mr-1 shrink-0 rounded-full p-1 active:pressable-active"
+              style={{ color: 'var(--text-tertiary)' }}
+            >
+              <X size={14} aria-hidden />
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       {/*
         Полоса дат — неподвижная часть экрана, отступ от краёв ей нужен свой:
         трек карусели дней вынесен к краям экрана целиком (см. Page в режиме
@@ -596,12 +777,30 @@ export function SchedulePage() {
         />
       </div>
 
+      {/*
+        Обёртка — система координат для индикатора обновления. overflow-hidden
+        нужен именно здесь: при жесте лента уезжает вниз через transform, и без
+        обрезки её нижний край вылезал бы из-под панели навигации (панель — это
+        следующий элемент колонки, а не часть этого блока).
+      */}
+      <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
+        <PullIndicator
+          pullY={pull.pullY}
+          progress={pull.progress}
+          status={pull.status}
+          label="Обновление расписания"
+        />
+
+        {/* Лента едет за пальцем на величину pullY (transform, без ререндера). */}
+        <motion.div style={{ y: pull.pullY }} className="flex min-h-0 flex-1 flex-col">
       {/* Отступ снизу — под последней карточкой, а не под панель навигации:
           панель стоит в колонке ниже этого блока и ленту не перекрывает. */}
       <DayPager
         days={weekDays}
         index={activeDay}
         onIndexChange={selectDayAt}
+        revealSignal={revealSignal}
+        onActiveNode={pull.attach}
         className="mt-3 min-h-0 flex-1"
         // Прокрутка страницы и отступы заданы явно здесь, а не только в DayPager:
         // значение ниже складывается с классами DayPager, но полагаться на
@@ -626,7 +825,26 @@ export function SchedulePage() {
       >
         {renderDay}
       </DayPager>
+
+        </motion.div>
+      </div>
       </Page>
+
+      {/*
+        Календарь — поверх экрана, но не на весь экран: выбирается в один тап и
+        закрывается Esc, тапом вне или кнопкой «Закрыть». Держится вне Page,
+        чтобы положение не зависело от прокрутки ленты и полосы дат.
+      */}
+      <CalendarModal
+        open={calendarOpen}
+        onClose={() => setCalendarOpen(false)}
+        anchor={effectiveDate}
+        today={today}
+        minRaw={minRaw}
+        maxRaw={maxRaw}
+        lessonDays={lessonDays}
+        onPick={pickDate}
+      />
     </>
   );
 }

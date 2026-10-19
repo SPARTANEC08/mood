@@ -5,7 +5,7 @@ import { Menu, Plus, Share, Smartphone } from 'lucide-react';
 import { haptic, isIOS, isStandalone } from '@/lib/env';
 
 /**
- * Инструкция по установке Hub на iPhone — ТОЛЬКО для iOS в браузере.
+ * Инструкция по установке Mood на iPhone — ТОЛЬКО для iOS в браузере.
  *
  * Зачем отдельно от InstallPrompt. На iOS страница чаще всего открыта во
  * встроенном WebView (из Telegram), а оттуда установить PWA нельзя: нужно
@@ -71,7 +71,7 @@ const STEPS: Step[] = [
     text: (
       <>
         Нажмите «Добавить» и убедитесь, что включён переключатель{' '}
-        <strong className="font-semibold" style={{ color: '#C4B5FD' }}>
+        <strong className="font-semibold" style={{ color: 'var(--accent)' }}>
           «Открыть как веб‑приложение»
         </strong>
         .
@@ -104,10 +104,10 @@ function StepImage({ step }: { step: Step }) {
   return (
     <div
       className="relative mt-2.5 overflow-hidden rounded-[12px] border"
-      style={{ borderColor: '#2A2A36', background: '#12121A' }}
+      style={{ borderColor: 'var(--separator-soft)', background: 'var(--surface)' }}
     >
       {failed ? (
-        <div className="flex h-[96px] items-center justify-center" style={{ color: '#A78BFA' }}>
+        <div className="flex h-[96px] items-center justify-center" style={{ color: 'var(--accent)' }}>
           <StepIcon kind={step.icon} />
         </div>
       ) : (
@@ -142,16 +142,16 @@ export function IosInstallGuide() {
   return createPortal(
     <div
       className="fixed inset-0 z-[1000] overflow-y-auto overscroll-contain"
-      style={{ background: '#0B0B10', color: '#FFFFFF' }}
+      style={{ background: 'var(--app-bg)', color: 'var(--text-primary)' }}
       role="dialog"
       aria-modal="true"
-      aria-label="Установка Hub на iPhone"
+      aria-label="Установка Mood на iPhone"
     >
       <div className="mx-auto flex min-h-full w-full max-w-[440px] flex-col gap-5 px-5 py-8 pb-[max(24px,env(safe-area-inset-bottom))]">
         <div className="flex flex-col items-center gap-3 text-center">
-          <Smartphone size={28} style={{ color: '#8B5CF6' }} aria-hidden />
-          <h1 className="text-[22px] font-semibold leading-tight">Откройте Hub как приложение</h1>
-          <p className="text-[15px] leading-snug" style={{ color: 'rgba(235,235,245,0.6)' }}>
+          <Smartphone size={28} style={{ color: 'var(--accent)' }} aria-hidden />
+          <h1 className="text-[22px] font-semibold leading-tight">Откройте Mood как приложение</h1>
+          <p className="text-[15px] leading-snug" style={{ color: 'var(--text-secondary)' }}>
             В браузере Telegram приложение работает хуже. Установите его на экран «Домой» — это займёт 15 секунд.
           </p>
         </div>
@@ -161,15 +161,15 @@ export function IosInstallGuide() {
             <li
               key={index}
               className="rounded-[16px] border p-3.5"
-              style={{ borderColor: '#2A2A36', background: '#1A1A22' }}
+              style={{ borderColor: 'var(--separator-soft)', background: 'var(--surface)' }}
             >
               <div className="flex gap-3">
-                <span className="text-[15px] font-semibold" style={{ color: '#8B5CF6' }}>
+                <span className="text-[15px] font-semibold" style={{ color: 'var(--accent)' }}>
                   {index + 1}
                 </span>
                 <span className="flex items-start gap-1.5 text-[15px] leading-snug">
                   <span>{step.text}</span>
-                  <span className="mt-0.5" style={{ color: '#A78BFA' }}>
+                  <span className="mt-0.5" style={{ color: 'var(--accent)' }}>
                     <StepIcon kind={step.icon} />
                   </span>
                 </span>
@@ -183,7 +183,7 @@ export function IosInstallGuide() {
           type="button"
           onClick={dismiss}
           className="pressable pressable-active w-full rounded-[14px] px-4 py-3.5 text-[16px] font-semibold text-white"
-          style={{ background: '#8B5CF6' }}
+          style={{ background: 'var(--accent)' }}
         >
           Понятно
         </button>

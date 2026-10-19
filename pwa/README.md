@@ -1,6 +1,6 @@
-# Веб-версия Hub (PWA)
+# Веб-версия Mood (PWA)
 
-Приложение Hub в браузере: ставится на домашний экран телефона и открывается
+Приложение Mood в браузере: ставится на домашний экран телефона и открывается
 оттуда в режиме standalone, без адресной строки, с офлайн-оболочкой и последним
 загруженным расписанием.
 
@@ -37,7 +37,7 @@
 группам в `routes/files.ts` работают без единой правки.
 
 На сервере проверяется не только подпись токена, но и его **хэш в `pwaTokens`
-пользователя** (см. `src/server/middleware/auth.ts`): без этого подписи было бы
+пользователя** (см. `backend/server/middleware/auth.ts`): без этого подписи было бы
 достаточно, чтобы выпустить токен с произвольным `userId` и сроком на 90 дней.
 
 **Срок жизни токена — 90 дней** (`PWA_TOKEN_TTL_MS`). Когда он истечёт, PWA
@@ -122,7 +122,7 @@ npm run pwa:dev:test
 кросс-доменное поведение CORS в проде: поднять второй туннель на `:3000`,
 переменную `API_ORIGIN`/`VITE_API_TARGET` направить на него, а `PWA_URL`
 оставить на туннель фронта. Тогда origin'ы разойдутся, и запрос пойдёт через
-CORS — именно этот путь проверяет `allowedOrigins()` в `src/server/index.ts`.
+CORS — именно этот путь проверяет `allowedOrigins()` в `backend/server/index.ts`.
 
 ### Установка на iPhone: пошагово
 
@@ -132,7 +132,7 @@ Safari на iPhone **не** показывает кнопку установки
 1. Открыть адрес PWA в **Safari** (не в Chrome — в Chrome будет свой, другой PWA).
 2. Нажать кнопку **«Поделиться»** — квадрат со стрелкой вверх, внизу экрана.
 3. В списке пролистать вниз до **«На экран Домой»**.
-4. Проверить имя (по умолчанию «Hub») и нажать **«Добавить»**.
+4. Проверить имя (по умолчанию «Mood») и нажать **«Добавить»**.
 5. Запустить с домашнего экрана: иконка, без адресной строки.
 
 Android Chrome: меню ⋮ → «Установить приложение» → «Установить».
@@ -149,12 +149,12 @@ cd pwa && npm run preview  # посмотреть собранную верси�
 ### Вариант A — всё на VPS за nginx (рекомендуется)
 
 ```bash
-sudo mkdir -p /var/www/hub-pwa
+sudo mkdir -p /var/www/mood-pwa
 # ВАЖНО: rsync, а не `cp -r dist/*`. Манифест сборки лежит в pwa/dist/.vite/
 # и скрыт от `*`, поэтому обычным копированием он на сервер не попадает.
-sudo rsync -a --delete pwa/dist/ /var/www/hub-pwa/
-sudo cp pwa/nginx.conf.example /etc/nginx/sites-available/hub-pwa
-sudo ln -s /etc/nginx/sites-available/hub-pwa /etc/nginx/sites-enabled/
+sudo rsync -a --delete pwa/dist/ /var/www/mood-pwa/
+sudo cp pwa/nginx.conf.example /etc/nginx/sites-available/mood-pwa
+sudo ln -s /etc/nginx/sites-available/mood-pwa /etc/nginx/sites-enabled/
 sudo nginx -t && sudo systemctl reload nginx
 sudo certbot --nginx -d pwa.example.com
 ```
@@ -175,14 +175,14 @@ curl -sI https://pwa.example.com/.vite/manifest.json | head -1   # ожидае�
 PWA_URL=https://pwa.example.com
 ```
 
-Перезапуск бота: `npm run build && systemctl restart hub`.
+Перезапуск бота: `npm run build && systemctl restart mood`.
 
 Важные моменты конфига (подробности и комментарии — в самом файле):
 
 - `location = /sw.js` с `Cache-Control: no-cache` — без этого браузер месяц не
   увидит новый Service Worker;
 - `/api/` с `proxy_read_timeout 120s` — `/api/mail` и `/api/bars/grades` ходят
-  в IMAP и БАРС и живут дольше стандартных 60 с;
+  в OWA и БАРС и живут дольше стандартных 60 с;
 - `/assets/` с `expires 1y immutable` — имена хешированные, кэш безопасен;
 - `index.html` без кэша — иначе после деплоя откроется старый бандл.
 
@@ -201,7 +201,7 @@ PWA_URL=https://pwa.example.com
    ```
 
 4. `PWA_URL` добавляется в CORS автоматически — отдельных правок в коде не
-   нужно (см. `allowedOrigins()` в `src/server/index.ts`).
+   нужно (см. `allowedOrigins()` в `backend/server/index.ts`).
 
 Проверить, что origin действительно в белом списке: запрос с чужого `Origin`
 должен вернуться без `Access-Control-Allow-Origin`.
@@ -361,7 +361,7 @@ Service Worker не даёт забрать старый бандл, пока п
 | `public/sw.js` | Service Worker: кэш оболочки, расписания и bootstrap |
 | `public/manifest.webmanifest` | Манифест PWA |
 | `public/offline.html` | Экран офлайна |
-| `scripts/gen-icons.mjs` | Иконки из `assets/icon.png` через sharp (идемпотентно) |
+| `scripts/gen-icons.mjs` | Иконки через sharp: `assets/icon_fs.png` → манифест, `assets/icon.png` → favicon/apple-touch/сайт (идемпотентно) |
 | `scripts/inject-sw-version.mjs` | Подстановка версии в `sw.js` после сборки |
 | `scripts/dev-tunnel.sh` | Туннель + бот + vite для проверки на iPhone |
 | `nginx.conf.example` | Шаблон server-блока nginx |

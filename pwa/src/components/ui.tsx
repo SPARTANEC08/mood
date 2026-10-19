@@ -271,6 +271,33 @@ export function PrimaryButton({
 }
 
 /**
+ * Всплывающее сообщение об ошибке поверх ленты.
+ *
+ * Живёт в общей дизайн-системе, а не рядом с экраном «Задания»: тост нужен и
+ * расписанию (ошибка жеста обновления), и «Успеваемости», и «Кабинету».
+ */
+export function Toast({ text, onClose }: { text: string; onClose: () => void }) {
+  useEffect(() => {
+    const timer = setTimeout(onClose, 4000);
+    return () => clearTimeout(timer);
+  }, [text, onClose]);
+
+  return (
+    <div
+      role="alert"
+      className="animate-fade fixed inset-x-4 z-50 mx-auto max-w-[400px] rounded-[14px] px-4 py-3 text-center text-[14px] text-white"
+      style={{
+        background: 'var(--danger)',
+        bottom: 'calc(var(--tabbar-height) + var(--tabbar-gap) + 12px)',
+      }}
+      onClick={onClose}
+    >
+      {text}
+    </div>
+  );
+}
+
+/**
  * Модальный лист снизу (iOS Bottom Sheet).
  *
  * Реализация на голом портaле с блокировкой прокрутки фона: нативный

@@ -11,7 +11,7 @@
  * (тот же формат, что в расписании).
  */
 
-const PREFIX = 'hub_last_day:';
+const PREFIX = 'mood_last_day:';
 
 export function readLastDay(userId: string): string | null {
   if (!userId) return null;

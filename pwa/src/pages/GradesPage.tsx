@@ -1,10 +1,13 @@
-import { useState } from 'react';
-import { ChevronRight, Clock, Hash, RefreshCw } from 'lucide-react';
+import { useCallback, useMemo, useState, type CSSProperties } from 'react';
+import { ChevronRight, Clock, Hash } from 'lucide-react';
 
 import { Header } from '@/components/TabBar';
 import { Page } from '@/components/Page';
-import { Card, EmptyState, ListGroup, SkeletonCard, SkeletonLesson } from '@/components/ui';
+import { Card, EmptyState, ListGroup, SkeletonCard, SkeletonLesson, Toast } from '@/components/ui';
+import { RefreshIndicator } from '@/components/RefreshIndicator';
+import { usePullToRefresh } from '@/components/PullToRefresh';
 import { useAppData } from '@/lib/dataContext';
+import { plural } from '@/lib/dates';
 import { gradeColor } from '@/lib/format';
 import { haptic } from '@/lib/env';
 import type { ApiSubjectGrade } from '@/types/api';
@@ -33,6 +36,20 @@ export function GradesPage() {
   } = useAppData();
 
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [toast, setToast] = useState<string | null>(null);
+
+  /**
+   * Обновление по жесту: принудительный запрос снимка БАРС мимо TTL.
+   *
+   * Без force сервер отдал бы снимок двадцатиминутной давности, и жест выглядел
+   * бы сломанным: спиннер прошёл, данные те же.
+   */
+  const pullRefresh = useCallback(async () => {
+    const message = await refreshBars();
+    if (message) setToast(message);
+  }, [refreshBars]);
+
+  const pull = usePullToRefresh({ enabled: true, onRefresh: pullRefresh });
 
   const toggle = (id: string) => {
     haptic('light');
@@ -82,28 +99,19 @@ export function GradesPage() {
   }
 
   return (
+    <>
     <Page
       header={
         <Header
           title="Успеваемость"
           large
           subtitle={grades?.semesterName}
-          right={
-            <button
-              type="button"
-              aria-label="Обновить"
-              onClick={() => {
-                haptic('light');
-                refreshBars();
-              }}
-              className="pressable rounded-full p-2 active:pressable-active"
-              style={{ color: 'var(--accent)' }}
-            >
-              <RefreshCw size={19} className={barsRefreshing ? 'spinner' : undefined} aria-hidden />
-            </button>
-          }
+          // Фоновое обновление (возврат в приложение после TTL) — единственная
+          // обратная связь о том, что цифры перезапрашиваются.
+          right={<RefreshIndicator active={barsRefreshing && !pull.suppressBackground} />}
         />
       }
+      pull={pull}
     >
       <div className="space-y-3">
         {/* Два квадрата рядом: задолженности и рейтинг */}
@@ -167,25 +175,48 @@ export function GradesPage() {
         </div>
       </div>
     </Page>
+
+    {toast ? <Toast text={toast} onClose={() => setToast(null)} /> : null}
+    </>
   );
 }
 
 /**
- * Распределение выставленных оценок.
+ * Распределение выставленных оценок — сводкой из четырёх карточек.
  *
- * Полоска идёт в порядке убывания балла: пятёрки — зелёные, четвёрки —
- * оранжевые, тройки — жёлтые, двойки — красные. Ширина сегмента
- * пропорциональна количеству, поэтому видно, чего больше всего.
+ * Раньше это была только полоска, а рядом с ней цветные «5» и «12»: по такой
+ * подписи нельзя было понять, где сама оценка, а где её количество, — и это
+ * главная претензия к прежнему виду. Теперь у каждой оценки своя карточка:
+ * крупная цифра — сколько, подпись со склонением — за что. Полоска осталась
+ * под карточками и служит только пропорцией, без подписей внутри.
  *
- * Раньше здесь была полоса «уважительные / неуважительные пропуски». Она
- * дублировала соседний блок с числом пропусков и забирала место, которое
- * полезнее отдать распределению оценок.
+ * Цвет цифры — не чистый токен, а смесь с основным цветом текста: чистый токен
+ * не проходит AA на светлой теме (см. @utility grade-ink в index.css).
+ *
+ * Склонение берём у существующего plural(): правила у «оценка/оценки/оценок»
+ * ровно те же, что у «пара/пары/пар», — второй такой функции не нужно.
  */
 function DistributionBar({
   distribution,
 }: {
   distribution: { fives: number; fours: number; threes: number; twos: number; total: number } | null;
 }) {
+  /** Карточки пересобираются только при смене снимка, а не на каждый рендер. */
+  const cards = useMemo(
+    () =>
+      distribution
+        ? [
+            { mark: 5, count: distribution.fives, tone: 'var(--grade-5)', words: ['пятёрка', 'пятёрки', 'пятёрок'] },
+            { mark: 4, count: distribution.fours, tone: 'var(--grade-4)', words: ['четвёрка', 'четвёрки', 'четвёрок'] },
+            { mark: 3, count: distribution.threes, tone: 'var(--grade-3)', words: ['тройка', 'тройки', 'троек'] },
+            { mark: 2, count: distribution.twos, tone: 'var(--grade-2)', words: ['двойка', 'двойки', 'двоек'] },
+          ]
+        : [],
+    [distribution],
+  );
+
+  // Ни одной оценки в семестре: четыре нуля читались бы как «данные есть», хотя
+  // их нет. Поэтому показывается пояснение — как и раньше.
   if (!distribution || distribution.total === 0) {
     return (
       <Card className="px-4 py-4">
@@ -196,43 +227,50 @@ function DistributionBar({
     );
   }
 
-  const { fives, fours, threes, twos, total } = distribution;
-  const pct = (n: number) => `${(n / total) * 100}%`;
-
-  // Палитра из --grade-*: раньше «4» и «3» красились в один и тот же оранжевый
-  // (--warning и --practice совпадают), и легенда была нечитаемой.
-  const segments = [
-    { label: '5', count: fives, color: 'var(--grade-5)' },
-    { label: '4', count: fours, color: 'var(--grade-4)' },
-    { label: '3', count: threes, color: 'var(--grade-3)' },
-    { label: '2', count: twos, color: 'var(--grade-2)' },
-  ].filter((s) => s.count > 0);
-
   return (
     <Card className="px-4 py-3.5">
-      <div className="mb-2 flex items-baseline justify-between">
+      <div className="mb-2.5 flex items-baseline justify-between">
         <span className="text-[13px] text-[var(--text-secondary)]">Распределение оценок</span>
-        <span className="text-[12px] tabular-nums text-[var(--text-tertiary)]">
-          всего {total}
+        {/* Было --text-tertiary: контраст 1.97:1 на светлой теме, ниже AA. */}
+        <span className="text-[12px] tabular-nums text-[var(--text-secondary)]">
+          всего {distribution.total}
         </span>
       </div>
 
-      <div className="flex h-2.5 overflow-hidden rounded-full" role="img" aria-label="Распределение оценок">
-        {segments.map((s) => (
-          <div key={s.label} style={{ width: pct(s.count), background: s.color }} />
+      {/* Две колонки на телефоне, четыре — когда места хватает. */}
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        {cards.map(({ mark, count, tone, words }) => (
+          <div
+            key={mark}
+            // role="img": карточка читается одним объектом, поэтому цифра и
+            // подпись не дублируют друг друга в скринридере. В aria — полная
+            // формулировка (в подписи слово короче, но смысл тот же).
+            role="img"
+            aria-label={`Оценок на ${mark}: ${count}`}
+            className="surface-grouped flex flex-col items-center justify-center px-2 py-2.5"
+            style={{ '--tone': tone } as CSSProperties}
+          >
+            <span className="grade-ink text-[22px] font-semibold leading-none tabular-nums">
+              {count}
+            </span>
+            <span className="mt-1 text-center text-[12px] leading-tight text-[var(--text-secondary)]">
+              {plural(count, words[0], words[1], words[2])}
+            </span>
+          </div>
         ))}
       </div>
 
-      <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[12px]">
-        {segments.map((s) => (
-          <span key={s.label} className="inline-flex items-center gap-1.5">
-            <span className="h-2 w-2 rounded-full" style={{ background: s.color }} aria-hidden />
-            <span className="tabular-nums font-medium" style={{ color: s.color }}>
-              {s.label}
-            </span>
-            <span className="tabular-nums text-[var(--text-secondary)]">{s.count}</span>
-          </span>
-        ))}
+      {/* Пропорция без подписей: числа уже озвучены карточками. Перекрывать
+          ими полоску нельзя — именно это и путало в прежнем виде. */}
+      <div className="mt-2.5 flex h-2 overflow-hidden rounded-full" aria-hidden>
+        {cards
+          .filter((card) => card.count > 0)
+          .map(({ mark, count, tone }) => (
+            <div
+              key={mark}
+              style={{ width: `${(count / distribution.total) * 100}%`, background: tone }}
+            />
+          ))}
       </div>
     </Card>
   );

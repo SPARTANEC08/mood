@@ -57,10 +57,10 @@ const NO_VIEWPORT: ViewportMetrics = {
 
 /** Цвет вердикта: ниже 45 fps — интерфейс дёргается, это видно глазом. */
 function fpsVerdict(fps: number): { text: string; color: string } {
-  if (fps >= 55) return { text: 'плавно', color: '#30d158' };
-  if (fps >= 45) return { text: 'нормально', color: '#ffd60a' };
-  if (fps >= 30) return { text: 'рвано', color: '#ff9f0a' };
-  return { text: 'лаги', color: '#ff453a' };
+  if (fps >= 55) return { text: 'плавно', color: 'var(--success)' };
+  if (fps >= 45) return { text: 'нормально', color: 'var(--grade-3)' };
+  if (fps >= 30) return { text: 'рвано', color: 'var(--warning)' };
+  return { text: 'лаги', color: 'var(--danger)' };
 }
 
 export function DiagnosticsScreen({ onClose }: { onClose: () => void }) {
@@ -80,7 +80,7 @@ export function DiagnosticsScreen({ onClose }: { onClose: () => void }) {
   }, []);
 
   const verdict = fpsVerdict(d.fps);
-  const bad = verdict.color === '#ff453a' || verdict.color === '#ff9f0a';
+  const bad = verdict.color === 'var(--danger)' || verdict.color === 'var(--warning)';
 
   // Пересчёт замеров вьюпорта по нажатию: без кнопки значения ездили бы сами
   // (панель Safari живёт своей жизнью), и в скриншоте попадал бы случайный
@@ -94,7 +94,7 @@ export function DiagnosticsScreen({ onClose }: { onClose: () => void }) {
   return (
     <div
       className="min-h-full overflow-y-auto px-4 pb-10 pt-[max(16px,env(safe-area-inset-top))]"
-      style={{ background: '#000', color: '#fff', font: '13px/1.45 ui-monospace, Menlo, monospace' }}
+      style={{ background: 'var(--app-bg)', color: 'var(--text-primary)', font: '13px/1.45 ui-monospace, Menlo, monospace' }}
     >
       <div className="mb-3 flex items-center justify-between">
         <h1 className="text-[17px] font-bold">Замеры на устройстве</h1>
@@ -102,13 +102,13 @@ export function DiagnosticsScreen({ onClose }: { onClose: () => void }) {
           type="button"
           onClick={onClose}
           className="rounded-lg px-3 py-1.5"
-          style={{ background: '#1c1c1e' }}
+          style={{ background: 'var(--surface)' }}
         >
           Закрыть
         </button>
       </div>
 
-      <p style={{ color: '#8e8e93' }} className="mb-4 text-[12px] leading-snug">
+      <p style={{ color: 'var(--text-secondary)' }} className="mb-4 text-[12px] leading-snug">
         Обнови страницу, потом листай расписание и переключай дни. Здесь появится,
         где именно теряется кадр. Скриншот этого экрана и есть ответ.
       </p>
@@ -116,9 +116,9 @@ export function DiagnosticsScreen({ onClose }: { onClose: () => void }) {
       {/* Главная цифра — одна, крупно: её и нужно прислать. */}
       <div
         className="mb-3 rounded-2xl p-4"
-        style={{ background: '#1c1c1e', border: `1px solid ${bad ? verdict.color : '#2c2c2e'}` }}
+        style={{ background: 'var(--surface)', border: `1px solid ${bad ? verdict.color : 'var(--separator-soft)'}` }}
       >
-        <div className="mb-1 text-[11px]" style={{ color: '#8e8e93' }}>
+        <div className="mb-1 text-[11px]" style={{ color: 'var(--text-secondary)' }}>
           КАДРОВ В СЕКУНДУ (среднее за 5 с)
         </div>
         <div className="text-[40px] leading-none font-bold" style={{ color: verdict.color }}>
@@ -137,9 +137,9 @@ export function DiagnosticsScreen({ onClose }: { onClose: () => void }) {
 
       <div
         className="mt-4 rounded-xl p-3 text-[12px] leading-snug"
-        style={{ background: '#1c1c1e', color: '#8e8e93' }}
+        style={{ background: 'var(--surface)', color: 'var(--text-secondary)' }}
       >
-        <div className="mb-1 font-bold" style={{ color: '#fff' }}>
+        <div className="mb-1 font-bold" style={{ color: 'var(--text-primary)' }}>
           ВЬЮПОРТ (причина пустой полосы под меню)
         </div>
         <div>
@@ -158,12 +158,12 @@ export function DiagnosticsScreen({ onClose }: { onClose: () => void }) {
         type="button"
         onClick={shootViewport}
         className="mt-2 w-full rounded-xl py-2.5"
-        style={{ background: '#1c1c1e' }}
+        style={{ background: 'var(--surface)' }}
       >
         Снять замеры вьюпорта
       </button>
 
-      <div className="mt-2 rounded-xl px-3" style={{ background: '#1c1c1e' }}>
+      <div className="mt-2 rounded-xl px-3" style={{ background: 'var(--surface)' }}>
         <Row label="Высота #root (вычисл.)" value={vp.rootHeight} />
         <Row label="Верх #root" value={vp.rootTop} />
         <Row label="Низ #root" value={vp.rootBottom} />
@@ -200,9 +200,9 @@ export function DiagnosticsScreen({ onClose }: { onClose: () => void }) {
       */}
       <div
         className="mt-2 rounded-xl p-3 text-[12px] leading-snug"
-        style={{ background: '#1c1c1e', color: '#8e8e93' }}
+        style={{ background: 'var(--surface)', color: 'var(--text-secondary)' }}
       >
-        <div className="mb-1 font-bold" style={{ color: '#fff' }}>
+        <div className="mb-1 font-bold" style={{ color: 'var(--text-primary)' }}>
           ЛЕНТЫ (корень / трек / страница)
         </div>
         <div style={{ whiteSpace: 'pre-line' }}>{vp.pagers}</div>
@@ -214,9 +214,9 @@ export function DiagnosticsScreen({ onClose }: { onClose: () => void }) {
 
       <div
         className="mt-4 rounded-xl p-3 text-[12px] leading-snug"
-        style={{ background: '#1c1c1e', color: '#8e8e93' }}
+        style={{ background: 'var(--surface)', color: 'var(--text-secondary)' }}
       >
-        <div className="mb-1 font-bold" style={{ color: '#fff' }}>
+        <div className="mb-1 font-bold" style={{ color: 'var(--text-primary)' }}>
           СБОРКА
         </div>
         <div>версия Service Worker: {swVersion}</div>
@@ -230,13 +230,13 @@ export function DiagnosticsScreen({ onClose }: { onClose: () => void }) {
         type="button"
         onClick={resetDiagnostics}
         className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl py-2.5"
-        style={{ background: '#1c1c1e' }}
+        style={{ background: 'var(--surface)' }}
       >
         <RotateCcw size={14} />
         Сбросить замеры
       </button>
 
-      <p className="mt-3 text-[12px] leading-snug" style={{ color: '#8e8e93' }}>
+      <p className="mt-3 text-[12px] leading-snug" style={{ color: 'var(--text-secondary)' }}>
         «Длинных задач» много и «поток занят» большой — значит интерфейс
         считает что-то лишнее. Если задач нет, а кадров мало — значит тормозит
         не скрипт, а отрисовка (размытие, тени, анимация через GPU).
@@ -249,10 +249,10 @@ function Row({ label, value, bad = false }: { label: string; value: string; bad?
   return (
     <div
       className="flex items-center justify-between border-b py-2"
-      style={{ borderColor: '#2c2c2e' }}
+      style={{ borderColor: 'var(--separator-soft)' }}
     >
-      <span style={{ color: '#8e8e93' }}>{label}</span>
-      <span style={{ color: bad ? '#ff9f0a' : '#fff' }}>{value}</span>
+      <span style={{ color: 'var(--text-secondary)' }}>{label}</span>
+      <span style={{ color: bad ? 'var(--warning)' : 'var(--text-primary)' }}>{value}</span>
     </div>
   );
 }

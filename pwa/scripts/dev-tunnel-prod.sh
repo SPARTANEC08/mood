@@ -25,7 +25,7 @@ API_PORT=3000
 # 3000, а всё остальное — на 4173.
 PROXY_PORT=4180
 
-MOCK_ID="${MOCK_TELEGRAM_USER_ID:-757471228}"
+MOCK_ID="${MOCK_TELEGRAM_USER_ID:-100000001}"
 
 command -v cloudflared >/dev/null 2>&1 || {
   echo "Не найден cloudflared. Установите: brew install cloudflared"
@@ -47,7 +47,7 @@ cleanup() {
   for pid in "${PIDS[@]:-}"; do
     kill "$pid" 2>/dev/null || true
   done
-  pkill -f 'tsx bot.ts' 2>/dev/null || true
+  pkill -f 'tsx tg/bot.ts' 2>/dev/null || true
   pkill -f 'vite preview' 2>/dev/null || true
   pkill -f 'cloudflared tunnel --url' 2>/dev/null || true
   echo "Готово."
@@ -62,7 +62,7 @@ if [ ! -d pwa/dist ]; then
 fi
 
 # ── 1. Раздача собранной версии ────────────────────────────────────────────
-PREVIEW_LOG=$(make_log hub-pwa-preview)
+PREVIEW_LOG=$(make_log mood-pwa-preview)
 echo "▸ Раздаю pwa/dist на порту $PREVIEW_PORT, лог: $PREVIEW_LOG"
 
 # preview не умеет проксировать /api (это делает dev-сервер), поэтому прокси
@@ -89,9 +89,9 @@ if [ "$READY" -ne 1 ]; then
 fi
 
 # ── 2. Прокси /api → :3000 ─────────────────────────────────────────────────
-PROXY_LOG=$(make_log hub-pwa-proxy)
+PROXY_LOG=$(make_log mood-pwa-proxy)
 echo "▸ Поднимаю прокси /api → 127.0.0.1:$API_PORT..."
-PROXY_JS="$(make_log hub-pwa-proxy-script).mjs"
+PROXY_JS="$(make_log mood-pwa-proxy-script).mjs"
 
 # Прокси на голом node без зависимостей: preview-сервер проксировать не умеет,
 # а ставить ради этого отдельный пакет незачем.
@@ -153,7 +153,7 @@ for _ in $(seq 1 15); do
 done
 
 # ── 3. Туннель ─────────────────────────────────────────────────────────────
-TUNNEL_LOG=$(make_log hub-pwa-tunnel)
+TUNNEL_LOG=$(make_log mood-pwa-tunnel)
 echo "▸ Поднимаю туннель..."
 cloudflared tunnel --url "http://localhost:$PROXY_PORT" --no-autoupdate > "$TUNNEL_LOG" 2>&1 &
 PIDS+=($!)
@@ -183,7 +183,7 @@ done
 
 # ── 4. Бот + API ───────────────────────────────────────────────────────────
 echo "▸ Запускаю бота и API на порту $API_PORT..."
-BOT_LOG=$(make_log hub-pwa-bot)
+BOT_LOG=$(make_log mood-pwa-bot)
 
 # ${MOCK_ID} в фигурных скобках: кириллическая кавычка » после голого $MOCK_ID
 # попадает в имя переменной, и bash падает с «unbound variable».
@@ -191,7 +191,7 @@ API_PORT="$API_PORT" \
 API_HOST=127.0.0.1 \
 MOCK_TELEGRAM_USER_ID="$MOCK_ID" \
 PWA_URL="$TUNNEL_URL" \
-  npx tsx bot.ts > "$BOT_LOG" 2>&1 &
+  npx tsx tg/bot.ts > "$BOT_LOG" 2>&1 &
 PIDS+=($!)
 
 echo "  жду API..."

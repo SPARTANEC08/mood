@@ -20,5 +20,5 @@ interface BeforeInstallPromptEvent extends Event {
 
 interface Window {
   /** Отложенное событие установки; null, если браузер его не присылал. */
-  __hubInstallPrompt?: BeforeInstallPromptEvent | null;
+  __moodInstallPrompt?: BeforeInstallPromptEvent | null;
 }

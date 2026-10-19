@@ -1,23 +1,25 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { NotebookPen, RefreshCw, StickyNote } from 'lucide-react';
+import { NotebookPen, StickyNote } from 'lucide-react';
 
 import { AddRecordSheet, type RecordKind } from '@/components/AddRecordSheet';
 import { Page } from '@/components/Page';
 import { Header } from '@/components/TabBar';
 import { RecordDetailScreen } from '@/components/RecordDetailScreen';
-import { EmptyState, ErrorState, ListGroup, SkeletonList } from '@/components/ui';
+import { EmptyState, ErrorState, ListGroup, SkeletonList, Toast } from '@/components/ui';
+import { RefreshIndicator } from '@/components/RefreshIndicator';
+import { usePullToRefresh } from '@/components/PullToRefresh';
 import {
   ConfirmSheet,
   describeRecord,
   HomeworkCard,
   ImportantCard,
   SectionHeader,
-  Toast,
   type TaskRecord,
 } from '@/components/tasks/parts';
 import { ApiError, api } from '@/lib/api';
 import { useAppData } from '@/lib/dataContext';
-import { haptic, notify } from '@/lib/env';
+import { todayRawMoscow } from '@/lib/dates';
+import { notify } from '@/lib/env';
 
 /**
  * Экран «Задания и Важное».
@@ -55,7 +57,7 @@ interface SheetState {
  *   устаревшим кэшем.
  */
 export function TasksPage({ listsRevision = 0 }: { listsRevision?: number }) {
-  const { homework, important, loading, error, refreshing, refresh, reloadLists } = useAppData();
+  const { homework, important, loading, error, refreshing, reloadLists } = useAppData();
 
   const [filter, setFilter] = useState<string>('');
 
@@ -81,17 +83,44 @@ export function TasksPage({ listsRevision = 0 }: { listsRevision?: number }) {
     await reloadLists();
   }, [reloadLists]);
 
+  /**
+   * Обновление по жесту: перечитывает ровно данные этой вкладки — ДЗ и
+   * «Важное». Расписание не форсим: оно тут не показано, а поход в МЭИ ради
+   * невидимого экрана — лишняя нагрузка.
+   */
+  const pullRefresh = useCallback(async () => {
+    const message = await reloadLists();
+    if (message) setToast(message);
+  }, [reloadLists]);
+
+  const pull = usePullToRefresh({ enabled: true, onRefresh: pullRefresh });
+
+  /**
+   * На вкладке «Задания» показываются только актуальные задания.
+   *
+   * Общий список ДЗ теперь шире экрана: он покрывает окно расписания (−14 дней),
+   * потому что задания на прошедшие дни нужны ленте пар вместе с вложениями.
+   * Список же читают как «что задано» — прошедшие записи в нём были бы шумом,
+   * поэтому здесь они отсекаются по московской дате.
+   */
+  const upcomingHomework = useMemo(() => {
+    const today = todayRawMoscow();
+    return homework.filter((hw) => hw.targetDate >= today);
+  }, [homework]);
+
   /** Предметы фильтра — из существующих ДЗ: фильтровать нечем по тому, чего нет. */
   const subjects = useMemo(() => {
     const set = new Set<string>();
-    for (const hw of homework) set.add(hw.discipline);
+    for (const hw of upcomingHomework) set.add(hw.discipline);
     return [...set].sort();
-  }, [homework]);
+  }, [upcomingHomework]);
 
   const visibleHomework = useMemo(() => {
-    const list = filter ? homework.filter((h) => h.discipline === filter) : homework;
+    const list = filter
+      ? upcomingHomework.filter((h) => h.discipline === filter)
+      : upcomingHomework;
     return [...list].sort((a, b) => a.targetDate.localeCompare(b.targetDate));
-  }, [homework, filter]);
+  }, [upcomingHomework, filter]);
 
   // Важное сортируется от новых к старым: у объявлений нет дедлайна, и «сверху
   // самое свежее» — единственный порядок, в котором они и читаются.
@@ -128,11 +157,11 @@ export function TasksPage({ listsRevision = 0 }: { listsRevision?: number }) {
   }, [openRecordId, openRecord]);
 
   /**
-   * Удаление записи своей группы.
+   * Удаление записи.
    *
-   * Права внутри группы не сужены — удалить может любой однокурсник, как и в
-   * боте. Чужая запись вернёт 404, и тогда показываем честное сообщение
-   * вместо «успеха»: человек должен знать, что запись удалил кто-то другой.
+   * Удалить может только автор; кнопки у чужих записей не показываются вовсе
+   * (`canEdit` от сервера). Если запись всё же исчезла/недоступна, сервер
+   * вернёт 404 — тогда показываем честное сообщение вместо «успеха».
    */
   const doDelete = useCallback(async () => {
     if (!confirmDelete || deletingId) return;
@@ -227,22 +256,13 @@ export function TasksPage({ listsRevision = 0 }: { listsRevision?: number }) {
           <Header
             title="Задания"
             large
-            right={
-              <button
-                type="button"
-                aria-label="Обновить"
-                onClick={() => {
-                  haptic('light');
-                  refresh();
-                }}
-                className="pressable rounded-full p-2 active:pressable-active"
-                style={{ color: 'var(--accent)' }}
-              >
-                <RefreshCw size={18} className={refreshing ? 'spinner' : undefined} aria-hidden />
-              </button>
-            }
+            // Индикатор фонового обновления: списки обновляются сами при
+            // возврате в приложение, и раньше это было совсем не видно. Пока
+            // идёт жест, спиннер рисует сам pull-to-refresh — не дублируем.
+            right={<RefreshIndicator active={refreshing && !pull.suppressBackground} />}
           />
         }
+        pull={pull}
       >
         {/* Фильтр по предмету живёт в шапке списка и появляется только когда
             предметов больше одного: единственный предмет фильтром не является. */}

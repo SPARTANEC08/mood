@@ -1,0 +1,41 @@
+{
+  "packageId": "ru.mpei.mood",
+  "host": "109-120-129-61.sslip.io",
+  "name": "Mood — расписание МЭИ",
+  "launcherName": "Mood",
+  "display": "standalone",
+  "themeColor": "#15131E",
+  "themeColorDark": "#15131E",
+  "navigationColor": "#15131E",
+  "navigationColorDark": "#15131E",
+  "navigationDividerColor": "#15131E",
+  "navigationDividerColorDark": "#15131E",
+  "backgroundColor": "#15131E",
+  "enableNotifications": false,
+  "startUrl": "/",
+  "iconUrl": "https://109-120-129-61.sslip.io/icons/icon-512.png?v=2",
+  "maskableIconUrl": "https://109-120-129-61.sslip.io/icons/icon-maskable-512.png?v=2",
+  "splashScreenFadeOutDuration": 300,
+  "signingKey": {
+    "path": "../mood.keystore",
+    "alias": "mood"
+  },
+  "appVersion": "1.0.0",
+  "appVersionCode": 1,
+  "shortcuts": [],
+  "webManifestUrl": "https://109-120-129-61.sslip.io/manifest.webmanifest",
+  "fallbackType": "customtabs",
+  "features": {},
+  "alphaDependencies": {
+    "enabled": false
+  },
+  "enableSiteSettingsShortcut": true,
+  "isChromeOSOnly": false,
+  "isMetaQuest": false,
+  "fullScopeUrl": "https://109-120-129-61.sslip.io/",
+  "minSdkVersion": 24,
+  "orientation": "portrait",
+  "fingerprints": [],
+  "additionalTrustedOrigins": [],
+  "retainedBundles": []
+}

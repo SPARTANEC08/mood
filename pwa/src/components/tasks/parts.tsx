@@ -6,7 +6,7 @@
  * разметка карточек жила отдельно. Состояния у них нет — всё через пропсы.
  */
 
-import { useEffect, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { ChevronRight, Paperclip, Pencil, Trash2 } from 'lucide-react';
 
 import { KindBadge } from '@/components/ui';
@@ -92,7 +92,8 @@ export function HomeworkCard({
         <FilesBadge count={item.files.length} />
       </div>
 
-      <CardActions onEdit={onEdit} onDelete={onDelete} />
+      {/* Правка и удаление — только у своих записей; чужие открываются на просмотр. */}
+      {item.canEdit ? <CardActions onEdit={onEdit} onDelete={onDelete} /> : null}
     </div>
   );
 }
@@ -133,7 +134,8 @@ export function ImportantCard({
         <FilesBadge count={item.files.length} />
       </div>
 
-      <CardActions onEdit={onEdit} onDelete={onDelete} />
+      {/* Правка и удаление — только у своих записей; чужие открываются на просмотр. */}
+      {item.canEdit ? <CardActions onEdit={onEdit} onDelete={onDelete} /> : null}
     </div>
   );
 }
@@ -243,7 +245,7 @@ export function ConfirmSheet({
               onConfirm();
             }}
             className="pressable w-full rounded-[12px] py-2.5 text-[16px] font-semibold active:pressable-active disabled:opacity-50"
-            style={{ background: 'var(--danger)', color: '#fff' }}
+            style={{ background: 'var(--danger)', color: 'var(--accent-text)' }}
           >
             {busy ? 'Удаляем…' : 'Удалить'}
           </button>
@@ -258,28 +260,6 @@ export function ConfirmSheet({
           </button>
         </div>
       </div>
-    </div>
-  );
-}
-
-/** Всплывающее сообщение об ошибке поверх ленты. */
-export function Toast({ text, onClose }: { text: string; onClose: () => void }) {
-  useEffect(() => {
-    const timer = setTimeout(onClose, 4000);
-    return () => clearTimeout(timer);
-  }, [text, onClose]);
-
-  return (
-    <div
-      role="alert"
-      className="animate-fade fixed inset-x-4 z-50 mx-auto max-w-[400px] rounded-[14px] px-4 py-3 text-center text-[14px] text-white"
-      style={{
-        background: 'var(--danger)',
-        bottom: 'calc(var(--tabbar-height) + var(--tabbar-gap) + 12px)',
-      }}
-      onClick={onClose}
-    >
-      {text}
     </div>
   );
 }

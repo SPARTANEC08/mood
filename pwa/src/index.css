@@ -5,10 +5,10 @@
  *
  * Решения и их причины:
  *
- * 1. Цвета заданы через CSS-переменные и переопределяются в @media
- *    (prefers-color-scheme). Telegram умеет сообщать свою тему, но системная
- *    тема устройства совпадает с ней почти всегда, а @media работает и в
- *    обычном браузере при отладке.
+ * 1. Цвета заданы через CSS-переменные: светлая палитра — в :root, тёмная —
+ *    в [data-theme="dark"]. Атрибут data-theme на <html> ставит переключатель
+ *    темы (lib/theme.ts + ранний скрипт theme-init.js), поэтому тема следует
+ *    выбору пользователя, а не только системной схеме устройства.
  *
  * 2. Семантические имена переменных вместо хардкода в компонентах: тёмная
  *    тема не должна требовать правок разметки.
@@ -37,26 +37,32 @@
 :root {
   color-scheme: light;
 
-  /* Фон приложения — системный серый iOS, а не белый */
-  --app-bg: #f2f2f7;
+  /* Фон приложения */
+  --app-bg: #f4f2fb;
   /* Карточка на фоне */
   --surface: #ffffff;
   /* Вложенная карточка / сгруппированный список */
-  --surface-grouped: #ffffff;
+  --surface-grouped: #f8f6fe;
   /* Полупрозрачная подложка для навбара и таббара */
   --surface-blur: rgba(255, 255, 255, 0.82);
 
-  --text-primary: #000000;
-  --text-secondary: rgba(60, 60, 67, 0.6);
-  --text-tertiary: rgba(60, 60, 67, 0.3);
+  --text-primary: #15131e;
+  --text-secondary: rgba(21, 19, 30, 0.6);
+  --text-tertiary: rgba(21, 19, 30, 0.3);
 
-  --separator: rgba(60, 60, 67, 0.29);
-  --separator-soft: rgba(60, 60, 67, 0.14);
+  --separator: rgba(21, 19, 30, 0.18);
+  --separator-soft: rgba(21, 19, 30, 0.08);
 
   /* Акцент — фиолетовый. Отдельный от «лекции», чтобы номер пары и
      выделение сегодняшнего дня не совпадали с бейджем типа занятия. */
-  --accent: #6d4aff;
-  --accent-soft: rgba(109, 74, 255, 0.12);
+  --accent: #7c4dff;
+  --accent-soft: rgba(124, 77, 255, 0.12);
+  /* Текст на акцентной заливке */
+  --accent-text: #ffffff;
+  /* Затухающий акцент — три ступени к фону (например, «прошедшие» дни). */
+  --accent-fade-1: #9d45fe;
+  --accent-fade-2: #7f3cd0;
+  --accent-fade-3: #6539a9;
 
   /* Служебные цвета — приглушённые, как в системных компонентах iOS */
   --success: #34c759;
@@ -76,9 +82,10 @@
   --grade-3: #ffcc00;
   --grade-2: #ff3b30;
 
-  /* Номер пары и активные элементы — заливка акцентом */
-  --lesson-chip: #6d4aff;
-  --lesson-chip-text: #ffffff;
+  /* Номер пары и активные элементы — заливка акцентом (без дублей: цвет
+     берётся из --accent, поэтому смена акцента меняет и их). */
+  --lesson-chip: var(--accent);
+  --lesson-chip-text: var(--accent-text);
 
   /* Бейджи типов занятий */
   --lecture: #0a84ff;
@@ -136,47 +143,54 @@
   --tabbar-gap: 0px;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    color-scheme: dark;
+/**
+ * Тёмная тема (Dark Violet). Переключается атрибутом data-theme="dark" на
+ * <html>; системная схема устройства учитывается только в режиме «Системная»
+ * (решение принимает lib/theme.ts), поэтому медиазапроса здесь нет.
+ *
+ * Акцент и «текст на акценте» заданы значением, а зависимые токены
+ * (--lesson-chip) наследуются из :root — дублей нет.
+ */
+[data-theme='dark'] {
+  color-scheme: dark;
 
-    --app-bg: #000000;
-    --surface: #1c1c1e;
-    --surface-grouped: #2c2c2e;
-    --surface-blur: rgba(28, 28, 30, 0.82);
+  --app-bg: #15131e;
+  --surface: #1f1c2b;
+  --surface-grouped: #2a2638;
+  --surface-blur: rgba(31, 28, 43, 0.82);
 
-    --text-primary: #ffffff;
-    --text-secondary: rgba(235, 235, 245, 0.6);
-    --text-tertiary: rgba(235, 235, 245, 0.3);
+  --text-primary: #f4f2fb;
+  --text-secondary: rgba(244, 242, 251, 0.6);
+  --text-tertiary: rgba(244, 242, 251, 0.3);
 
-    --separator: rgba(84, 84, 88, 0.65);
-    --separator-soft: rgba(84, 84, 88, 0.36);
+  --separator: rgba(244, 242, 251, 0.24);
+  --separator-soft: rgba(244, 242, 251, 0.1);
 
-    --accent: #8b5cff;
-    --accent-soft: rgba(139, 92, 255, 0.2);
+  --accent: #9d45fe;
+  --accent-soft: rgba(157, 69, 254, 0.2);
+  --accent-text: #ffffff;
+  --accent-fade-1: #7f3cd0;
+  --accent-fade-2: #6539a9;
+  --accent-fade-3: #4b3082;
 
-    --success: #30d158;
-    --warning: #ff9f0a;
-    --danger: #ff453a;
+  --success: #30d158;
+  --warning: #ff9f0a;
+  --danger: #ff453a;
 
-    --grade-5: #30d158;
-    --grade-4: #ff9f0a;
-    --grade-3: #ffd60a;
-    --grade-2: #ff453a;
+  --grade-5: #30d158;
+  --grade-4: #ff9f0a;
+  --grade-3: #ffd60a;
+  --grade-2: #ff453a;
 
-    --lesson-chip: #8b5cff;
-    --lesson-chip-text: #ffffff;
+  --lecture: #0a84ff;
+  --lecture-bg: rgba(10, 132, 255, 0.18);
+  --practice: #ff9f0a;
+  --practice-bg: rgba(255, 159, 10, 0.18);
+  --lab: #40cbe0;
+  --lab-bg: rgba(64, 203, 224, 0.18);
 
-    --lecture: #0a84ff;
-    --lecture-bg: rgba(10, 132, 255, 0.18);
-    --practice: #ff9f0a;
-    --practice-bg: rgba(255, 159, 10, 0.18);
-    --lab: #40cbe0;
-    --lab-bg: rgba(64, 203, 224, 0.18);
-
-    --shadow-card: none;
-    --shadow-bar: 0 -1px 0 var(--separator-soft);
-  }
+  --shadow-card: none;
+  --shadow-bar: 0 -1px 0 var(--separator-soft);
 }
 
 * {
@@ -293,7 +307,7 @@ body {
  * Селекторов два, и это не перестраховка:
  *
  *   - `(display-mode: standalone)` работает на Android и десктопе;
- *   - `html[data-hub-standalone]` — на iOS, который медиазапрос НЕ
+ *   - `html[data-mood-standalone]` — на iOS, который медиазапрос НЕ
  *     поддерживает и сообщает режим только через navigator.standalone. Атрибут
  *     ставит lib/viewport.ts (см. syncStandaloneAttr). Без него эта ветка на
  *     iPhone не срабатывала НИКОГДА, и корзина оставалась на высоте вьюпорта
@@ -309,7 +323,7 @@ body {
   }
 }
 
-html[data-hub-standalone] #root {
+html[data-mood-standalone] #root {
   height: max(100dvh, var(--app-height, 0px));
   min-height: max(100dvh, var(--app-height, 0px));
 }
@@ -362,6 +376,30 @@ body {
 @utility separator {
   margin-left: 16px;
   border-top: 1px solid var(--separator-soft);
+}
+
+/**
+ * Цвет оценки для ТЕКСТА.
+ *
+ * Чистый токен --grade-N как цвет текста не проходит WCAG AA на светлой теме:
+ * жёлтый даёт 1.5:1, зелёный 2.2:1, красный 3.6:1. Поэтому оттенок смешивается
+ * с основным цветом текста (45% оттенка): на светлом фоне он темнеет, на тёмном
+ * — светлеет. Итог: 5.2–9.0:1 на светлой теме и 7.6–11.6:1 на тёмной.
+ *
+ * Fallback отдельным объявлением НЕ ставим: минификатор сборки переписывает
+ * первое объявление в чистый --tone, то есть ровно в нечитаемый цвет. Браузер
+ * без color-mix() просто отбросит это объявление и унаследует цвет от body
+ * (--text-primary) — тоже AA, только без оттенка.
+ *
+ * Порядок аргументов ВАЖЕН: сборщик сам добавляет перед color-mix() fallback,
+ * беря первый цвет, и им обязан быть читаемый --text-primary. Если поставить
+ * первым оттенок, fallback окажется чистым --grade-N — то есть ровно тем
+ * нечитаемым цветом, от которого мы уходим.
+ *
+ * Оттенок задаётся переменной --tone на карточке.
+ */
+@utility grade-ink {
+  color: color-mix(in srgb, var(--text-primary) 55%, var(--tone));
 }
 
 /**

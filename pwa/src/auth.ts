@@ -7,7 +7,7 @@
  * паролем от личного кабинета БАРС. Сервер проверяет их по-настоящему, а не
  * доверяет на слово, и отдаёт токен на 90 дней.
  *
- * Где лежит токен. localStorage под ключом hub_pwa_token, и НЕ cookie: cookie
+ * Где лежит токен. localStorage под ключом mood_pwa_token, и НЕ cookie: cookie
  * уехала бы на любой запрос домена, включая сторонние счётчики и аналитику, а
  * заголовок X-PWA-Token живёт ровно там, где нужен. Цена решения — токен виден
  * скриптам на этой странице, но страница и так отдаёт ему все данные
@@ -21,12 +21,13 @@
 
 import type { BootstrapProfile } from './types/api';
 import { perfLog } from './lib/perf';
+import { platformHeader } from './lib/platform';
 import { CACHE_KEYS, clearPersistedData, clearPreviewCache, readJson } from './lib/data/tier1';
 import { clearFileCache } from './lib/fileCache';
 import { clearPreviewUrlCache } from './lib/api/files.ts';
 
-const TOKEN_KEY = 'hub_pwa_token';
-const EXPIRES_KEY = 'hub_pwa_token_expires';
+const TOKEN_KEY = 'mood_pwa_token';
+const EXPIRES_KEY = 'mood_pwa_token_expires';
 
 /** Что сервер отдаёт при успешном входе. */
 export interface PwaTokenResponse {
@@ -105,7 +106,7 @@ export function setPwaToken(token: string, expiresAt: number): void {
  * бы не показало»: приложение продолжило бы рендериться с данными, которые
  * сервер больше не отдаёт.
  */
-export const SIGNED_OUT_EVENT = 'hub:signed-out';
+export const SIGNED_OUT_EVENT = 'mood:signed-out';
 
 function announceSignedOut(): void {
   try {
@@ -181,7 +182,7 @@ async function postAuth(
   try {
     response = await fetch(path, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json', ...platformHeader() },
       body: JSON.stringify(payload),
       signal: AbortSignal.timeout(60_000),
     });

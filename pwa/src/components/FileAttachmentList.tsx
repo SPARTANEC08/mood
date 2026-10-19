@@ -1,9 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { File as FileIcon, FileImage, FileText, Paperclip, Trash2, Upload } from 'lucide-react';
 
 import { FileThumbnail } from '@/components/FilePreview';
+import { BottomSheet } from '@/components/ui';
 import { InAppBrowser } from '@/components/InAppBrowser';
 import { api } from '@/lib/api';
+import { openPdf, pdfOpenErrorText, pdfShareUrl } from '@/lib/openPdf';
 import { haptic } from '@/lib/env';
 import { cn } from '@/lib/cn';
 import type { ServerFileRef } from '@/types/api';
@@ -29,7 +31,6 @@ import type { ServerFileRef } from '@/types/api';
  *  после отправки пяти мегабайт. */
 export const MAX_FILES_PER_RECORD = 10;
 export const MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024;
-const PDF_LINK_REFRESH_MS = 4 * 60 * 1000;
 
 function iconFor(file: ServerFileRef) {
   if (file.mimeType.startsWith('image/')) return FileImage;
@@ -83,50 +84,42 @@ export function FileAttachmentList({
 }) {
   /** Индекс открытого файла в этом списке — вьюер листает соседей. */
   const [openIndex, setOpenIndex] = useState<number | null>(null);
-  const [pdfShareLinks, setPdfShareLinks] = useState<Record<string, { path: string; expiresAt: number }>>({});
-  const pdfIdsKey = files
-    .filter((file) => file.mimeType === 'application/pdf')
-    .map((file) => file.fileId)
-    .join('\n');
+  /** Файл, который открываем прямо сейчас: защита от повторного нажатия. */
+  const [pdfBusyId, setPdfBusyId] = useState<string | null>(null);
+  /**
+   * Подсказка, если браузер не открыл PDF сам: показываем прямую ссылку, которую
+   * человек нажмёт руками. Без неё неудачное открытие выглядело как «ничего не
+   * произошло» — именно на это и жаловались.
+   */
+  const [pdfFallback, setPdfFallback] = useState<{
+    file: ServerFileRef;
+    url: string | null;
+    error?: string;
+  } | null>(null);
 
-  // Готовим inline-ссылки заранее. Генерация ссылки внутри тапа оставляла
-  // браузеру только popup через about:blank; Safari/standalone его блокирует и
-  // уходил в share/download-фолбэк вместо прямого PDF-просмотрщика. Короткий
-  // TTL сервера (5 минут) обновляем с запасом, пока список открыт.
-  useEffect(() => {
-    if (!pdfIdsKey) {
-      setPdfShareLinks({});
-      return;
-    }
+  /**
+   * PDF открываем системным просмотрщиком (Safari/Chrome), а не своим canvas:
+   * на iOS так работает штатный интерфейс PDF с «Поделиться», на Android — это
+   * единственный способ, который вообще рисует документ.
+   */
+  const openPdfFile = useCallback(
+    async (file: ServerFileRef) => {
+      if (pdfBusyId) return;
+      setPdfBusyId(file.fileId);
 
-    let alive = true;
-    const refreshLinks = async () => {
-      const ids = pdfIdsKey ? pdfIdsKey.split('\n') : [];
-      const links = await Promise.all(
-        ids.map(async (fileId) => {
-          try {
-            return [fileId, await api.createFileShareLink(fileId)] as const;
-          } catch {
-            return null;
-          }
-        }),
-      );
-
-      if (alive) {
-        setPdfShareLinks(
-          Object.fromEntries(links.filter((entry): entry is NonNullable<typeof entry> => entry !== null)),
-        );
+      try {
+        const outcome = await openPdf(file);
+        if (outcome === 'fallback') {
+          setPdfFallback({ file, url: await pdfShareUrl(file.fileId) });
+        }
+      } catch (err: unknown) {
+        setPdfFallback({ file, url: null, error: pdfOpenErrorText(err) });
+      } finally {
+        setPdfBusyId(null);
       }
-    };
-
-    void refreshLinks();
-    const timer = window.setInterval(() => void refreshLinks(), PDF_LINK_REFRESH_MS);
-
-    return () => {
-      alive = false;
-      window.clearInterval(timer);
-    };
-  }, [pdfIdsKey]);
+    },
+    [pdfBusyId],
+  );
 
   if (files.length === 0) {
     return emptyHint ? (
@@ -174,27 +167,14 @@ export function FileAttachmentList({
                     setOpenIndex(index);
                     return;
                   }
-                  // PDF открывается inline в системном просмотрщике в отдельной
-                  // вкладке: текущая PWA не навигируется и сохраняет состояние.
-                  // Для остальных документов оставляем системную передачу файла.
                   if (file.mimeType === 'application/pdf') {
-                    const share = pdfShareLinks[file.fileId];
-                    if (share && share.expiresAt > Date.now()) {
-                      const viewerLink = document.createElement('a');
-                      viewerLink.href = new URL(share.path, window.location.origin).href;
-                      viewerLink.target = '_blank';
-                      viewerLink.rel = 'noopener noreferrer';
-                      document.body.appendChild(viewerLink);
-                      viewerLink.click();
-                      viewerLink.remove();
-                    } else {
-                      void api.openFileInSystemViewer(file.fileId).catch(() =>
-                        api.downloadFile(file.fileId, file.originalName, file.mimeType),
-                      );
-                    }
-                  } else {
-                    void api.downloadFile(file.fileId, file.originalName, file.mimeType);
+                    // PDF — система: Safari на iOS, Chrome на Android.
+                    void openPdfFile(file);
+                    return;
                   }
+                  // Остальные документы (docx, zip, …) передаём системе: своего
+                  // просмотрщика у них нет.
+                  void api.downloadFile(file.fileId, file.originalName, file.mimeType);
                 }}
                 className="pressable flex min-w-0 flex-1 items-center gap-2.5 text-left active:pressable-active"
               >
@@ -220,6 +200,51 @@ export function FileAttachmentList({
           );
         })}
       </ul>
+
+      <BottomSheet
+        open={Boolean(pdfFallback)}
+        onClose={() => setPdfFallback(null)}
+        title="Документ PDF"
+        footer={
+          pdfFallback?.url ? (
+            <a
+              href={pdfFallback.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={() => {
+                haptic('light');
+                setPdfFallback(null);
+              }}
+              className="pressable block w-full rounded-[14px] py-3 text-center text-[17px] font-semibold text-white active:pressable-active"
+              style={{ background: 'var(--accent)' }}
+            >
+              Открыть в браузере
+            </a>
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                const target = pdfFallback?.file;
+                if (!target) return;
+                haptic('medium');
+                void api.downloadFile(target.fileId, target.originalName, target.mimeType);
+                setPdfFallback(null);
+              }}
+              className="pressable w-full rounded-[14px] py-3 text-[17px] font-semibold text-white active:pressable-active"
+              style={{ background: 'var(--accent)' }}
+            >
+              Скачать файл
+            </button>
+          )
+        }
+      >
+        <p className="text-[14px] leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+          {pdfFallback?.error ??
+            (pdfFallback?.url
+              ? `«${pdfFallback.file.originalName}» откроется в браузере: там документ покажет системный просмотрщик с кнопкой «Поделиться».`
+              : 'Документ можно скачать и открыть в системном просмотрщике.')}
+        </p>
+      </BottomSheet>
 
       {openIndex !== null && openIndex < files.length ? (
         <InAppBrowser

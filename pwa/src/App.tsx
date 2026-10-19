@@ -143,7 +143,7 @@ export default function App() {
     // срабатывает после первого кадра, поэтому исчезновение splash незаметно —
     // он был ровно того же цвета, что и фон приложения. Пустого белого кадра
     // между ними не возникает.
-    document.getElementById('hub-splash')?.remove();
+    document.getElementById('mood-splash')?.remove();
   }, []);
 
   /** Вход состоялся — открываем приложение. */
@@ -339,8 +339,8 @@ function LoginScreen({
   return (
     <div className="mx-auto flex min-h-full w-full max-w-[440px] flex-col justify-center gap-6 px-6 py-10">
       <div className="flex flex-col items-center gap-3 text-center">
-        <img src="/icons/icon-192.png" width={64} height={64} alt="" className="rounded-[16px]" />
-        <h1 className="text-[22px] font-semibold">Hub — расписание МЭИ</h1>
+        <img src="/icons/site-icon-192.png?v=2" width={64} height={64} alt="" className="rounded-[16px]" />
+        <h1 className="text-[22px] font-semibold">Mood — расписание МЭИ</h1>
         <p className="text-[15px] leading-snug text-[var(--text-secondary)]">
           Войдите логином и паролем от личного кабинета НИУ МЭИ.
         </p>
@@ -458,7 +458,7 @@ function LoginScreen({
       ) : null}
 
       <p className="text-center text-[12px] leading-snug text-[var(--text-tertiary)]">
-        Логин и пароль уходят только на сервер Hub и в БАРС МЭИ. Токен хранится
+        Логин и пароль уходят только на сервер Mood и в БАРС МЭИ. Токен хранится
         только в этом браузере и никуда не передаётся.
       </p>
     </div>

@@ -63,32 +63,10 @@ export function longDayName(raw: string): string {
 }
 
 /**
- * Формат даты по Москве — один на весь модуль.
+ * Формат даты по Москве — один на всё приложение.
  *
- * Intl.DateTimeFormat НЕ тривиальный объект: создание разбирает локаль и
- * timezone из ICU, это десятки микросекунд и заметная работа на телефоне.
- * Формат создаётся один раз при загрузке модуля.
+ * Сама реализация переехала в lib/dates.ts (её же использует слой данных для
+ * окна запроса ДЗ): здесь остаётся прежнее имя, чтобы вызывающий код и импорты
+ * не разъезжались.
  */
-const MOSCOW_FORMAT = new Intl.DateTimeFormat('en-GB', {
-  timeZone: 'Europe/Moscow',
-  year: 'numeric',
-  month: '2-digit',
-  day: '2-digit',
-});
-
-/** Сегодня по Москве — та же зона, что и у бота. */
-export function toMoscowRaw(now: Date = new Date()): string {
-  const parts = MOSCOW_FORMAT.formatToParts(now);
-
-  let year = '';
-  let month = '';
-  let day = '';
-
-  for (const p of parts) {
-    if (p.type === 'year') year = p.value;
-    else if (p.type === 'month') month = p.value;
-    else if (p.type === 'day') day = p.value;
-  }
-
-  return `${year}.${month}.${day}`;
-}
+export { todayRawMoscow as toMoscowRaw } from '@/lib/dates';

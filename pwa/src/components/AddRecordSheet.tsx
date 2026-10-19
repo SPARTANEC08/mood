@@ -115,7 +115,7 @@ export function AddRecordSheet({
    */
   const [subjectsLoading, setSubjectsLoading] = useState(false);
   const [subjectsError, setSubjectsError] = useState<string | null>(null);
-  /** Номер попытки: увеличение перезапускает загрузку по кнопке «Обновить». */
+  /** Номер попытки: увеличение перезапускает загрузку по кнопке «Повторить». */
   const [subjectsAttempt, setSubjectsAttempt] = useState(0);
 
   /**
@@ -460,7 +460,7 @@ export function AddRecordSheet({
             {mode === 'create' && subjectsError ? (
               <div className="mt-1.5 flex items-start gap-2">
                 <p className="flex-1 text-[12px] leading-snug text-[var(--danger)]">
-                  {subjectsError} Потяните список вниз или нажмите «Обновить».
+                  {subjectsError} Нажмите «Повторить», чтобы запросить список ещё раз.
                 </p>
                 <button
                   type="button"
@@ -468,7 +468,7 @@ export function AddRecordSheet({
                   className="pressable shrink-0 rounded-full px-2.5 py-1 text-[12px] font-medium active:pressable-active"
                   style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}
                 >
-                  Обновить
+                  Повторить
                 </button>
               </div>
             ) : null}
@@ -485,7 +485,7 @@ export function AddRecordSheet({
                   className="pressable shrink-0 rounded-full px-2.5 py-1 text-[12px] font-medium active:pressable-active"
                   style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}
                 >
-                  Обновить
+                  Повторить
                 </button>
               </div>
             ) : null}

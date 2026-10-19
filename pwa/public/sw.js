@@ -1,7 +1,7 @@
 /* eslint-env serviceworker */
 
 /**
- * Service Worker веб-версии Hub.
+ * Service Worker веб-версии Mood.
  *
  * ЗАДАЧА САМОГО SW: сделать приложение полезным без сети, не превратив его в
  * источник чужих данных. Отсюда все решения ниже.
@@ -43,8 +43,8 @@
  */
 
 const VERSION = '__SW_VERSION__';
-const SHELL_CACHE = `hub-shell-${VERSION}`;
-const DATA_CACHE = `hub-data-${VERSION}`;
+const SHELL_CACHE = `mood-shell-${VERSION}`;
+const DATA_CACHE = `mood-data-${VERSION}`;
 
 /** Сколько последних ответов /api/schedule держим. */
 const SCHEDULE_CACHE_LIMIT = 3;
@@ -65,9 +65,11 @@ const PRECACHE_URLS = [
   '/',
   '/offline.html',
   '/manifest.webmanifest',
-  '/icons/icon-192.png',
-  '/icons/icon-512.png',
-  '/icons/apple-touch-icon.png',
+  '/icons/icon-192.png?v=2',
+  '/icons/icon-512.png?v=2',
+  '/icons/icon-maskable-512.png?v=2',
+  '/icons/apple-touch-icon.png?v=2',
+  '/icons/site-icon-192.png?v=2',
 ];
 
 /** Манифест Vite: машинное описание того, что лежит в dist. */
@@ -227,7 +229,7 @@ self.addEventListener('activate', (event) => {
         names
           // Чужие кэши (например, от другой версии эксперимента) не трогаем:
           // префиксы жёсткие, всё остальное не наше.
-          .filter((name) => name.startsWith('hub-') && name !== SHELL_CACHE && name !== DATA_CACHE)
+          .filter((name) => name.startsWith('mood-') && name !== SHELL_CACHE && name !== DATA_CACHE)
           .map((name) => caches.delete(name)),
       );
 

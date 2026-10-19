@@ -39,7 +39,7 @@ const DEV_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]', '::1', '']);
 const DEV_HOST_SUFFIXES = ['.trycloudflare.com', '.ngrok-free.app', '.ngrok.app', '.ngrok.io', '.local'];
 
 /** Не показывать инструкцию после отказа в Safari при каждом новом открытии. */
-const INSTALL_DISMISSED_KEY = 'hub_install_dismissed_at';
+const INSTALL_DISMISSED_KEY = 'mood_install_dismissed_at';
 const INSTALL_DISMISS_COOLDOWN_MS = 30 * 24 * 60 * 60 * 1000;
 
 function hasRecentInstallDismissal(): boolean {
@@ -170,7 +170,7 @@ interface Steps {
 function stepsFor(platform: Platform): Steps {
   if (platform === 'android') {
     return {
-      title: 'Установите Hub на телефон',
+      title: 'Установите Mood на телефон',
       intro:
         'Отдельное приложение открывается без адресной строки, запускается быстрее и не закрывается при сворачивании.',
       items: [
@@ -182,7 +182,7 @@ function stepsFor(platform: Platform): Steps {
   }
 
   return {
-    title: 'Поставьте Hub на домашний экран',
+    title: 'Поставьте Mood на домашний экран',
     intro:
       'Отдельное приложение открывается без адресной строки, запускается быстрее и переживает сворачивание: iOS не выгружает его при уходе в фон.',
     items: [
@@ -233,10 +233,10 @@ export function InstallPrompt({ onSkip }: { onSkip: () => void }) {
   function install() {
     haptic('medium');
 
-    const promptEvent = window.__hubInstallPrompt;
+    const promptEvent = window.__moodInstallPrompt;
 
     if (promptEvent) {
-      window.__hubInstallPrompt = null;
+      window.__moodInstallPrompt = null;
       void promptEvent.prompt().then(
         () => dismiss(),
         () => dismiss(),
@@ -248,7 +248,7 @@ export function InstallPrompt({ onSkip }: { onSkip: () => void }) {
     // действие «На экран Домой». Отдельного API установки у Safari нет.
     const share = (navigator as Navigator & { share?: (data: ShareData) => Promise<void> }).share;
     if (typeof share === 'function') {
-      share({ title: 'Hub — расписание МЭИ', url: window.location.href }).catch(() => undefined);
+      share({ title: 'Mood — расписание МЭИ', url: window.location.href }).catch(() => undefined);
     }
 
     dismiss();
@@ -314,5 +314,5 @@ export function InstallPrompt({ onSkip }: { onSkip: () => void }) {
  */
 export function rememberInstallPrompt(event: Event): void {
   event.preventDefault();
-  window.__hubInstallPrompt = event as BeforeInstallPromptEvent;
+  window.__moodInstallPrompt = event as BeforeInstallPromptEvent;
 }

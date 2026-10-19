@@ -3,7 +3,8 @@ import { createRoot } from 'react-dom/client';
 
 import App from './App';
 import { rememberInstallPrompt } from './components/InstallPrompt';
-import { initTelegramApp, syncColorScheme } from '@/lib/env';
+import { initTelegramApp } from '@/lib/env';
+import { initTheme } from '@/lib/theme';
 import { bindViewportHeight } from '@/lib/viewport';
 import { registerServiceWorker } from './sw-register';
 import './styles.css';
@@ -18,7 +19,12 @@ import './styles.css';
 
 // Шим вместо Telegram.ready()/expand(): готовит документ и тему по системной.
 initTelegramApp();
-syncColorScheme();
+
+// Тема из выбора пользователя (тёмная по умолчанию). Идёт после
+// initTelegramApp(), чтобы перекрыть color-scheme, выставленный там по системе.
+// Ранний theme-init.js уже выставил data-theme до первого кадра — здесь только
+// согласование с рантаймом.
+initTheme();
 
 // Событие установки ловится ДО рендера: браузер присылает его раньше, чем
 // отрисуется первый экран, и поймать его позже уже нельзя. На iOS события нет

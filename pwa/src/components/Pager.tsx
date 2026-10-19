@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 
 import { haptic } from '@/lib/env';
 
@@ -45,6 +45,32 @@ const DEFAULT_THRESHOLD_RATIO = 0.18;
 const DEFAULT_THRESHOLD_PX = 56;
 
 /**
+ * Порог выбора оси жеста по горизонтали. Пока палец не ушёл вбок дальше этого
+ * расстояния, лента не двигается: иначе случайное дрожание при вертикальной
+ * прокрутке тянуло бы страницу вбок.
+ */
+const AXIS_SLOP_PX = 10;
+
+/**
+ * На сколько горизонталь должна превышать вертикаль, чтобы жест считался
+ * свайпом. Небольшой зазор обязателен на Android: палец при обычной прокрутке
+ * почти всегда уходит вбок на пару пикселей, и без него жест «свайп» срабатывал
+ * бы при вертикальном скролле.
+ */
+const AXIS_DOMINANCE_PX = 2;
+
+/**
+ * Элементы, с которых горизонтальный жест не начинается.
+ *
+ * Только ссылки и поля ввода: у них собственное поведение, которое нельзя
+ * перебивать. Кнопки в списке сюда НЕ входят и это осознанно — дни недели,
+ * клетки полосы дат и карточки пар сами являются кнопками, и их запрет убил бы
+ * листание целиком. Тап по кнопке при этом не страдает: переключение происходит
+ * лишь после сдвига больше AXIS_SLOP_PX, а короткое нажатие уходит в click.
+ */
+const NO_DRAG_SELECTOR = 'a[href], input, textarea, select, [data-no-swipe]';
+
+/**
  * Ease защёлкивания.
  *
  * Один и тот же для дней и недель: страницы одинаковые, и разный ease читался
@@ -84,6 +110,8 @@ export interface SwipePagerProps {
   className?: string;
   /** Классы прокручиваемой области страницы. */
   pageClassName?: string;
+  /** Ссылка на DOM-узел страницы — нужна, чтобы прокрутить конкретный день. */
+  pageRef?: (index: number, node: HTMLDivElement | null) => void;
   /** Содержимое страницы по индексу. Вызывается для всех смонтированных. */
   children: (index: number) => ReactNode;
 }
@@ -98,6 +126,7 @@ export function SwipePager({
   thresholdPx = DEFAULT_THRESHOLD_PX,
   className,
   pageClassName,
+  pageRef,
   children,
 }: SwipePagerProps) {
   const [dragging, setDraggingState] = useState(false);
@@ -114,10 +143,19 @@ export function SwipePager({
   const offsetRef = useRef(0);
   const draggingRef = useRef(false);
   const startXRef = useRef(0);
+  const startYRef = useRef(0);
   const movedRef = useRef(0);
   const widthRef = useRef(0);
+  /**
+   * Ось жеста. Пока 'unknown', страница не двигается: на Android вертикальный
+   * скролл и горизонтальный свайп приходят одними и теми же pointermove, и без
+   * блокировки по оси карточки дёргались вбок при каждой прокрутке.
+   */
+  const axisRef = useRef<'unknown' | 'x'>('unknown');
   /** DOM-узел трека: transform пишется напрямую, минуя ререндер. */
   const trackRef = useRef<HTMLDivElement | null>(null);
+  /** Корень пейджера: на него вешается непассивный touchmove (см. эффект ниже). */
+  const rootRef = useRef<HTMLDivElement | null>(null);
   /** Запланированный кадр записи transform — батчит частые pointermove. */
   const rafRef = useRef<number | null>(null);
 
@@ -170,42 +208,114 @@ export function SwipePager({
     }
   }, []);
 
+  /**
+   * Пока жест горизонтальный, вертикальная прокрутка страницы должна быть
+   * выключена — иначе Android одновременно и тянет ленту вбок, и скроллит
+   * список под ней (та самая «лента едет и прокручивается»).
+   *
+   * Именно НАТИВНЫЙ слушатель с passive: false: React вешает touchmove
+   * пассивным, и preventDefault из него не работает. preventDefault вызывается
+   * только когда ось уже наша — вертикальные жесты не задеваются, `touch-action`
+   * остаётся pan-y.
+   */
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!el) return;
+
+    const onTouchMove = (event: TouchEvent): void => {
+      if (!draggingRef.current || axisRef.current !== 'x') return;
+      if (event.cancelable) event.preventDefault();
+    };
+
+    el.addEventListener('touchmove', onTouchMove, { passive: false });
+    return () => el.removeEventListener('touchmove', onTouchMove);
+  }, []);
+
+  /** Снимает захват указателя и завершает жест, не трогая индекс. */
+  function releaseDrag(el: HTMLDivElement, pointerId: number): void {
+    cancelRaf();
+    draggingRef.current = false;
+    if (el.hasPointerCapture(pointerId)) el.releasePointerCapture(pointerId);
+    setDraggingState(false);
+  }
+
   function onPointerDown(event: React.PointerEvent<HTMLDivElement>): void {
     // Жест не начинается, если страница всего одна: тянуть некуда, а эластичность
     // без цели движения читается как «прилипание».
     if (count <= 1 || (index === 0 && !canPrev) || (index === count - 1 && !canNext)) return;
     if (event.pointerType === 'mouse' && event.button !== 0) return;
 
+    // Ссылка или поле ввода: у них своё поведение, жест не перехватываем.
+    if (event.target instanceof Element && event.target.closest(NO_DRAG_SELECTOR)) return;
+
     startXRef.current = event.clientX;
+    startYRef.current = event.clientY;
     movedRef.current = 0;
+    axisRef.current = 'unknown';
     widthRef.current = event.currentTarget.getBoundingClientRect().width;
     offsetRef.current = 0;
     cancelRaf();
 
+    // Указатель пока НЕ захватываем и трек не трогаем. Это принципиально для
+    // Android: setPointerCapture на pointerdown переназначает click контейнеру,
+    // и тап по вложенной кнопке (день, карточка, «ДЗ», файл) до неё не доходит.
+    // Захват берём позже — когда жест подтверждён как горизонтальный.
     draggingRef.current = true;
-    // Переход выключается сразу: до первого pointermove трек должен стоять ровно
-    // на текущей странице, без анимации из прошлого положения.
-    writeTransform(0, false);
-    setDraggingState(true);
-
-    // Захват указателя на самом контейнере, а не на event.target: под пальцем
-    // может оказаться карточка пары, и без захвата жест рассыпался бы на
-    // обработчики разных элементов при выходе за их границы.
-    event.currentTarget.setPointerCapture(event.pointerId);
   }
 
   function onPointerMove(event: React.PointerEvent<HTMLDivElement>): void {
     if (!draggingRef.current) return;
 
     const diff = event.clientX - startXRef.current;
+    const diffY = event.clientY - startYRef.current;
+
+    /*
+     * Ось ещё не выбрана. Горизонталью считаем только ЯВНО доминирующий жест:
+     *
+     * - пока палец не ушёл далеко, решать нечего;
+     * - если вертикаль преобладает, мы НЕ фиксируем ось 'y', а остаёмся в
+     *   'unknown'. Раньше фиксация 'y' на первом же сдвиге убивала свайп: на
+     *   Android горизонтальное движение почти всегда начинается с чуть большего
+     *   вертикального, и жест «не срабатывал». Теперь вертикальный жест просто
+     *   остаётся браузеру: начнётся прокрутка — придёт pointercancel, и мы
+     *   корректно сбросимся.
+     */
+    if (axisRef.current === 'unknown') {
+      const dx = Math.abs(diff);
+      const dy = Math.abs(diffY);
+
+      if (dx < AXIS_SLOP_PX && dy < AXIS_SLOP_PX) return;
+      if (dx < AXIS_SLOP_PX || dx <= dy + AXIS_DOMINANCE_PX) return;
+
+      // Ось подтверждена — только теперь захватываем указатель и включаем
+      // анимацию. Под пальцем жест не развалится при выходе за границы.
+      axisRef.current = 'x';
+      if (!event.currentTarget.hasPointerCapture(event.pointerId)) {
+        try {
+          event.currentTarget.setPointerCapture(event.pointerId);
+        } catch {
+          // Указатель уже отпущен или перехвачен системой — не критично:
+          // просто продолжим без захвата.
+        }
+      }
+      writeTransform(0, false);
+      setDraggingState(true);
+    }
+
+    if (axisRef.current !== 'x') return;
+
     movedRef.current = diff;
 
     const atStart = indexRef.current === 0 || !canPrev;
     const atEnd = indexRef.current === count - 1 || !canNext;
 
-    // На краях доступного диапазона лента идёт за пальцем вчетверо медленнее.
+    // В середине ленты сдвиг ограничен одной страницей: тянуть дальше некуда и
+    // незачем. На краях доступного диапазона — вчетверо медленнее за пальцем.
+    const clamped = Math.max(-widthRef.current, Math.min(widthRef.current, diff));
     offsetRef.current =
-      (atStart && diff > 0) || (atEnd && diff < 0) ? diff * EDGE_RESISTANCE : diff;
+      (atStart && clamped > 0) || (atEnd && clamped < 0)
+        ? clamped * EDGE_RESISTANCE
+        : clamped;
 
     // Запись в DOM батчится по кадру: pointermove приходит чаще, чем рисуется
     // кадр, и без rAF мы бы писали transform вхолостую.
@@ -220,14 +330,19 @@ export function SwipePager({
   function onPointerUp(event: React.PointerEvent<HTMLDivElement>): void {
     if (!draggingRef.current) return;
 
-    cancelRaf();
-    draggingRef.current = false;
+    const axis = axisRef.current;
+    const diff = movedRef.current;
+    releaseDrag(event.currentTarget, event.pointerId);
+    movedRef.current = 0;
+    axisRef.current = 'unknown';
 
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId);
+    // Тап: ось так и не выбрана. Ничего не двигаем и не защёлкиваем — клик
+    // должен спокойно дойти до кнопки под пальцем.
+    if (axis !== 'x') {
+      offsetRef.current = 0;
+      return;
     }
 
-    const diff = movedRef.current;
     const width = widthRef.current || 1;
     const threshold = Math.max(thresholdPx, width * thresholdRatio);
     const current = indexRef.current;
@@ -240,7 +355,6 @@ export function SwipePager({
     }
 
     offsetRef.current = 0;
-    setDraggingState(false);
 
     if (target !== current) {
       haptic('light');
@@ -253,15 +367,33 @@ export function SwipePager({
     }
   }
 
+  /**
+   * Жест отменён системой (Android/WKWebView отдали движение браузеру или
+   * запустили нативный скролл). Возвращаем трек на место и НЕ защёлкиваем:
+   * раньше здесь вызывался onPointerUp, и отмена доезжала до середины страницы.
+   */
+  function onPointerCancel(event: React.PointerEvent<HTMLDivElement>): void {
+    if (!draggingRef.current) return;
+
+    releaseDrag(event.currentTarget, event.pointerId);
+    offsetRef.current = 0;
+    movedRef.current = 0;
+    axisRef.current = 'unknown';
+    writeTransform(0, true);
+  }
+
   if (count <= 0) return null;
 
   return (
     <div
+      ref={rootRef}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
-      onPointerCancel={onPointerUp}
-      className={`touch-pan-y select-none overflow-hidden ${className ?? ''}`}
+      onPointerCancel={onPointerCancel}
+      // overscroll-x-contain не даёт горизонтальному жесту на краю уходить в
+      // историю браузера/жест «назад» на Android.
+      className={`touch-pan-y overscroll-x-contain select-none overflow-hidden ${className ?? ''}`}
       style={{ cursor: dragging ? 'grabbing' : 'grab' }}
     >
       <div
@@ -274,7 +406,11 @@ export function SwipePager({
         style={{ willChange: dragging ? 'transform' : 'auto' }}
       >
         {Array.from({ length: count }, (_, pageIndex) => (
-          <div key={pageIndex} className={`h-full w-full shrink-0 ${pageClassName ?? ''}`}>
+          <div
+            key={pageIndex}
+            ref={pageRef ? (node) => pageRef(pageIndex, node) : undefined}
+            className={`h-full w-full shrink-0 ${pageClassName ?? ''}`}
+          >
             {children(pageIndex)}
           </div>
         ))}

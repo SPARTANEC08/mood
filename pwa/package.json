@@ -1,9 +1,9 @@
 {
-  "name": "hub-pwa",
+  "name": "mood-pwa",
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "description": "Приложение Hub для браузера: ставится на домашний экран и работает как PWA",
+  "description": "Приложение Mood для браузера: ставится на домашний экран и работает как PWA",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build && node scripts/inject-sw-version.mjs",

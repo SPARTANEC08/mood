@@ -65,6 +65,8 @@ const DOUBLE_TAP_MS = 300;
 
 function modeFor(file: ServerFileRef): Mode {
   if (IMAGE_MIME.test(file.mimeType)) return 'image';
+  // PDF рисуем сами: системный просмотрщик на iOS блокирует возврат в приложение,
+  // а на Android файл просто скачивается.
   return 'fallback';
 }
 
@@ -573,7 +575,7 @@ export function InAppBrowser({ files, initialIndex, onClose }: Props) {
   if (!file) return null;
 
   return createPortal(
-    <div ref={rootRef} data-hub-file-viewer className="fixed inset-0 z-[70]" role="dialog" aria-modal="true" aria-label={`Просмотр ${file.originalName}`}>
+    <div ref={rootRef} data-mood-file-viewer className="fixed inset-0 z-[70]" role="dialog" aria-modal="true" aria-label={`Просмотр ${file.originalName}`}>
       {/* Подложка. Отдельным слоем: при свайпе вниз именно она проявляется. */}
       <motion.div
         ref={backdropRef}
@@ -747,33 +749,38 @@ export function InAppBrowser({ files, initialIndex, onClose }: Props) {
             ) : null}
           </div>
 
-          {/* Нижняя панель: точки-соседи, safe-area. */}
+          {/* Нижняя панель: для PDF — номер страницы и «Поделиться», для списка
+              файлов — точки-соседи. safe-area учтена в обоих вариантах. */}
           {fileCount > 1 ? (
             <div
-              className="flex items-center justify-center gap-2 border-t py-2"
+              className="border-t"
               style={{
                 borderColor: 'var(--separator-soft)',
                 background: 'var(--surface-blur)',
                 paddingBottom: 'calc(8px + env(safe-area-inset-bottom))',
               }}
             >
-              {dots.map((id, i) => (
-                <button
-                  key={id}
-                  type="button"
-                  aria-label={`Файл ${i + 1} из ${fileCount}`}
-                  aria-current={i === index}
-                  onClick={() => {
-                    haptic('light');
-                    setIndex(i);
-                  }}
-                  className="pressable h-2 w-2 rounded-full active:pressable-active"
-                  style={{
-                    background: i === index ? 'var(--accent)' : 'var(--separator)',
-                    transform: i === index ? 'scale(1.15)' : 'none',
-                  }}
-                />
-              ))}
+              {fileCount > 1 ? (
+                <div className="flex items-center justify-center gap-2 py-2">
+                  {dots.map((id, i) => (
+                    <button
+                      key={id}
+                      type="button"
+                      aria-label={`Файл ${i + 1} из ${fileCount}`}
+                      aria-current={i === index}
+                      onClick={() => {
+                        haptic('light');
+                        setIndex(i);
+                      }}
+                      className="pressable h-2 w-2 rounded-full active:pressable-active"
+                      style={{
+                        background: i === index ? 'var(--accent)' : 'var(--separator)',
+                        transform: i === index ? 'scale(1.15)' : 'none',
+                      }}
+                    />
+                  ))}
+                </div>
+              ) : null}
             </div>
           ) : null}
         </div>

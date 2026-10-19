@@ -11,33 +11,48 @@
       щипком: приложение ведёт себя как нативное, случайный зум не «разъезжает»
       вёрстку. Просмотр файлов — исключение: там свой зум (жестами для картинки
       и кнопками для PDF), и блокировка на него не распространяется (см.
-      lib/env.ts и data-hub-file-viewer во вьюере).
+      lib/env.ts и data-mood-file-viewer во вьюере).
     -->
     <meta
       name="viewport"
       content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
     />
-    <meta name="description" content="Hub — расписание, задания, оценки и почта НИУ МЭИ" />
+    <meta name="description" content="Mood — расписание, задания, оценки и почта НИУ МЭИ" />
 
-    <!-- PWA-манифест: имя, иконки, standalone-режим -->
-    <link rel="manifest" href="/manifest.webmanifest" />
+    <!-- PWA-манифест: имя, иконки, standalone-режим. ?v — версия набора иконок:
+         при смене иконок увеличить, чтобы браузер перечитал манифест и обновил
+         иконки, не дожидаясь истечения месячного кэша. -->
+    <link rel="manifest" href="/manifest.webmanifest?v=2" />
 
     <!--
       iOS не читает манифест для иконки на экране «домой» и запуска с иконки —
       он берёт только эти мета-теги. Без них «На экран Домой» добавит белую
       иконку-заглушку, а приложение откроется с адресной строкой.
     -->
-    <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png?v=2" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="Hub" />
+    <meta name="apple-mobile-web-app-title" content="Mood" />
 
-    <meta name="theme-color" content="#F2F2F7" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)" />
-    <!-- color-scheme до CSS и JS: системные контролы и фон совпадают с темой
-         с самого первого кадра, без вспышки светлого. -->
+    <!--
+      Цвет статус-бара/адресной строки. Начальное значение — фон тёмной темы
+      (она по умолчанию); theme-init.js ниже сразу поправит его, если выбрана
+      светлая.
+    -->
+    <meta name="theme-color" content="#15131e" />
+    <!-- color-scheme до CSS и JS: системные контролы совпадают с темой с самого
+         первого кадра, без вспышки светлого. -->
     <meta name="color-scheme" content="light dark" />
+
+    <!--
+      Тема до первого кадра. Скрипт синхронный, стоит в <head> раньше стилей и
+      бандла, поэтому data-theme уже выставлен к первой отрисовке — вспышки
+      темы нет. Это отдельный файл, а не инлайн-скрипт: CSP продакшена разрешает
+      только `script-src 'self'` и инлайн заблокировал бы. См. public/theme-init.js
+      и src/lib/theme.ts.
+    -->
+    <script src="/theme-init.js"></script>
 
     <!--
       Критический фон и стартовый splash прямо в документе.
@@ -55,67 +70,115 @@
       html,
       body {
         margin: 0;
-        background: #f2f2f7;
+        background: #f4f2fb;
         color-scheme: light dark;
       }
-      @media (prefers-color-scheme: dark) {
-        html,
-        body {
-          background: #000;
-        }
-      }
-      #hub-splash {
+      #mood-splash {
         position: fixed;
         inset: 0;
         z-index: 1;
         display: flex;
         align-items: center;
         justify-content: center;
-        background: #f2f2f7;
+        background: #f4f2fb;
       }
-      @media (prefers-color-scheme: dark) {
-        #hub-splash {
-          background: #000;
-        }
-      }
-      #hub-splash::after {
+      #mood-splash::after {
         content: '';
         width: 26px;
         height: 26px;
         border-radius: 9999px;
-        border: 3px solid rgba(109, 74, 255, 0.25);
-        border-top-color: #6d4aff;
-        animation: hub-splash-spin 0.9s linear infinite;
+        border: 3px solid rgba(124, 77, 255, 0.25);
+        border-top-color: #7c4dff;
+        animation: mood-splash-spin 0.9s linear infinite;
       }
-      @media (prefers-color-scheme: dark) {
-        #hub-splash::after {
-          border-color: rgba(139, 92, 255, 0.25);
-          border-top-color: #8b5cff;
-        }
+      /* Тёмная тема: фон и индикатор повторяют токены --app-bg и --accent.
+         Переключается атрибутом, который ставит theme-init.js до первого
+         кадра, поэтому правило без media-запроса. */
+      html[data-theme='dark'],
+      html[data-theme='dark'] body,
+      html[data-theme='dark'] #mood-splash {
+        background: #15131e;
       }
-      @keyframes hub-splash-spin {
+      html[data-theme='dark'] #mood-splash::after {
+        border-color: rgba(157, 69, 254, 0.25);
+        border-top-color: #9d45fe;
+      }
+      @keyframes mood-splash-spin {
         to {
           transform: rotate(360deg);
         }
       }
       @media (prefers-reduced-motion: reduce) {
-        #hub-splash::after {
+        #mood-splash::after {
           animation: none;
         }
       }
     </style>
 
-    <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />
-    <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icons/site-icon-192.png?v=2" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png?v=2" />
     <!-- ICO последним: браузер берёт первую подходящую иконку, поэтому он
          нужен только там, где PNG не принимают. -->
-    <link rel="icon" href="/icons/favicon.ico" sizes="32x32" />
+    <link rel="icon" href="/icons/favicon.ico?v=2" sizes="32x32" />
 
-    <title>Hub — расписание МЭИ</title>
+    <title>Mood — расписание МЭИ</title>
   </head>
   <body>
-    <div id="hub-splash" aria-hidden="true"></div>
+    <div id="mood-splash" aria-hidden="true"></div>
     <div id="root"></div>
+    <!--
+      Аварийное самовосстановление.
+
+      Если через 6 секунд React так и не смонтировался (#root пуст), значит
+      клиент застрял на битом кэше Service Worker: старый index.html ссылается
+      на уже удалённые чанки, а обновление воркера заблокировано троттлингом
+      браузера. Тогда один раз за сессию чистим Cache Storage, снимаем
+      регистрацию SW и перезагружаемся — приложение поднимется по сети.
+      Повторно не срабатывает (sessionStorage), чтобы не было цикла перезагрузок.
+    -->
+    <script>
+      (function () {
+        try {
+          var RECOVERY_KEY = 'mood_boot_recovery';
+          var timer = setTimeout(function () {
+            var root = document.getElementById('root');
+            if (root && root.childElementCount > 0) return;
+            if (sessionStorage.getItem(RECOVERY_KEY) === '1') return;
+            sessionStorage.setItem(RECOVERY_KEY, '1');
+
+            var tasks = [];
+            if (window.caches && caches.keys) {
+              tasks.push(
+                caches.keys().then(function (names) {
+                  return Promise.all(names.map(function (name) { return caches.delete(name); }));
+                })
+              );
+            }
+            if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations) {
+              tasks.push(
+                navigator.serviceWorker.getRegistrations().then(function (regs) {
+                  return Promise.all(regs.map(function (reg) { return reg.unregister(); }));
+                })
+              );
+            }
+            Promise.all(tasks)
+              .catch(function () {})
+              .then(function () { location.reload(); });
+          }, 6000);
+
+          var observer = new MutationObserver(function () {
+            var root = document.getElementById('root');
+            if (root && root.childElementCount > 0) {
+              clearTimeout(timer);
+              observer.disconnect();
+            }
+          });
+          observer.observe(document.documentElement, { childList: true, subtree: true });
+        } catch (e) {
+          /* без восстановления приложение всё равно попробует загрузиться */
+        }
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

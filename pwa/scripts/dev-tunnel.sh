@@ -27,7 +27,7 @@ API_PORT=3000
 # Telegram ID тестового пользователя: он уже есть в базе, и через него бот
 # отдаёт приветственный экран без входа в БАРС. В PWA это ни на что не влияет —
 # вход в приложение логином и паролем БАРС, а не через Telegram.
-MOCK_ID="${MOCK_TELEGRAM_USER_ID:-757471228}"
+MOCK_ID="${MOCK_TELEGRAM_USER_ID:-100000001}"
 
 command -v cloudflared >/dev/null 2>&1 || {
   echo "Не найден cloudflared. Установите:"
@@ -62,7 +62,7 @@ PIDS=()
 echo "▸ Убираю возможные остатки прошлого запуска..."
 pkill -f "cloudflared tunnel --url http://localhost:$VITE_PORT" 2>/dev/null || true
 pkill -f "vite --port $VITE_PORT" 2>/dev/null || true
-pkill -f "tsx bot.ts" 2>/dev/null || true
+pkill -f "tsx tg/bot.ts" 2>/dev/null || true
 sleep 1
 
 # Временный файл для лога процесса.
@@ -84,7 +84,7 @@ cleanup() {
   done
   pkill -f "cloudflared tunnel --url http://localhost:$VITE_PORT" 2>/dev/null || true
   pkill -f "vite --port $VITE_PORT" 2>/dev/null || true
-  pkill -f "tsx bot.ts" 2>/dev/null || true
+  pkill -f "tsx tg/bot.ts" 2>/dev/null || true
   echo "Готово."
 }
 trap cleanup EXIT INT TERM
@@ -92,7 +92,7 @@ trap cleanup EXIT INT TERM
 cd "$ROOT"
 
 # ── 1. Фронтенд ────────────────────────────────────────────────────────────
-VITE_LOG=$(make_log hub-pwa-vite)
+VITE_LOG=$(make_log mood-pwa-vite)
 echo "▸ Запускаю vite (pwa/) на порту $VITE_PORT, лог: $VITE_LOG"
 (
   cd pwa
@@ -120,7 +120,7 @@ if [ "$READY" -ne 1 ]; then
 fi
 
 # ── 2. Туннель ─────────────────────────────────────────────────────────────
-TUNNEL_LOG=$(make_log hub-pwa-tunnel)
+TUNNEL_LOG=$(make_log mood-pwa-tunnel)
 echo "▸ Поднимаю туннель..."
 cloudflared tunnel --url "http://localhost:$VITE_PORT" --no-autoupdate > "$TUNNEL_LOG" 2>&1 &
 PIDS+=($!)
@@ -146,7 +146,7 @@ API_PORT="$API_PORT" \
 API_HOST=127.0.0.1 \
 MOCK_TELEGRAM_USER_ID="$MOCK_ID" \
 PWA_URL="$TUNNEL_URL" \
-  npx tsx bot.ts > "$(make_log hub-pwa-bot)" 2>&1 &
+  npx tsx tg/bot.ts > "$(make_log mood-pwa-bot)" 2>&1 &
 PIDS+=($!)
 
 # Ждём живости API: пока бот поднимает БАРС и IMAP, /health может не отвечать

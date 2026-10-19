@@ -1,0 +1,8 @@
+# В git хранится ТОЛЬКО источник правды — twa-manifest.json (см. README, «APK (TWA)»).
+# Остальное — генерируемый Bubblewrap-ом Gradle-проект: он содержит абсолютные
+# пути, скачанный gradle-wrapper.jar и локальные конфиги, поэтому в репозиторий
+# не кладётся. Воспроизводится командой `npm run apk:build`.
+*
+!.gitignore
+!twa-manifest.json
+!README.md

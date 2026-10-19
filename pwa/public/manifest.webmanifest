@@ -1,31 +1,55 @@
 {
-  "name": "Hub — расписание МЭИ",
-  "short_name": "Hub",
+  "name": "Mood — расписание МЭИ",
+  "short_name": "Mood",
   "description": "Расписание, задания, оценки и почта МЭИ",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#000000",
-  "theme_color": "#0a84ff",
+  "background_color": "#15131e",
+  "theme_color": "#15131e",
   "lang": "ru",
   "dir": "ltr",
   "categories": ["education", "productivity"],
   "icons": [
     {
-      "src": "/icons/icon-192.png",
+      "src": "/icons/icon-48.png?v=2",
+      "sizes": "48x48",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-72.png?v=2",
+      "sizes": "72x72",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-96.png?v=2",
+      "sizes": "96x96",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-144.png?v=2",
+      "sizes": "144x144",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-192.png?v=2",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/icons/icon-512.png",
+      "src": "/icons/icon-512.png?v=2",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/icons/icon-maskable-512.png",
+      "src": "/icons/icon-maskable-512.png?v=2",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
@@ -35,7 +59,7 @@
     {
       "name": "Расписание",
       "url": "/",
-      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+      "icons": [{ "src": "/icons/icon-192.png?v=2", "sizes": "192x192" }]
     }
   ]
 }

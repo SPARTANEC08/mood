@@ -1,4 +1,4 @@
-import { useLayoutEffect, useMemo, useRef, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, type ReactNode } from 'react';
 
 import { animate, motion, useMotionValue } from 'framer-motion';
 
@@ -314,7 +314,7 @@ function DateCell({
         color: !inRange
           ? 'var(--text-tertiary)'
           : selected
-            ? '#fff'
+            ? 'var(--accent-text)'
             : isDayOff
               ? 'var(--text-tertiary)'
               : 'var(--text-primary)',
@@ -328,7 +328,10 @@ function DateCell({
           </span>
           <span
             className="mt-0.5 text-[10px] leading-none"
-            style={{ color: selected ? 'rgba(255,255,255,0.75)' : 'var(--text-tertiary)' }}
+            style={{
+              color: selected ? 'var(--accent-text)' : 'var(--text-tertiary)',
+              opacity: selected ? 0.75 : 1,
+            }}
           >
             {MONTHS[date.getUTCMonth()]}
           </span>
@@ -352,6 +355,20 @@ export interface DayPagerProps {
   onIndexChange: (index: number) => void;
   className?: string;
   pageClassName?: string;
+  /**
+   * Растёт, когда экран сам просит показать выбранный день (кнопка «К сегодня»).
+   * По этому сигналу активная страница прокручивается к началу — смена дня
+   * свайпом по-прежнему сохраняет позицию скролла, как в списках писем.
+   */
+  revealSignal?: number;
+  /**
+   * Уведомляет о DOM-узле активной страницы.
+   *
+   * Нужен pull-to-refresh: прокручивается не экран, а страница дня, и жесту
+   * требуется именно её scrollTop. Уведомление приходит не на каждой
+   * перерисовке, а только когда страница действительно сменилась (index/count).
+   */
+  onActiveNode?: (node: HTMLDivElement | null) => void;
   /** Содержимое дня. Вызывается для всех дней недели. */
   children: (day: ApiScheduleDay) => ReactNode;
 }
@@ -373,8 +390,45 @@ export function DayPager({
   onIndexChange,
   className,
   pageClassName,
+  revealSignal,
+  onActiveNode,
   children,
 }: DayPagerProps) {
+  /** Узлы страниц по индексу: нужны, чтобы прокрутить активный день к началу. */
+  const pageNodes = useRef<(HTMLDivElement | null)[]>([]);
+  const indexRef = useRef(index);
+  indexRef.current = index;
+  const revealMountedRef = useRef(false);
+
+  /**
+   * Подписчик на активный узел — через ref: сам колбэк приходит из страницы на
+   * каждом рендере, а эффект ниже обязан зависеть только от index/count.
+   */
+  const onActiveNodeRef = useRef(onActiveNode);
+  onActiveNodeRef.current = onActiveNode;
+
+  useEffect(() => {
+    onActiveNodeRef.current?.(pageNodes.current[indexRef.current] ?? null);
+  }, [index, days.length]);
+
+  useEffect(() => {
+    // Первый прогон — монтирование: прокручивать нечего и не от чего.
+    if (!revealMountedRef.current) {
+      revealMountedRef.current = true;
+      return;
+    }
+    if (revealSignal === undefined) return;
+
+    const reduced =
+      typeof window !== 'undefined' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    pageNodes.current[indexRef.current]?.scrollTo({
+      top: 0,
+      behavior: reduced ? 'auto' : 'smooth',
+    });
+  }, [revealSignal]);
+
   return (
     <SwipePager
       count={days.length}
@@ -382,7 +436,12 @@ export function DayPager({
       onIndexChange={onIndexChange}
       thresholdPx={DAY_THRESHOLD_PX}
       className={className}
-      pageClassName={`scroll-hidden overflow-y-auto overscroll-contain ${pageClassName ?? ''}`}
+      // touch-pan-y дублирует намерение явно: вертикальный скролл — браузеру,
+      // горизонталь забирает пейджер (см. Pager.tsx).
+      pageClassName={`scroll-hidden touch-pan-y overflow-y-auto overscroll-contain ${pageClassName ?? ''}`}
+      pageRef={(pageIndex, node) => {
+        pageNodes.current[pageIndex] = node;
+      }}
     >
       {(pageIndex) => children(days[pageIndex])}
     </SwipePager>

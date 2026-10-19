@@ -26,7 +26,7 @@ export interface ServerFileRef {
 
 /** Профиль студента для шапки приложения. */
 export interface BootstrapProfile {
-  /** Идентификатор пользователя в Hub — общий для бота и PWA. */
+  /** Идентификатор пользователя в Mood — общий для бота и PWA. */
   userId: string;
   /** Есть ли у пользователя Telegram. У PWA-пользователей — нет. */
   /**
@@ -269,8 +269,8 @@ export interface MailResponse {
  * Снимок данных БАРС и почты — ответ POST /api/bars/refresh.
  *
  * Приходит целиком: сервер всё равно собирает снимок за один поход в МЭИ, а
- * после кнопки «Обновить» клиенту нужны и оценки, и пропуски, и рейтинг сразу.
- * Почта внутри — единственный необязательный блок.
+ * после принудительного обновления клиенту нужны и оценки, и пропуски, и
+ * рейтинг сразу. Почта внутри — единственный необязательный блок.
  */
 export interface BarsSnapshotResponse {
   grades: GradesResponse;
@@ -298,6 +298,8 @@ export interface ApiHomework {
   authorName?: string;
   createdAt: string;
   files: ServerFileRef[];
+  /** Текущий пользователь — автор записи: только он может править и удалять. */
+  canEdit: boolean;
 }
 
 /** Ответ GET /api/homework. */
@@ -334,6 +336,8 @@ export interface ApiImportant {
   authorName?: string;
   createdAt: string;
   files: ServerFileRef[];
+  /** Текущий пользователь — автор записи: только он может править и удалять. */
+  canEdit: boolean;
 }
 
 /** Ответ GET /api/important. */

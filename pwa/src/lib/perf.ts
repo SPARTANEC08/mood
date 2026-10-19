@@ -12,18 +12,18 @@
  *
  * Либо один раз выполнить в консоли на телефоне:
  *
- *   localStorage.setItem('hub_perf', '1')
+ *   localStorage.setItem('mood_perf', '1')
  *
  * Флаг держится до перезагрузки страницы: `?perf=1` действует только на текущий
  * заход, ключ в localStorage — до явной отмены
- * (`localStorage.removeItem('hub_perf')`).
+ * (`localStorage.removeItem('mood_perf')`).
  *
  * Почему не всегда включено. В обычном режиме логов нет вовсе: консоль на
  * телефоне всё равно не видна, а лишние строки на каждый запрос — это шум в
  * отладке и лишняя работа на слабом устройстве.
  */
 
-const STORAGE_KEY = 'hub_perf';
+const STORAGE_KEY = 'mood_perf';
 
 /** Разбор флага один раз: он не меняется в течение сессии. */
 const enabled = ((): boolean => {

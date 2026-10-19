@@ -6,6 +6,8 @@
  * SchedulePage, чтобы страница не разрасталась разметкой карточки.
  */
 
+import { memo, type MouseEvent } from 'react';
+
 import { ChevronRight, MapPin, StickyNote, User } from 'lucide-react';
 
 import { FileAttachmentList } from '@/components/FileAttachmentList';
@@ -15,21 +17,39 @@ import { shortKindLabel } from '@/lib/format';
 import type { ApiHomework, ApiLessonSlot } from '@/types/api';
 import { truncatePreview } from './helpers';
 
-/** Карточка одной пары. */
-export function LessonCard({
-  slot,
-  expanded,
-  onToggleHomework,
-  onOpenSubject,
-  homeworkById,
-}: {
+/**
+ * Вложенные интерактивные элементы карточки.
+ *
+ * Клик по ним не должен открывать предмет: у них своё действие (раскрыть ДЗ,
+ * открыть файл, перейти по внешней ссылке). Проверяем по target, а не
+ * stopPropagation на каждом элементе: так новая кнопка внутри карточки не
+ * «выстрелит» переходом по недосмотру.
+ */
+const NESTED_INTERACTIVE = 'a[href], button, input, textarea, select, [role="button"]';
+
+interface LessonCardProps {
   slot: ApiLessonSlot;
   expanded: Set<string>;
   onToggleHomework: (id: string) => void;
   onOpenSubject: (discipline: string) => void;
   /** Полные записи ДЗ — нужны ради вложений, которых нет в метаданных пары. */
   homeworkById: Map<string, ApiHomework>;
-}) {
+}
+
+/**
+ * Карточка одной пары.
+ *
+ * Обёрнута в memo (см. areLessonCardPropsEqual): страница дней смонтирована
+ * целиком, и без этого раскрытие одного задания перерисовывало все карточки
+ * всех семи дней, включая невидимые.
+ */
+export const LessonCard = memo(function LessonCard({
+  slot,
+  expanded,
+  onToggleHomework,
+  onOpenSubject,
+  homeworkById,
+}: LessonCardProps) {
   const variant = slot.variants[0];
   const extraCount = slot.variants.length - 1;
 
@@ -41,7 +61,36 @@ export function LessonCard({
     );
   }
 
+  /**
+   * Активация карточки: вся площадь ведёт на предмет, кроме вложенных
+   * интерактивных элементов (клик по кнопке/ссылке внутри обрабатывается ею).
+   */
+  const activate = (event: MouseEvent<HTMLDivElement>): void => {
+    const target = event.target as HTMLElement | null;
+    const nested = target?.closest(NESTED_INTERACTIVE);
+    if (nested && nested !== event.currentTarget) return;
+    onOpenSubject(variant.discipline);
+  };
+
   return (
+    // Вся карточка — одна зона нажатия, но БЕЗ role="button": внутри есть
+    // собственные кнопки и ссылки, а вложенные интерактивные элементы внутри
+    // role="button" — невалидная ARIA-композиция (скринридер путается, какая
+    // кнопка «главная»). tabIndex + aria-label + Enter/Space дают тот же
+    // доступный результат без ложной роли.
+    <div
+      tabIndex={0}
+      aria-label={`Открыть предмет «${variant.discipline}»`}
+      onClick={activate}
+      onKeyDown={(event) => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        // Фокус на вложенной кнопке — её дело, не наше.
+        if (event.target !== event.currentTarget) return;
+        event.preventDefault();
+        onOpenSubject(variant.discipline);
+      }}
+      className="cursor-pointer rounded-[var(--radius-card)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+    >
     <Card>
       {/* Время и номер пары — вторичный слой, как в iOS-карточках событий */}
       <div className="flex items-center gap-2 px-4 pt-3 pb-1">
@@ -56,20 +105,25 @@ export function LessonCard({
         <span className="text-[13px] tabular-nums text-[var(--text-secondary)]">
           {slot.timeStart} — {slot.timeEnd}
         </span>
+        {/* Бейдж типа пары живёт в строке времени, то есть НАД серой линией
+            (верхняя граница Row). Раньше он стоял под линией рядом с названием
+            предмета и читался как часть названия, а не как метка типа занятия. */}
+        <span className="ml-auto shrink-0">
+          <KindBadge kind={variant.kind} label={shortKindLabel(variant.kindOfWork)} />
+        </span>
       </div>
 
       <Row flush>
         <div className="px-4 pb-3">
           {/* Название кликабельно: тап открывает предмет — его пары, ДЗ и итог. */}
-          <div className="mb-1 flex items-start justify-between gap-2">
+          <div className="mb-1">
             <button
               type="button"
               onClick={() => onOpenSubject(variant.discipline)}
-              className="pressable flex-1 text-left active:pressable-active"
+              className="pressable w-full text-left active:pressable-active"
             >
               <h3 className="text-[16px] font-semibold leading-snug">{variant.discipline}</h3>
             </button>
-            <KindBadge kind={variant.kind} label={shortKindLabel(variant.kindOfWork)} />
           </div>
 
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] text-[var(--text-secondary)]">
@@ -169,7 +223,36 @@ export function LessonCard({
         })
       ) : null}
     </Card>
+    </div>
   );
+}, areLessonCardPropsEqual);
+
+/**
+ * Сравнение пропсов карточки.
+ *
+ * Раскрытие задания меняет Set раскрытых на всей странице, то есть по ссылке
+ * «изменились» все карточки — и перерисовывались все семь страниц дней.
+ * Сравниваем только те id, что приклеены к ЭТОЙ паре: отметка чужого задания
+ * карточку не касается. Остальные пропсы — по ссылке: slot приходит из данных
+ * расписания, homeworkById меняется при обновлении списка ДЗ (тогда перерисовка
+ * обязательна — именно так появляются вложения), оба колбэка стабильны.
+ */
+function areLessonCardPropsEqual(prev: LessonCardProps, next: LessonCardProps): boolean {
+  if (
+    prev.slot !== next.slot ||
+    prev.homeworkById !== next.homeworkById ||
+    prev.onToggleHomework !== next.onToggleHomework ||
+    prev.onOpenSubject !== next.onOpenSubject
+  ) {
+    return false;
+  }
+
+  return expandedOf(next.slot, prev.expanded) === expandedOf(next.slot, next.expanded);
+}
+
+/** Отпечаток раскрытых заданий пары: «1» — раскрыто, «0» — нет. */
+function expandedOf(slot: ApiLessonSlot, expanded: Set<string>): string {
+  return slot.homework.map((hw) => (expanded.has(hw.id) ? '1' : '0')).join('');
 }
 
 /** Карточка перерыва между парами. */

@@ -12,5 +12,5 @@
     "allowImportingTsExtensions": true,
     "noEmit": true
   },
-  "include": ["bot.ts", "src/**/*.ts", "scripts/**/*.ts"]
+  "include": ["tg/**/*.ts", "backend/**/*.ts", "db/**/*.ts"]
 }

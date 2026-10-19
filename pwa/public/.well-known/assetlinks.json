@@ -1,0 +1,14 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "ru.mpei.mood",
+      "sha256_cert_fingerprints": [
+        "18:63:1B:A7:26:DE:64:BE:6D:73:A1:BF:53:59:A8:B5:99:96:21:4E:59:71:EC:16:8B:AC:EE:24:D5:7B:77:80"
+      ]
+    }
+  }
+]

@@ -95,3 +95,32 @@ export function formatRawDate(date: Date): string {
   const d = String(date.getUTCDate()).padStart(2, '0');
   return `${y}.${m}.${d}`;
 }
+
+/**
+ * Сегодня по Москве в формате расписания — «YYYY.MM.DD».
+ *
+ * Живёт здесь, а не в компонентах: этим форматом пользуются и данные (окно
+ * запроса ДЗ, см. tier1), и полоса дат. Форматтер создаётся один раз: Intl —
+ * не бесплатный объект, а решение «какой сегодня день» принимается по Москве
+ * независимо от часового пояса устройства.
+ */
+const MOSCOW_DAY = new Intl.DateTimeFormat('en-GB', {
+  timeZone: 'Europe/Moscow',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+});
+
+export function todayRawMoscow(now: Date = new Date()): string {
+  const parts = MOSCOW_DAY.formatToParts(now);
+  const get = (type: string): string => parts.find((p) => p.type === type)?.value ?? '';
+  return `${get('year')}.${get('month')}.${get('day')}`;
+}
+
+/** «YYYY.MM.DD», сдвинутая на days дней (UTC-арифметика, как и остальной файл). */
+export function shiftRawDate(raw: string, days: number): string {
+  const date = parseRawDate(raw);
+  if (!date) return raw;
+  date.setUTCDate(date.getUTCDate() + days);
+  return formatRawDate(date);
+}

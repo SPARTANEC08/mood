@@ -2,8 +2,8 @@
  * Оболочка с вкладками.
  *
  * Прокидывает кэш данных и счётчик обновления в страницы: вкладки не делают
- * собственных запросов, а читают готовое и получают новую метку, только когда
- * нажата кнопка «Обновить».
+ * собственных запросов, а читают готовое и получают новую метку, когда запись
+ * добавили или поправили через диалог.
  *
  * Страница и панель навигации — соседи в одной flex-колонке #root высотой ровно
  * во видимую область (--app-height, см. index.css и lib/viewport.ts). Панель
@@ -12,15 +12,25 @@
  * не зависит ни от длины ленты, ни от адресной строки, ни от клавиатуры.
  */
 
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { MotionConfig } from 'framer-motion';
 
 import { TabBar, type TabId } from '@/components/TabBar';
+import { SkeletonList } from '@/components/ui';
 import { useAppData } from '@/lib/dataContext';
-import { GradesPage } from '@/pages/GradesPage';
 import { ProfilePage } from '@/pages/ProfilePage';
 import { SchedulePage } from '@/pages/SchedulePage';
-import { TasksPage } from '@/pages/TasksPage';
+
+/**
+ * Тяжёлые вкладки грузятся отдельными чанками.
+ *
+ * Расписание — первый экран, оно в основном бандле. «Успеваемость» и «Задания»
+ * открывают реже, и держать их код в стартовом бандле значит увеличивать LCP
+ * ради экранов, которые человек может вообще не открыть. Vite выносит их в
+ * отдельные файлы, а Suspense показывает скелет, пока чанк едет.
+ */
+const GradesPage = lazy(() => import('@/pages/GradesPage').then((m) => ({ default: m.GradesPage })));
+const TasksPage = lazy(() => import('@/pages/TasksPage').then((m) => ({ default: m.TasksPage })));
 import type { BootstrapResponse } from '@/types/api';
 import { AddRecordFlow } from './AddRecordFlow';
 import type { RecordKind } from '@/components/AddRecordSheet';
@@ -80,8 +90,16 @@ export function Shell({
       <Tier2Gate tab={tab} />
 
       {tab === 'schedule' ? <SchedulePage /> : null}
-      {tab === 'grades' ? <GradesPage /> : null}
-      {tab === 'tasks' ? <TasksPage listsRevision={listsRevision} /> : null}
+      <Suspense
+        fallback={
+          <div className="p-4">
+            <SkeletonList count={3} />
+          </div>
+        }
+      >
+        {tab === 'grades' ? <GradesPage /> : null}
+        {tab === 'tasks' ? <TasksPage listsRevision={listsRevision} /> : null}
+      </Suspense>
       {tab === 'profile' ? <ProfilePage profile={profile} /> : null}
 
       <TabBar

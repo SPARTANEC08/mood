@@ -54,7 +54,7 @@ export function FileThumbnail({ file }: { file: ServerFileRef }) {
   return (
     <span
       className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden"
-      style={{ borderRadius: '8px', background: 'var(--surface-2)' }}
+      style={{ borderRadius: '8px', background: 'var(--surface-grouped)' }}
     >
       {url ? (
         <img

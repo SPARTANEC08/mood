@@ -1,4 +1,7 @@
 import { useEffect, useRef, type ReactNode } from 'react';
+import { motion } from 'framer-motion';
+
+import { PullIndicator, type PullToRefreshHandle } from '@/components/PullToRefresh';
 
 /**
  * Каркас экрана: шапка сверху, содержимое, ничего лишнего снизу.
@@ -33,17 +36,49 @@ export function Page({
   resetKey,
   /** Содержимое занимает всю высоту и прокручивается само (см. описание выше). */
   fill = false,
+  /**
+   * Pull-to-refresh: потянуть ленту вниз, когда она в самом верху.
+   *
+   * Хендл приходит с экрана, а не создаётся здесь. Так владелец состояния жеста
+   * один: экран уже читает его признак «идёт жест» для индикатора в шапке, и
+   * второй экземпляр хука здесь означал бы, что шапка смотрит на спящий
+   * экземпляр и показывает свой индикатор во время ручного обновления.
+   * Page в этой схеме только отдаёт узлу жест и рисует индикатор.
+   *
+   * В режиме fill не поддерживается: там прокручиваются страницы карусели
+   * (у расписания свои, и оно рисует индикатор само).
+   */
+  pull,
 }: {
   header?: ReactNode;
   children: ReactNode;
   resetKey?: string | number | null;
   fill?: boolean;
+  pull?: PullToRefreshHandle;
 }) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: 0 });
   }, [resetKey]);
+
+  const pullAttach = pull?.attach;
+  useEffect(() => {
+    if (fill || !pullAttach) return;
+    pullAttach(scrollRef.current);
+    return () => pullAttach(null);
+  }, [fill, pullAttach]);
+
+  // min-h-0 обязателен: во flex-колонке по умолчанию flex-элемент не может
+  // стать ниже своего содержимого, и прокрутка просто не заработает.
+  const scrollArea = (
+    <div
+      ref={scrollRef}
+      className="scroll-hidden min-h-0 flex-1 overflow-y-auto overscroll-contain"
+    >
+      <div className="mx-auto max-w-[560px] px-4 pt-3 pb-8">{children}</div>
+    </div>
+  );
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -72,14 +107,32 @@ export function Page({
           </div>
         </div>
       ) : (
-        // min-h-0 обязателен: во flex-колонке по умолчанию flex-элемент не может
-        // стать ниже своего содержимого, и прокрутка просто не заработает.
-        <div
-          ref={scrollRef}
-          className="scroll-hidden min-h-0 flex-1 overflow-y-auto overscroll-contain"
-        >
-          <div className="mx-auto max-w-[560px] px-4 pt-3 pb-8">{children}</div>
-        </div>
+        /*
+          Обёртка вокруг ленты нужна только pull-to-refresh: индикатор
+          позиционируется абсолютно над лентой, а сама лента при жесте уезжает
+          вниз через transform. Экранам без жеста (предмет, ошибки, скелетоны)
+          лишний узел и transform-предок не нужны — он меняет containing block
+          для position: fixed внутри. overflow-hidden обязателен: без него
+          сдвинутая лента вылезала бы из-под нижней панели навигации.
+        */
+        pull ? (
+          <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
+            <PullIndicator
+              pullY={pull.pullY}
+              progress={pull.progress}
+              status={pull.status}
+            />
+
+            <motion.div
+              style={{ y: pull.pullY }}
+              className="flex min-h-0 flex-1 flex-col"
+            >
+              {scrollArea}
+            </motion.div>
+          </div>
+        ) : (
+          scrollArea
+        )
       )}
     </div>
   );

@@ -18,6 +18,7 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import { TabBar, type TabId } from '@/components/TabBar';
+import { TelegramPrompt } from '@/components/TelegramPrompt';
 import { ErrorState } from '@/components/ui';
 import { clearPwaToken, SIGNED_OUT_EVENT } from '@/auth';
 import { ApiError, api } from '@/lib/api';
@@ -59,6 +60,7 @@ export function ScheduleApp({ onReLogin }: { onReLogin: () => void }) {
   const [addSheetOpen, setAddSheetOpen] = useState(false);
   /** На какой вид записи открыть диалог. По умолчанию — ДЗ: их добавляют чаще. */
   const [addKind, setAddKind] = useState<RecordKind>('homework');
+
 
   useEffect(() => {
     initTelegramApp();
@@ -138,6 +140,15 @@ export function ScheduleApp({ onReLogin }: { onReLogin: () => void }) {
           setAddSheetOpen(true);
         }}
         onCloseAddSheet={() => setAddSheetOpen(false)}
+      />
+
+      {/*
+        Приглашение подключить Telegram. Показывается при каждом заходе, пока бот
+        не привязан: внутри компонента и монтирование, и возврат из фона.
+      */}
+      <TelegramPrompt
+        userId={bootstrap.profile.userId}
+        telegramId={bootstrap.profile.telegramId}
       />
     </DataProvider>
   );

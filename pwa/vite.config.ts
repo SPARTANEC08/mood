@@ -23,7 +23,11 @@ import { fileURLToPath } from 'node:url';
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [
+    react(),
+    tailwindcss(),
+
+  ],
 
   resolve: {
     /**
@@ -99,6 +103,13 @@ export default defineConfig({
         // Зависимости меняются редко, и вынос их отдельно не сбрасывает кэш
         // оболочки при каждой правке интерфейса.
         manualChunks(id) {
+          // PDF.js и react-pdf намеренно НЕ выделяем в общий чанк: manualChunks
+          // делает его статическим импортом точки входа, и полмегабайта PDF.js
+          // попадали в предзагрузку первого кадра. Без правила они уезжают в
+          // ленивый чанк вьюера и грузятся только при открытии PDF.
+          if (id.includes('node_modules/pdfjs-dist') || id.includes('node_modules/react-pdf')) {
+            return undefined;
+          }
           if (id.includes('node_modules/react')) return 'react';
           if (id.includes('node_modules/lucide-react')) return 'icons';
           return undefined;

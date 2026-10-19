@@ -189,7 +189,7 @@ export function TabBar({
                     boxShadow: '0 1px 4px rgba(0,0,0,0.14)',
                   }}
                 >
-                  <Icon size={20} strokeWidth={2.4} color="#fff" aria-hidden />
+                  <Icon size={20} strokeWidth={2.4} color="var(--accent-text)" aria-hidden />
                 </span>
               </button>
             );

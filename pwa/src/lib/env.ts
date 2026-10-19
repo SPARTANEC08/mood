@@ -128,12 +128,12 @@ export function initTelegramApp(): void {
  * `gesturestart`/`gesturechange`/`gestureend` и Ctrl+колесо (щипок на десктопе).
  *
  * Исключение — просмотр файлов: внутри вьюера (портал в body с маркером
- * `data-hub-file-viewer`) зум нужен, там события не перехватываются. Картинка
+ * `data-mood-file-viewer`) зум нужен, там события не перехватываются. Картинка
  * зумится своими pointer-жестами, PDF — кнопками/pdf.js.
  */
 function blockInterfaceZoom(): void {
   const insideViewer = (target: EventTarget | null): boolean =>
-    target instanceof Element && target.closest('[data-hub-file-viewer]') !== null;
+    target instanceof Element && target.closest('[data-mood-file-viewer]') !== null;
 
   const swallow = (event: Event) => {
     if (!insideViewer(event.target)) event.preventDefault();

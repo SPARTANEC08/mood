@@ -26,7 +26,7 @@
  *    Разница 852 − 793 = 59px — это нижняя safe-area (домашний индикатор и
  *    закругление). #root заканчивался на 59px выше физического низа экрана, а
  *    TabBar прижат к низу корзины по построению — значит, под ним оставалась
- *    полоса. В тёмной теме это `body { background: #000 }`, то есть ровно
+ *    полоса. В тёмной теме это фон приложения (--app-bg), то есть ровно
  *    чёрная полоса.
  *
  *    Отсюда две поправки, обе — только для standalone:
@@ -142,7 +142,7 @@ function isFullscreenDisplay(): boolean {
  * уже на него. Дублирующая проверка через медиазапрос остаётся: на Android и
  * десктопе он работает, а navigator.standalone там не существует.
  */
-const STANDALONE_ATTR = 'data-hub-standalone';
+const STANDALONE_ATTR = 'data-mood-standalone';
 
 function detectStandalone(): boolean {
   if ((window.navigator as Navigator & { standalone?: boolean }).standalone === true) return true;

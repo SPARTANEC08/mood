@@ -1,6 +1,6 @@
-# Полный пример server-блока для веб-версии Hub (PWA).
+# Полный пример server-блока для веб-версии Mood (PWA).
 #
-# Сценарий A: всё на VPS за nginx. Статика отдаётся из /var/www/hub-pwa,
+# Сценарий A: всё на VPS за nginx. Статика отдаётся из /var/www/mood-pwa,
 # /api проксируется на Fastify, который крутится в том же процессе, что и бот.
 #
 # Самостоятельных новых юнитов не появляется: API поднимает бот, если в .env
@@ -8,10 +8,10 @@
 # /api и отдать sw.js без кэша.
 #
 # Установка:
-#   sudo mkdir -p /var/www/hub-pwa
-#   sudo rsync -a --delete pwa/dist/ /var/www/hub-pwa/
-#   sudo cp pwa/nginx.conf.example /etc/nginx/sites-available/hub-pwa
-#   sudo ln -s /etc/nginx/sites-available/hub-pwa /etc/nginx/sites-enabled/
+#   sudo mkdir -p /var/www/mood-pwa
+#   sudo rsync -a --delete pwa/dist/ /var/www/mood-pwa/
+#   sudo cp pwa/nginx.conf.example /etc/nginx/sites-available/mood-pwa
+#   sudo ln -s /etc/nginx/sites-available/mood-pwa /etc/nginx/sites-enabled/
 #   sudo nginx -t && sudo systemctl reload nginx
 #
 # rsync, а не `cp -r dist/*`: манифест сборки лежит в pwa/dist/.vite/, скрыт от
@@ -59,7 +59,7 @@ server {
     ssl_certificate     /etc/letsencrypt/live/pwa.example.com/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/pwa.example.com/privkey.pem;
 
-    root /var/www/hub-pwa;
+    root /var/www/mood-pwa;
     index index.html;
 
     # Потолок загрузки: без него nginx отклонит файл больше 1 МБ (свой дефолт
@@ -67,9 +67,42 @@ server {
     # приложение разрешает файлы до 20 МБ (MAX_FILE_SIZE_BYTES в fileStore.ts).
     client_max_body_size 22m;
 
+    # ── Заголовки безопасности ──────────────────────────────────────────────
+    # HSTS, nosniff, Referrer-Policy, X-Frame-Options, Permissions-Policy.
+    # nginx НЕ наследует add_header в location с собственным add_header, поэтому
+    # тот же include нужно повторить в /assets/, /icons/, /sw.js, /index.html,
+    # /install/, /api/, /dev-api/, /robots.txt и assetlinks. Готовый файл и
+    # инструкция — backend/deploy/nginx-security-headers.conf.
+    include snippets/mood-security-headers.conf;
+
+    # ── Digital Asset Links (TWA/APK) ───────────────────────────────────────
+    # Без этого блока APK откроется с адресной строкой. Content-Type обязан быть
+    # application/json — проверяется на устройстве при запуске приложения.
+    # Полный сниппет и инструкция: backend/deploy/nginx-assetlinks.snippet.conf
+    location = /.well-known/assetlinks.json {
+        default_type application/json;
+        add_header Cache-Control "no-cache" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        try_files $uri =404;
+    }
+
     # ── Статика ─────────────────────────────────────────────────────────────
     # Хешированные имена файлов из /assets/ меняются при каждой сборке, поэтому
     # год в кэше безопасен: новое имя — новая запись, старое никто не запросит.
+    #
+    # ⚠️ Рядом со сборкой лежит воркер PDF.js — файл .mjs (ES-модуль). В системном
+    # /etc/nginx/mime.types типа для .mjs нет, и nginx отдаёт его как
+    # application/octet-stream. Браузер в этом случае отказывается запускать
+    # модуль («Expected a JavaScript-or-Wasm module script»), PDF.js уходит в
+    # fake worker, и PDF «не открывается» без внятной ошибки на экране.
+    #
+    # Лечится один раз на сервере — добавить расширение в системную карту типов:
+    #   sudo sed -i -E "s|(application/javascript[[:space:]]+js)(;)|\1 mjs\2|" \
+    #     /etc/nginx/mime.types && sudo nginx -t && sudo systemctl reload nginx
+    #
+    # Вложенным блоком `types { … }` внутри server{} этого делать НЕЛЬЗЯ: он не
+    # дополняет, а ЗАМЕНЯЕТ всю карту типов, и тогда css/js тоже начинают
+    # отдаваться как octet-stream — сайт остаётся без стилей и модулей.
     location /assets/ {
         expires 1y;
         add_header Cache-Control "public, immutable";
@@ -83,6 +116,17 @@ server {
         access_log off;
     }
 
+    # ── Манифест ────────────────────────────────────────────────────────────
+    # default_type обязателен: nginx без него отдаёт .webmanifest как
+    # application/octet-stream, и часть браузеров отказывается читать манифест.
+    # no-cache — чтобы после релиза подхватились новый набор иконок и имя.
+    location = /manifest.webmanifest {
+        open_file_cache off;
+        default_type application/manifest+json;
+        add_header Cache-Control "no-cache" always;
+        access_log off;
+    }
+
     # ── Service Worker ──────────────────────────────────────────────────────
     # Два заголовка, и оба обязательны:
     #   Cache-Control no-cache — иначе браузер месяц не увидит новый sw.js и
@@ -91,6 +135,7 @@ server {
     #   Service-Worker-Allowed / — нужен, если sw.js когда-нибудь окажется не в
     #     корне. Сейчас он в корне, и заголовок просто снимает вопрос на будущее.
     location = /sw.js {
+        open_file_cache off;
         add_header Service-Worker-Allowed "/";
         add_header Cache-Control "no-cache, no-store, must-revalidate";
         access_log off;
@@ -98,6 +143,9 @@ server {
 
     # index.html — всегда свежий, иначе после деплоя откроется старый бандл.
     location = /index.html {
+        # open_file_cache off: иначе релиз до минуты «не приезжает». Не удалять
+        # старые assets при деплое (см. README, деплой статики).
+        open_file_cache off;
         add_header Cache-Control "no-cache, must-revalidate";
     }
 

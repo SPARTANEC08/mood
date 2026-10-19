@@ -1,18 +1,28 @@
 /**
- * Генерация PNG-иконок приложения из assets/icon.png.
+ * Генерация PNG-иконок приложения из двух исходников в assets/.
  *
  * Зачем отдельным скриптом: в манифесте нужны конкретные размеры (192, 512,
- * maskable-512, apple-touch 180, favicon 32), а править исходник под каждый
- * размер вручную — гарантированный способ однажды забыть про иконку.
+ * maskable-512), сайту и браузеру — свои (apple-touch 180, favicon 32, иконка на
+ * экране входа). Править исходники под каждый размер вручную — гарантированный
+ * способ однажды забыть про иконку.
  *
- * Исходник — растровый PNG (логотип приложения), а не SVG: генератор только
- * режет и масштабирует его под нужные размеры.
+ * Два источника и зачем:
+ *   - assets/icon.png    — логотип со скруглёнными гранями (прозрачные углы).
+ *                          Идёт ВЕЗДЕ, кроме манифеста: favicon, apple-touch,
+ *                          иконка на сайте.
+ *   - assets/icon_fs.png — тот же логотип, полностью залитый цветом (full-bleed,
+ *                          без прозрачных углов). Только для манифеста PWA:
+ *                          Android сам скругляет иконку/делает maskable, и
+ *                          прозрачные углы там дали бы дыры и обрезанный логотип.
  *
- * Идемпотентен: если PNG новее исходника, он пропускается. Это позволяет
- * держать иконки в репозитории и не генерировать их на каждой машине.
- *
+ * Идемпотентен: если PNG новее своего исходника, он пропускается.
  * Если sharp не установлен, скрипт не падает, а предупреждает: без PNG
- * приложение всё равно работает, теряется только внешний вид на экране «домой».
+ * приложение работает, теряется только внешний вид на экране «домой».
+ *
+ * ВАЖНО при смене иконок: у /icons/ в nginx кэш 30 дней, поэтому после
+ * перегенерации нужно поднять версию `?v=N` в manifest.webmanifest, index.html
+ * и public/sw.js — иначе браузер и Service Worker ещё месяц отдают старую
+ * картинку по тому же URL.
  */
 
 import { readFile, writeFile, stat } from 'node:fs/promises';
@@ -21,78 +31,77 @@ import { fileURLToPath } from 'node:url';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ICONS_DIR = path.resolve(HERE, '../public/icons');
-// Исходный логотип лежит вне public: он нужен только на этапе сборки и не
-// должен попадать в раздачу (файл крупный, а браузер его не запрашивает).
-const SOURCE = path.resolve(HERE, '../assets/icon.png');
+
+// Исходные логотипы лежат вне public: они нужны только на этапе сборки и не
+// должны попадать в раздачу (файлы крупные, браузер их не запрашивает).
+const SOURCE_ROUNDED = path.resolve(HERE, '../assets/icon.png');
+const SOURCE_FULL = path.resolve(HERE, '../assets/icon_fs.png');
 
 /**
- * Все варианты, которые нужны манифесту и браузерам.
+ * Скруглённый логотип — всё, что не манифест.
  *
- * favicon.ico собирается вручную из PNG: sharp не умеет писать формат ICO,
- * а формат с PNG внутри (Vista и новее, то есть везде актуальном) — это
- * 22-байтный заголовок, и он читается прямо в этом файле. Отдельная ссылка на
- * favicon-32.png в index.html при этом тоже остаётся: PNG отдаётся без
- * преобразования, а ICO нужен там, где PNG-иконку браузер игнорирует.
+ * `site-icon-192.png` — картинка на экране входа; отдельным файлом, чтобы не
+ * путать её с `icon-192.png` манифеста (там full-bleed источник).
  */
-const TARGETS = [
-  { file: 'icon-192.png', size: 192 },
-  { file: 'icon-512.png', size: 512 },
+const ROUNDED_TARGETS = [
   { file: 'apple-touch-icon.png', size: 180 },
   { file: 'favicon-32.png', size: 32 },
+  { file: 'site-icon-192.png', size: 192 },
 ];
 
-/** ICO с одной картинкой 32×32 внутри. */
+/** ICO с одной картинкой 32×32 внутри; собирается из скруглённого favicon-32. */
 const FAVICON = { file: 'favicon.ico', size: 32 };
+
+/**
+ * Full-bleed источник — только иконки манифеста PWA.
+ *
+ * maskable берётся без дополнительного отступа: источник уже залит по краям,
+ * а искусственная рамка только добавляла видимый бордюр.
+ */
+const FULL_TARGETS = [
+  // 48/72/96/144 — размеры лаунчера Android (их берёт и TWA). 192/512 — манифест
+  // PWA; 512 maskable — adaptive-иконка.
+  { file: 'icon-48.png', size: 48 },
+  { file: 'icon-72.png', size: 72 },
+  { file: 'icon-96.png', size: 96 },
+  { file: 'icon-144.png', size: 144 },
+  { file: 'icon-192.png', size: 192 },
+  { file: 'icon-512.png', size: 512 },
+  { file: 'icon-maskable-512.png', size: 512 },
+];
+
+/** Фон для flatten: нужен на случай полупрозрачных уголков у full-bleed PNG. */
+const FULL_BG = '#15131e';
 
 /**
  * Оборачивает PNG в контейнер ICO.
  *
  * Формат: ICONDIR (6 байт) + ICONDIRENTRY (16 байт) + сами данные PNG.
- * Для ICO с PNG внутри данные не нужно распаковывать в BMP, поэтому хватает
- * указать размеры, которые и так есть в заголовке PNG.
  */
 function pngToIco(png, size) {
   const header = Buffer.alloc(6);
-  // 0 — иконка, 1 — количество картинок.
   header.writeUInt16LE(0, 0);
   header.writeUInt16LE(1, 2);
   header.writeUInt16LE(1, 4);
 
   const entry = Buffer.alloc(16);
-  entry.writeUInt8(size % 256, 0); // ширина (0 означает 256, но нам 32)
-  entry.writeUInt8(size % 256, 1); // высота
-  entry.writeUInt8(0, 2); // палитра не используется
-  entry.writeUInt8(0, 3); // reserved
-  entry.writeUInt16LE(1, 4); // цветовые плоскости
-  entry.writeUInt16LE(32, 6); // бит на пиксель
-  entry.writeUInt32LE(png.length, 8); // размер данных
-  entry.writeUInt32LE(header.length + entry.length, 12); // смещение данных
+  entry.writeUInt8(size % 256, 0);
+  entry.writeUInt8(size % 256, 1);
+  entry.writeUInt8(0, 2);
+  entry.writeUInt8(0, 3);
+  entry.writeUInt16LE(1, 4);
+  entry.writeUInt16LE(32, 6);
+  entry.writeUInt32LE(png.length, 8);
+  entry.writeUInt32LE(header.length + entry.length, 12);
 
   return Buffer.concat([header, entry, png]);
 }
 
-/**
- * Отдельная maskable-иконка.
- *
- * Маска Android может обрезать до 20% с каждой стороны (безопасная зона — круг),
- * поэтому картинка уменьшается до 80% и центрируется на полностью залитом фоне.
- * Без этого логотип обрезался бы по краям на части устройств.
- *
- * Фон — тёмный цвет подложки самого логотипа, чтобы квадрат не выделялся на
- * иконке-«квадрате» Android.
- */
-// Исходник icon_fs.png уже имеет залитый фон по краям, поэтому для maskable
-// тоже используем весь кадр: дополнительный отступ создавал заметную рамку.
-const MASKABLE = { file: 'icon-maskable-512.png', size: 512, padding: 0 };
-const MASKABLE_BG = '#100f1e';
-
-async function isFresh(target) {
+/** Иконка свежее исходника? Иначе её нужно пересобрать. */
+async function isFresh(file, source) {
   try {
-    const [png, source] = await Promise.all([
-      stat(path.join(ICONS_DIR, target.file)),
-      stat(SOURCE),
-    ]);
-    return png.mtimeMs >= source.mtimeMs;
+    const [png, src] = await Promise.all([stat(path.join(ICONS_DIR, file)), stat(source)]);
+    return png.mtimeMs >= src.mtimeMs;
   } catch {
     return false;
   }
@@ -110,68 +119,46 @@ async function main() {
     return;
   }
 
-  const source = await readFile(SOURCE);
+  const [rounded, full] = await Promise.all([readFile(SOURCE_ROUNDED), readFile(SOURCE_FULL)]);
 
-  for (const target of TARGETS) {
-    const dest = path.join(ICONS_DIR, target.file);
-    if (await isFresh(target)) continue;
+  const render = (source, size, { flatten = false } = {}) => {
+    let pipeline = sharp(source).resize(size, size, { fit: 'cover' });
+    if (flatten) pipeline = pipeline.flatten({ background: FULL_BG });
+    return pipeline.png().toBuffer();
+  };
 
-    const png = await sharp(source)
-      .resize(target.size, target.size, { fit: 'cover' })
-      .png()
-      .toBuffer();
+  for (const target of ROUNDED_TARGETS) {
+    if (await isFresh(target.file, SOURCE_ROUNDED)) continue;
 
-    await writeFile(dest, png);
-    console.log(`[icons] ${target.file} (${target.size}×${target.size})`);
+    const png = await render(rounded, target.size);
+    await writeFile(path.join(ICONS_DIR, target.file), png);
+    console.log(`[icons] ${target.file} (${target.size}×${target.size}, скруглённый)`);
 
-    // favicon.ico переиспользует ровно тот же PNG, поэтому собирается вместе с
-    // ним и не требует отдельного рендера.
     if (target.size === FAVICON.size) {
       await writeFile(path.join(ICONS_DIR, FAVICON.file), pngToIco(png, FAVICON.size));
       console.log(`[icons] ${FAVICON.file} (${FAVICON.size}×${FAVICON.size}, ICO из PNG)`);
     }
   }
 
-  // favicon.ico собирается из уже существующего PNG: он мог остаться от
-  // предыдущего прогона и быть новее SVG, поэтому проверяем его отдельно.
-  if (!(await isFresh(FAVICON))) {
+  // favicon.ico мог остаться от прошлого прогона и быть новее скруглённого PNG,
+  // поэтому проверяем его отдельно и пересобираем из готового favicon-32.png.
+  if (!(await isFresh(FAVICON.file, SOURCE_ROUNDED))) {
     try {
       const png = await readFile(path.join(ICONS_DIR, 'favicon-32.png'));
       await writeFile(path.join(ICONS_DIR, FAVICON.file), pngToIco(png, FAVICON.size));
       console.log(`[icons] ${FAVICON.file} (${FAVICON.size}×${FAVICON.size}, ICO из PNG)`);
     } catch {
-      // favicon-32.png нет — значит, PNG ещё не сгенерирован, и подождёт
-      // следующего прогона вместе с ним.
+      // favicon-32.png ещё не сгенерирован — подождёт следующего прогона.
     }
   }
 
-  if (!(await isFresh(MASKABLE))) {
-    // Отступ задаётся ЦЕЛЫМ числом пикселей, и внутренний размер выводится из
-    // него, а не наоборот. Иначе размер не сойдётся: extend добавляет отступ с
-    // каждой из четырёх сторон, и при 512 - 307 = 205 (нечётное) половина
-    // округляется вверх, давая 513×513 вместо заявленных в манифесте 512×512.
-    // Chrome и Lighthouse отвергают maskable-иконку, чей размер не совпадает с
-    // указанным в манифесте, — то есть установка на Android просто не пройдёт.
-    const pad = Math.round(MASKABLE.size * MASKABLE.padding);
-    const inner = MASKABLE.size - pad * 2;
+  for (const target of FULL_TARGETS) {
+    if (await isFresh(target.file, SOURCE_FULL)) continue;
 
-    // flatten обязателен: исходник — «сквиркл» с прозрачными углами. Без
-    // него маска Android показала бы их как дыры поверх залитого квадрата.
-    const png = await sharp(source)
-      .resize(inner, inner, { fit: 'contain', background: MASKABLE_BG })
-      .flatten({ background: MASKABLE_BG })
-      .extend({
-        top: pad,
-        bottom: pad,
-        left: pad,
-        right: pad,
-        background: MASKABLE_BG,
-      })
-      .png()
-      .toBuffer();
-
-    await writeFile(path.join(ICONS_DIR, MASKABLE.file), png);
-    console.log(`[icons] ${MASKABLE.file} (${MASKABLE.size}×${MASKABLE.size}, maskable, отступ ${pad}px)`);
+    const maskable = target.file.includes('maskable');
+    const png = await render(full, target.size, { flatten: maskable });
+    await writeFile(path.join(ICONS_DIR, target.file), png);
+    console.log(`[icons] ${target.file} (${target.size}×${target.size}, full-bleed${maskable ? ', maskable' : ''})`);
   }
 }
 

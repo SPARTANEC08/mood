@@ -8,34 +8,37 @@ bars-session-debug.json
 .bars-debug-*.html
 .bars-debug-*.json
 
-# Данные бота: персональные, с зашифрованными кредями БАРС
-data/
-
-# Бэкапы с VPS (содержат .env и данные пользователей)
-backup_vps/
+# Данные приложения: персональные, с зашифрованными кредями БАРС.
+# Каталог сохраняется в репозитории только пустой заглушкой .gitkeep;
+# всё содержимое (users.json, файлы, снимки, отчёты) — вне git.
+db/data/*
+!db/data/.gitkeep
 
 # Зависимости
 node_modules/
-venv/
 __pycache__/
-
-# Отладочные дампы и черновики
-scratch/
-
-# Эксперименты на aiogram: внутри захардкожен реальный токен бота.
-# Перед коммитом токен нужно отозвать через @BotFather и вычистить из файлов.
-52.py
-67.py
 
 # Сборка
 dist/
+build/
+tmp/
+
+# APK (TWA): ключ подписи и артефакты сборки — НИКОГДА в git.
+# Потеря keystore = нельзя обновить установленное приложение (сменится подпись).
+mood.keystore
+*.keystore
+*.jks
+apk/
+android/app/build/
+android/build/
+android/.gradle/
+android/local.properties
+android/keystore.properties
 
 # Служебное
 .DS_Store
 *.log
 
-# Веб-версия (PWA). Явно, хотя выше уже есть общие node_modules/ и dist/:
-# правила без слэша в начале действуют на любой уровень вложенности, но
-# перечисление рядом с остальным фронтендом читается однозначнее.
+# Веб-версия (PWA)
 pwa/node_modules/
 pwa/dist/

@@ -9,11 +9,12 @@
  */
 
 import { perfLog } from '@/lib/perf';
+import { platformHeader } from '@/lib/platform';
 
 export const BASE = '/api';
 
 /** Ключ хранилища токена в localStorage. */
-const PWA_TOKEN_STORAGE_KEY = 'hub_pwa_token';
+const PWA_TOKEN_STORAGE_KEY = 'mood_pwa_token';
 
 export class ApiError extends Error {
   constructor(
@@ -44,7 +45,7 @@ export interface RequestOptions {
  */
 export function authHeader(): Record<string, string> {
   const token = readPwaToken();
-  return token ? { 'X-PWA-Token': token } : {};
+  return { ...(token ? { 'X-PWA-Token': token } : {}), ...platformHeader() };
 }
 
 /** Токен лежит в localStorage: он переживает перезагрузку и закрытие вкладки. */

@@ -51,6 +51,18 @@ async function register(): Promise<void> {
   try {
     const registration = await navigator.serviceWorker.register(SW_URL, { scope: '/' });
 
+    // Явная проверка обновлений: браузер иначе троттлит её до раза в сутки, и
+    // после деплоя пользователь мог остаться на старом воркере (а старый
+    // index.html — на удалённых чанках). Проверяем при старте и при каждом
+    // возврате в приложение.
+    const checkForUpdate = (): void => {
+      void registration.update().catch(() => undefined);
+    };
+    checkForUpdate();
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') checkForUpdate();
+    });
+
     registration.addEventListener('updatefound', () => {
       const installing = registration.installing;
       if (!installing) return;
@@ -79,12 +91,12 @@ async function register(): Promise<void> {
  */
 function showUpdateToast(): void {
   if (updateToastShown) return;
-  if (document.getElementById('hub-update-toast')) return;
+  if (document.getElementById('mood-update-toast')) return;
 
   updateToastShown = true;
 
   const toast = document.createElement('div');
-  toast.id = 'hub-update-toast';
+  toast.id = 'mood-update-toast';
   toast.setAttribute('role', 'status');
   toast.style.cssText = [
     'position:fixed',
@@ -97,26 +109,30 @@ function showUpdateToast(): void {
     'align-items:center',
     'padding:10px 14px',
     'border-radius:14px',
-    'background:var(--surface,#fff)',
-    'color:var(--text-primary,#000)',
+    'background:var(--surface)',
+    'color:var(--text-primary)',
     'border:1px solid var(--separator-soft,rgba(0,0,0,.1))',
     'box-shadow:0 4px 20px rgba(0,0,0,.12)',
     'font:500 14px/1.2 -apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif',
   ].join(';');
 
   const text = document.createElement('span');
-  text.textContent = 'Доступно обновление';
+  text.textContent = 'Доступна новая версия';
 
   const button = document.createElement('button');
   button.type = 'button';
-  button.textContent = 'Обновить';
+  // Именно «Перезагрузить», а не «Обновить»: кнопка перезагружает страницу
+  // целиком (применяет новый Service Worker), а не обновляет данные. Слово
+  // «Обновить» в интерфейсе закреплено за данными, и путать эти действия
+  // нельзя — человек нажмёт «Обновить» и не поймёт, почему приложение мигнуло.
+  button.textContent = 'Перезагрузить';
   button.style.cssText = [
     'appearance:none',
     'border:0',
     'border-radius:10px',
     'padding:7px 12px',
-    'background:var(--accent,#6d4aff)',
-    'color:var(--lesson-chip-text,#fff)',
+    'background:var(--accent)',
+    'color:var(--lesson-chip-text)',
     'font:600 14px/1 -apple-system,system-ui,sans-serif',
     'cursor:pointer',
   ].join(';');

@@ -1,3 +1,4 @@
+import { useCallback, useState } from 'react';
 import {
   BookOpen,
   CircleCheck,
@@ -5,7 +6,6 @@ import {
   LogOut,
   Mail,
   MessageCircle,
-  RefreshCw,
   Send,
   ScrollText,
   TriangleAlert,
@@ -13,8 +13,11 @@ import {
 
 import { Header } from '@/components/TabBar';
 import { Page } from '@/components/Page';
-import { Card, EmptyState, ListGroup, Row, SkeletonCard } from '@/components/ui';
+import { Card, EmptyState, ListGroup, Row, SkeletonCard, Toast } from '@/components/ui';
+import { RefreshIndicator } from '@/components/RefreshIndicator';
+import { usePullToRefresh } from '@/components/PullToRefresh';
 import { NotificationsCard } from '@/components/profile/NotificationsCard';
+import { ThemeCard } from '@/components/profile/ThemeCard';
 import { useAppData } from '@/lib/dataContext';
 import { haptic, openLink } from '@/lib/env';
 import { logout } from '@/auth';
@@ -31,7 +34,25 @@ export function ProfilePage({ profile }: { profile: BootstrapResponse }) {
     barsError: moreError,
     barsRefreshing,
     refreshBars,
+    refreshMail,
   } = useAppData();
+
+  const [toast, setToast] = useState<string | null>(null);
+
+  /**
+   * Обновление по жесту.
+   *
+   * БАРС и почта — параллельно и оба с force-семантикой: на «Кабинете» видно и
+   * снимок БАРС (стипендия, приказы, книги), и список писем, поэтому обновлять
+   * только половину экрана было бы обманом. Сообщение — первое, что не null.
+   */
+  const pullRefresh = useCallback(async () => {
+    const [barsMessage, mailMessage] = await Promise.all([refreshBars(), refreshMail()]);
+    const message = barsMessage ?? mailMessage;
+    if (message) setToast(message);
+  }, [refreshBars, refreshMail]);
+
+  const pull = usePullToRefresh({ enabled: true, onRefresh: pullRefresh });
 
   // Блоки рендерятся сразу; тяжёлые данные дозаполняются. Пока данных нет и
   // ошибки тоже нет — показываем скелет соответствующего блока, а не ложное
@@ -50,31 +71,19 @@ export function ProfilePage({ profile }: { profile: BootstrapResponse }) {
   const overdue = more?.libraryBooks.filter((b) => b.isOverdue).length ?? 0;
 
   return (
+    <>
     <Page
       header={
         <Header
           title="Кабинет"
           large
-          right={
-            <button
-              type="button"
-              aria-label="Обновить"
-              onClick={() => {
-                haptic('light');
-                refreshBars();
-              }}
-              className="pressable rounded-full p-2 active:pressable-active"
-              style={{ color: 'var(--accent)' }}
-            >
-              <RefreshCw
-                size={19}
-                className={barsRefreshing ? 'spinner' : undefined}
-                aria-hidden
-              />
-            </button>
-          }
+          // Почта перечитывается при каждом заходе — её в счётчик не берём
+          // (иначе спиннер мигал бы постоянно и ничего не значил). Здесь видно
+          // обновление разделов БАРС.
+          right={<RefreshIndicator active={barsRefreshing && !pull.suppressBackground} />}
         />
       }
+      pull={pull}
     >
       <div className="space-y-4">
         {/* Профиль */}
@@ -290,6 +299,8 @@ export function ProfilePage({ profile }: { profile: BootstrapResponse }) {
           </section>
         ) : null}
 
+        <ThemeCard />
+
         <section className="space-y-2">
           <h2 className="px-1 text-[13px] font-semibold text-[var(--text-secondary)]">Связь</h2>
           <Card className="divide-y divide-[var(--separator-soft)] overflow-hidden">
@@ -297,28 +308,28 @@ export function ProfilePage({ profile }: { profile: BootstrapResponse }) {
               type="button"
               onClick={() => {
                 haptic('light');
-                openLink('https://t.me/spartanec_0');
+                openLink('https://t.me/mood_mpei_sup');
               }}
               className="pressable flex w-full items-center gap-3 px-4 py-3 text-left active:pressable-active"
             >
               <MessageCircle size={18} className="shrink-0" style={{ color: 'var(--accent)' }} aria-hidden />
               <span className="min-w-0 flex-1">
                 <span className="block text-[14px] font-medium">Поддержка и сообщения об ошибках</span>
-                <span className="block text-[12px] text-[var(--text-tertiary)]">@spartanec_0</span>
+                <span className="block text-[12px] text-[var(--text-tertiary)]">@mood_mpei_sup</span>
               </span>
             </button>
             <button
               type="button"
               onClick={() => {
                 haptic('light');
-                openLink('https://t.me/hub_mpei');
+                openLink('https://t.me/mood_mpei');
               }}
               className="pressable flex w-full items-center gap-3 px-4 py-3 text-left active:pressable-active"
             >
               <Send size={18} className="shrink-0" style={{ color: 'var(--accent)' }} aria-hidden />
               <span className="min-w-0 flex-1">
-                <span className="block text-[14px] font-medium">Telegram-канал Hub</span>
-                <span className="block text-[12px] text-[var(--text-tertiary)]">@hub_mpei</span>
+                <span className="block text-[14px] font-medium">Telegram-канал Mood</span>
+                <span className="block text-[12px] text-[var(--text-tertiary)]">@mood_mpei</span>
               </span>
             </button>
           </Card>
@@ -353,6 +364,9 @@ export function ProfilePage({ profile }: { profile: BootstrapResponse }) {
         </p>
       </div>
     </Page>
+
+    {toast ? <Toast text={toast} onClose={() => setToast(null)} /> : null}
+    </>
   );
 }
 
@@ -394,7 +408,7 @@ export function NeedLoginScreen({ onReLogin }: { onReLogin: () => void }) {
         type="button"
         onClick={() => {
           haptic('light');
-          openLink('https://t.me/hub_mpei_bot');
+          openLink('https://t.me/mood_mpei_bot');
         }}
         className="pressable mt-2 rounded-[12px] px-4 py-2 text-[14px] font-semibold text-[var(--text-tertiary)] active:pressable-active"
       >
