@@ -31,6 +31,7 @@ import {
   registerLoginSuccess,
 } from '../../../utils/loginLimiter.ts';
 import { type StoredUser, userStore } from '../../../../db/storage/userStore.ts';
+import { registrationStore } from '../../../../db/storage/registrationStore.ts';
 import { detectPlatform, type UserPlatform } from '../../../utils/platform.ts';
 import { AuthError } from '../../middleware/auth.ts';
 import { clientKey, readCredentials } from './helpers.ts';
@@ -405,6 +406,16 @@ async function completeRegistration(input: {
 }): Promise<StoredUser> {
   const { existing, barsLoginHash, login, password, studentInfo, sessionData, platform } = input;
   const startedAt = Date.now();
+
+  // Единственная точка создания записи. Если регистрация закрыта, а записи ещё
+  // нет — вход не завершаем. Существующие пользователи проходят дальше.
+  if (!existing && !registrationStore.isOpen()) {
+    throw new AuthError(
+      'Регистрация новых аккаунтов временно закрыта. Вход доступен только тем, кто уже пользуется Mood.',
+      403,
+      'registration_closed',
+    );
+  }
 
   const fullName = studentInfo.studentName?.trim() || 'Студент';
   const barsGroupName = studentInfo.groupName?.trim() || '';

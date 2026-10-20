@@ -21,6 +21,7 @@ import {
 } from '../db/storage/adminsStore.ts';
 import { userStore, type StoredUser } from '../db/storage/userStore.ts';
 import { announcementStore } from '../db/storage/announcementStore.ts';
+import { registrationStore } from '../db/storage/registrationStore.ts';
 import { isNotifierCycleRunning, runCycleForced } from '../backend/services/notifications/barsNotifier.ts';
 import {
   buildAdminAddConfirmView,
@@ -326,6 +327,15 @@ export async function processTelegramCallback(
   if (data === 'admin_broadcast') {
     setFlow(sender.id, 'broadcast_text');
     return { view: buildBroadcastPromptView() };
+  }
+
+  // Рубильник регистрации: старые аккаунты работают всегда, новые не создаются.
+  if (data === 'admin_registration') {
+    const open = registrationStore.toggle();
+    return {
+      view: buildAdminMenu(),
+      toast: open ? 'Регистрация новых аккаунтов открыта' : 'Регистрация новых аккаунтов закрыта',
+    };
   }
 
   if (data === 'admin_broadcast_cancel') {

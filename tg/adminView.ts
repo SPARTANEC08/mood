@@ -7,6 +7,7 @@
  */
 
 import type { AdminRecord } from '../db/storage/adminsStore.ts';
+import { registrationStore } from '../db/storage/registrationStore.ts';
 import { b, code, esc, i, joinBlocks, link, RULE } from './format.ts';
 import { pageOfReports, type ReportFile } from './reports.ts';
 import type { BotViewResult, InlineButton } from './pwaView.ts';
@@ -46,16 +47,25 @@ export function buildAdminMenu(): BotViewResult {
    * читает сама страница /dev/, и он не попадает ни на сервер, ни в access-логи.
    */
   const statsUrl = buildStatsUrl();
+  const registrationOpen = registrationStore.isOpen();
 
   return {
     text: joinBlocks([
       `🛠 ${b('Администратор')}`,
       i('Служебные действия. Клиентское меню — кнопкой ниже.'),
+      i(`Регистрация новых аккаунтов: ${registrationOpen ? 'открыта' : 'закрыта'}.`),
     ]),
     keyboard: [
       ...(statsUrl ? [[{ text: '🌐 Статистика (/dev)', url: statsUrl }]] : []),
       [btn('📊 Отчёт сейчас', 'admin_report_now'), btn('📜 Отчёты', 'admin_reports:0')],
       [btn('🔄 Обновить почту', 'admin_mail'), btn('📣 Рассылка', 'admin_broadcast')],
+      [
+        btn(
+          registrationOpen ? '🔓 Регистрация: вкл' : '🔒 Регистрация: выкл',
+          'admin_registration',
+          registrationOpen ? 'success' : 'danger',
+        ),
+      ],
       [btn('👤 Назначить', 'admin_add'), btn('🚫 Снять', 'admin_remove')],
       [btn('🏠 В клиентское меню', 'menu')],
     ],
