@@ -190,6 +190,7 @@ function buildGrades(semester: SemesterGrades): BarsSnapshotResponse['grades'] {
         title: p.title,
         weight: p.weight,
         score: p.score,
+        attempts: p.attempts,
         week: p.week,
         date: p.date,
       })),
@@ -197,8 +198,10 @@ function buildGrades(semester: SemesterGrades): BarsSnapshotResponse['grades'] {
   });
 
   // Общий средневзвешенный: среднее по дисциплинам, где есть хоть одна оценка.
+  // Если БАРС уже посчитал балл по дисциплине — берём его: там учтены пересдачи,
+  // которые приложение по видимым КМ восстановить не может.
   const scored = subjects
-    .map((s) => s.currentAverage)
+    .map((s) => s.barsAverage ?? s.currentAverage)
     .filter((v): v is number => typeof v === 'number');
 
   return {

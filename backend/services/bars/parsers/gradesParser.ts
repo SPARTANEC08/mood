@@ -13,8 +13,13 @@ export interface ControlPoint {
   title?: string;
   /** Вес КМ в процентах (10, 25, 35...) */
   weight?: number;
-  /** Выставленная оценка, null если ещё не выставлена */
+  /** Выставленная оценка, null если ещё не выставлена. */
   score: number | null;
+  /**
+   * Все попытки по этому КМ, если БАРС показал их в одной ячейке
+   * («2 (дата) 4 (дата)»). Для среднего берётся их арифметическое.
+   */
+  attempts?: number[];
   /** Неделя проведения: «4» */
   week?: string;
   /** Дата получения оценки: «23.09.26» */
@@ -79,18 +84,38 @@ function parseControlType(text: string): SubjectGrade['controlType'] {
 }
 
 /**
- * Разбирает строку оценки вида «5 (28.09.26)» или «3,00» или пустую строку.
+ * Разбирает строку оценки.
+ *
+ * БАРС может показать в одной ячейке несколько попыток:
+ * «2 (10.10.26) 4 (15.10.26)» — пересдача. Даты в скобках оценками не считаем,
+ * а все числа без скобок — это попытки. Для среднего и для балла по КМ берём их
+ * арифметическое: именно так это делает БАРС, и именно из-за этого расходился
+ * средний балл, когда приложение учитывало только последнюю оценку.
  */
-function parseGradeCell(raw: string): { score: number | null; date?: string } {
+function parseGradeCell(raw: string): { score: number | null; date?: string; attempts?: number[] } {
   const cleaned = cleanText(raw);
   if (!cleaned) return { score: null };
 
-  const withDate = cleaned.match(/^([\d.,]+)\s*\(([^)]+)\)\s*$/);
-  if (withDate) {
-    return { score: parseScore(withDate[1]), date: cleanText(withDate[2]) };
+  const dates = [...cleaned.matchAll(/\(([^)]+)\)/g)]
+    .map((match) => cleanText(match[1] ?? ''))
+    .filter(Boolean);
+
+  const numbers = [...cleaned.replace(/\([^)]*\)/g, ' ').matchAll(/\d+(?:[.,]\d+)?/g)]
+    .map((match) => parseScore(match[0]))
+    .filter((value): value is number => value !== null);
+
+  if (numbers.length === 0) return { score: null, date: dates.at(-1) };
+
+  if (numbers.length === 1) {
+    return { score: numbers[0]!, date: dates.at(-1) };
   }
 
-  return { score: parseScore(cleaned) };
+  const mean = numbers.reduce((sum, value) => sum + value, 0) / numbers.length;
+  return {
+    score: Math.round(mean * 100) / 100,
+    date: dates.at(-1),
+    attempts: numbers,
+  };
 }
 
 /**
@@ -178,6 +203,7 @@ export function parseGradesPage($: cheerio.CheerioAPI): SemesterGrades {
           title,
           weight: weight ?? undefined,
           score: grade.score,
+          attempts: grade.attempts,
           week: when.week,
           date: grade.date ?? when.date,
         });

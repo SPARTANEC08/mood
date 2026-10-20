@@ -286,7 +286,9 @@ function SubjectRow({
   isOpen: boolean;
   onToggle: () => void;
 }) {
-  const average = subject.currentAverage;
+  // БАРС уже посчитал средний с учётом пересдач — если значение есть, показываем
+  // его. Свой расчёт по видимым КМ остаётся запасным вариантом.
+  const average = subject.barsAverage ?? subject.currentAverage;
   const progress = subject.totalWeight > 0 ? (subject.gradedWeight / subject.totalWeight) * 100 : 0;
 
   return (
@@ -380,6 +382,14 @@ function SubjectRow({
                     ) : null}
                     {point.date ? <span>{point.date}</span> : null}
                   </div>
+
+                  {/* Пересдача: БАРС считает среднее по попыткам, показываем его
+                      и сами попытки, чтобы оценка не выглядела «взявшейся из ниоткуда». */}
+                  {point.attempts && point.attempts.length > 1 ? (
+                    <p className="mt-1 text-[11px]" style={{ color: 'var(--text-secondary)' }}>
+                      Попытки: {point.attempts.join(' → ')}
+                    </p>
+                  ) : null}
                 </div>
 
                 <span

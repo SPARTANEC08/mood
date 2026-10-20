@@ -116,6 +116,8 @@ export interface ApiControlPoint {
   title?: string;
   weight?: number;
   score: number | null;
+  /** Все попытки, если БАРС показал пересдачу в одной ячейке. */
+  attempts?: number[];
   week?: string;
   date?: string;
 }

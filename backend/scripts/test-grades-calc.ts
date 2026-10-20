@@ -170,6 +170,42 @@ async function run(): Promise<void> {
   const physics = attendance.bySubject.find((s) => s.discipline.includes('Физика'));
   check('Физика: 1 пара = 2 часа', physics?.totalMissedHours === 2, `получено ${physics?.totalMissedHours}`);
 
+  section('Пересдача: несколько попыток в одной ячейке');
+  {
+    const retakeHtml = `
+      <html><body>
+        <div id="s_ss_1">
+          <div data-bs-target="#s_ss_1">Математика, Иванов И.И., экзамен</div>
+          <table>
+            <tr><td>1. КМ №1</td><td>100</td><td>4</td><td>2 (10.10.26) 4 (15.10.26)</td></tr>
+            <tr><td>Балл текущего контроля:</td><td>3</td></tr>
+          </table>
+        </div>
+      </body></html>
+    `;
+
+    const parsed = parseGradesPage(cheerio.load(retakeHtml));
+    const math = parsed.subjects[0];
+
+    check('пересдача — это один КМ', math?.controlPoints.length === 1, String(math?.controlPoints.length));
+    check(
+      'сохранены обе попытки',
+      JSON.stringify(math?.controlPoints[0]?.attempts) === '[2,4]',
+      JSON.stringify(math?.controlPoints[0]?.attempts),
+    );
+    check(
+      'оценка КМ = среднее попыток (3)',
+      math?.controlPoints[0]?.score === 3,
+      String(math?.controlPoints[0]?.score),
+    );
+    check(
+      'средний балл дисциплины учитывает пересдачу',
+      math ? buildSubjectReport(math).currentAverage === 3 : false,
+      math ? String(buildSubjectReport(math).currentAverage) : 'нет дисциплины',
+    );
+    check('балл БАРС сохранён для сверки', math?.totalScore === 3, String(math?.totalScore));
+  }
+
   section('Хранение файлов на сервере: имя и тип');
   {
     // Telegram больше не участвует в хранении файлов, и определять тип по
