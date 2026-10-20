@@ -340,14 +340,29 @@ async function refreshInBackground(cache, request) {
  */
 async function navigationStrategy(request) {
   const cache = await caches.open(SHELL_CACHE);
+  const url = new URL(request.url);
+  // Оболочкой приложения считаются только корень и index.html. Служебные
+  // страницы (/dev/, /test/) тоже navigation-запросы, но класть их в ключ '/'
+  // нельзя: иначе после открытия такой страницы офлайн-приложение показывало бы
+  // её вместо Mood.
+  const isAppShell = url.pathname === '/' || url.pathname === '/index.html';
 
   try {
     const fresh = await fetch(request);
-    if (fresh.ok) {
+    if (fresh.ok && isAppShell) {
       await cache.put('/', fresh.clone());
     }
     return fresh;
   } catch {
+    if (!isAppShell) {
+      const offline = await cache.match(OFFLINE_URL);
+      if (offline) return offline;
+      return new Response('Нет сети.', {
+        status: 503,
+        headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+      });
+    }
+
     const shell = await cache.match('/');
     if (shell) return shell;
 
