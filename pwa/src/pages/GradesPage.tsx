@@ -286,13 +286,9 @@ function SubjectRow({
   isOpen: boolean;
   onToggle: () => void;
 }) {
-  // Большим шрифтом — наш расчёт: незаполненные/непроведённые КМ не учитываются.
-  // Балл БАРС показывается ниже серым: он считает такие КМ нулями и потому ниже.
-  const average = subject.currentAverage;
-  const barsAverage = subject.barsAverage;
-  const showBars =
-    barsAverage !== null &&
-    (average === null || Math.abs(barsAverage - average) >= 0.005);
+  // БАРС уже посчитал средний с учётом пересдач — если значение есть, показываем
+  // его. Свой расчёт по видимым КМ остаётся запасным вариантом.
+  const average = subject.barsAverage ?? subject.currentAverage;
   const progress = subject.totalWeight > 0 ? (subject.gradedWeight / subject.totalWeight) * 100 : 0;
 
   return (
@@ -313,19 +309,12 @@ function SubjectRow({
                 {subject.finalGrade}
               </span>
             ) : null}
-            <div className="w-[74px] shrink-0 text-right">
-              <span
-                className="block text-[16px] font-semibold tabular-nums"
-                style={{ color: average !== null ? gradeColor(average) : 'var(--text-tertiary)' }}
-              >
-                {average !== null ? average.toFixed(1).replace('.', ',') : '—'}
-              </span>
-              {showBars && barsAverage !== null ? (
-                <span className="mt-0.5 block text-[10px] leading-tight tabular-nums text-[var(--text-tertiary)]">
-                  по Барсу {barsAverage.toFixed(1).replace('.', ',')}
-                </span>
-              ) : null}
-            </div>
+            <span
+              className="w-12 text-right text-[16px] font-semibold tabular-nums"
+              style={{ color: average !== null ? gradeColor(average) : 'var(--text-tertiary)' }}
+            >
+              {average !== null ? average.toFixed(1).replace('.', ',') : '—'}
+            </span>
           </div>
 
           {subject.attestation ? (
