@@ -15,8 +15,8 @@
 
 const SW_URL = `/sw.js?v=${__SW_VERSION__}`;
 
-/** Тост предложения обновить приложение. Один за сессию — см. ниже. */
-let updateToastShown = false;
+/** Полноэкранное предложение обновить приложение. Одно за сессию. */
+let updateOverlayShown = false;
 
 /**
  * Регистрирует Service Worker, если браузер его умеет.
@@ -63,6 +63,12 @@ async function register(): Promise<void> {
       if (document.visibilityState === 'visible') checkForUpdate();
     });
 
+    // Обновление уже ждёт (например, человек перезагрузил вкладку, но воркер
+    // ещё не активировался) — показываем экран сразу, не дожидаясь updatefound.
+    if (registration.waiting) {
+      showUpdateOverlay(registration);
+    }
+
     registration.addEventListener('updatefound', () => {
       const installing = registration.installing;
       if (!installing) return;
@@ -72,7 +78,7 @@ async function register(): Promise<void> {
         // раньше этого момента обновление ещё не готово.
         if (installing.state !== 'installed') return;
         if (navigator.serviceWorker.controller) {
-          showUpdateToast();
+          showUpdateOverlay(registration);
         }
       });
     });
@@ -82,65 +88,104 @@ async function register(): Promise<void> {
 }
 
 /**
- * Кнопка «перезагрузить» — единственный способ применить новую версию.
+ * Полноэкранное предложение обновить приложение.
  *
- * Показывается один раз за сессию: sw.js кэшируется по URL с версией, но сам
- * браузер переспрашивает его и при установке, поэтому тост мог бы появляться
- * каждые несколько минут поверх работы. Флаг живёт до перезагрузки страницы,
- * которая как раз и применяет обновление.
+ * Почему не тост: плавающая плашка перекрывала TabBar на Android и ломала его
+ * раскладку при перезагрузке. Полноэкранный слой не участвует в раскладке
+ * приложения и после нажатия полностью удаляется.
+ *
+ * Перезагрузка обязательно активирует новый воркер (`SKIP_WAITING`). Без этого
+ * после reload он снова оставался waiting, снова срабатывал updatefound — и
+ * уведомление появлялось второй раз.
  */
-function showUpdateToast(): void {
-  if (updateToastShown) return;
-  if (document.getElementById('mood-update-toast')) return;
+function showUpdateOverlay(registration: ServiceWorkerRegistration): void {
+  if (updateOverlayShown) return;
+  if (document.getElementById('mood-update-overlay')) return;
 
-  updateToastShown = true;
+  updateOverlayShown = true;
 
-  const toast = document.createElement('div');
-  toast.id = 'mood-update-toast';
-  toast.setAttribute('role', 'status');
-  toast.style.cssText = [
+  const overlay = document.createElement('div');
+  overlay.id = 'mood-update-overlay';
+  overlay.setAttribute('role', 'dialog');
+  overlay.setAttribute('aria-modal', 'true');
+  overlay.setAttribute('aria-labelledby', 'mood-update-title');
+  overlay.style.cssText = [
     'position:fixed',
-    'left:50%',
-    'transform:translateX(-50%)',
-    'bottom:calc(20px + env(safe-area-inset-bottom))',
-    'z-index:100',
+    'inset:0',
+    'z-index:10000',
     'display:flex',
-    'gap:12px',
     'align-items:center',
-    'padding:10px 14px',
-    'border-radius:14px',
-    'background:var(--surface)',
-    'color:var(--text-primary)',
-    'border:1px solid var(--separator-soft,rgba(0,0,0,.1))',
-    'box-shadow:0 4px 20px rgba(0,0,0,.12)',
-    'font:500 14px/1.2 -apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif',
+    'justify-content:center',
+    'padding:max(20px, env(safe-area-inset-top)) 20px max(20px, env(safe-area-inset-bottom))',
+    'background:rgba(0,0,0,0.55)',
+    'overscroll-behavior:contain',
+    'font:400 15px/1.45 -apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif',
   ].join(';');
 
-  const text = document.createElement('span');
-  text.textContent = 'Доступна новая версия';
+  const panel = document.createElement('div');
+  panel.style.cssText = [
+    'width:100%',
+    'max-width:360px',
+    'border-radius:20px',
+    'padding:20px',
+    'background:var(--surface)',
+    'color:var(--text-primary)',
+    'box-shadow:0 12px 40px rgba(0,0,0,0.35)',
+  ].join(';');
+
+  const title = document.createElement('h2');
+  title.id = 'mood-update-title';
+  title.textContent = 'Обновление Mood';
+  title.style.cssText = 'margin:0 0 8px;font-size:18px;font-weight:650;';
+
+  const text = document.createElement('p');
+  text.textContent = 'Вышла новая версия приложения. Перезагрузите, чтобы применить её.';
+  text.style.cssText = 'margin:0 0 16px;color:var(--text-secondary);';
 
   const button = document.createElement('button');
   button.type = 'button';
-  // Именно «Перезагрузить», а не «Обновить»: кнопка перезагружает страницу
-  // целиком (применяет новый Service Worker), а не обновляет данные. Слово
-  // «Обновить» в интерфейсе закреплено за данными, и путать эти действия
-  // нельзя — человек нажмёт «Обновить» и не поймёт, почему приложение мигнуло.
   button.textContent = 'Перезагрузить';
   button.style.cssText = [
     'appearance:none',
     'border:0',
-    'border-radius:10px',
-    'padding:7px 12px',
+    'border-radius:14px',
+    'width:100%',
+    'padding:13px 16px',
     'background:var(--accent)',
-    'color:var(--lesson-chip-text)',
-    'font:600 14px/1 -apple-system,system-ui,sans-serif',
+    'color:#fff',
+    'font:600 16px/1 -apple-system,system-ui,sans-serif',
     'cursor:pointer',
   ].join(';');
-  button.addEventListener('click', () => {
-    toast.remove();
+
+  let reloading = false;
+  const reload = (): void => {
+    if (reloading) return;
+    reloading = true;
+    overlay.remove();
     window.location.reload();
+  };
+
+  button.addEventListener('click', () => {
+    if (reloading) return;
+
+    button.disabled = true;
+    button.textContent = 'Обновляем…';
+    button.style.opacity = '0.7';
+
+    const waiting = registration.waiting;
+    if (!waiting) {
+      reload();
+      return;
+    }
+
+    // Новый воркер активируется и забирает управление; перезагружаемся ровно
+    // один раз — по controllerchange, со страховочным таймером.
+    navigator.serviceWorker.addEventListener('controllerchange', reload, { once: true });
+    waiting.postMessage({ type: 'SKIP_WAITING' });
+    window.setTimeout(reload, 1500);
   });
 
-  toast.append(text, button);
-  document.body.appendChild(toast);
+  panel.append(title, text, button);
+  overlay.appendChild(panel);
+  document.body.appendChild(overlay);
 }
