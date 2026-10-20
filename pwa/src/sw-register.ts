@@ -63,6 +63,15 @@ async function register(): Promise<void> {
       if (document.visibilityState === 'visible') checkForUpdate();
     });
 
+    // Демо-триггер для проверки экрана обновления: /?update-demo=1.
+    // Параметр убираем из адреса, чтобы после перезагрузки окно не появилось снова.
+    const demoUrl = new URL(window.location.href);
+    if (demoUrl.searchParams.get('update-demo') === '1') {
+      demoUrl.searchParams.delete('update-demo');
+      window.history.replaceState(null, '', `${demoUrl.pathname}${demoUrl.search}${demoUrl.hash}`);
+      showUpdateOverlay(registration);
+    }
+
     // Обновление уже ждёт (например, человек перезагрузил вкладку, но воркер
     // ещё не активировался) — показываем экран сразу, не дожидаясь updatefound.
     if (registration.waiting) {
