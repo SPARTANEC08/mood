@@ -15,9 +15,6 @@
  *   npx tsx backend/scripts/delete-user.ts <userId> --yes      # удалить
  */
 import dotenv from 'dotenv';
-import fs from 'node:fs';
-import path from 'node:path';
-
 import { userStore } from '../../db/storage/userStore.ts';
 import { snapshotStore } from '../../db/storage/snapshotStore.ts';
 import { homeworkStore } from '../../db/storage/homeworkStore.ts';
@@ -26,28 +23,10 @@ import { deleteAllFiles, getUserStorageUsage } from '../../db/storage/fileStore.
 
 dotenv.config();
 
-/**
- * Убирает снимок и из памяти, и из файла.
- *
- * `snapshotStore.remove` меняет только кэш (это его штатное поведение — запись
- * идёт общим flush-ом в нотификаторе), поэтому на диске след остаётся. Здесь
- * файл правится сразу: иначе удалённый userId всплывёт при следующем flush
- * работающего процесса из его кэша.
- */
+/** Убирает снимок из хранилища и сразу фиксирует удаление. */
 function purgeSnapshot(userId: string): void {
   snapshotStore.remove(userId);
-
-  const file = path.resolve(process.cwd(), 'db', 'data', 'bars_snapshots.json');
-  try {
-    if (!fs.existsSync(file)) return;
-    const doc = JSON.parse(fs.readFileSync(file, 'utf-8')) as Record<string, unknown>;
-    if (doc && typeof doc === 'object' && userId in doc) {
-      delete doc[userId];
-      fs.writeFileSync(file, JSON.stringify(doc, null, 2), { encoding: 'utf-8', mode: 0o600 });
-    }
-  } catch {
-    // файл недоступен/битый — не критично для удаления записи
-  }
+  snapshotStore.flush();
 }
 
 async function main(): Promise<void> {

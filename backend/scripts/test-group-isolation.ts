@@ -257,7 +257,7 @@ async function main(): Promise<void> {
     !/^(hw|imp)_[a-z0-9]{8}$/.test(makeRecordId('hw')));
 
   console.log('\n— Права на файлы базы —');
-  const st = fs.statSync(path.join(sandbox, 'db', 'data', 'homework.json'));
+  const st = fs.statSync(path.join(sandbox, 'db', 'data', 'mood.sqlite'));
   check('файл базы доступен только владельцу (0600)',
     (st.mode & 0o777) === 0o600, `режим: 0${(st.mode & 0o777).toString(8)}`);
   const dst = fs.statSync(path.join(sandbox, 'db', 'data'));

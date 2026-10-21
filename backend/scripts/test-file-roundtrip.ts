@@ -256,7 +256,7 @@ homeworkStore.save({
   groupName: 'ИЭ-11-26',
   discipline: 'Математика',
   kind: 'practice',
-  targetDate: '2026.10.20',
+  targetDate: '2099.01.10',
   text: 'фото задания',
   files: [fileRef as never],
   authorId: userId,

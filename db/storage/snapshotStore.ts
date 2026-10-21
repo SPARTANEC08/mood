@@ -72,7 +72,7 @@ export const snapshotStore = {
 
   remove(userId: string): UserSnapshot | undefined {
     const removed = store.remove(userId);
-    dirty = false;
+    dirty = true;
     return removed;
   },
 

@@ -1,15 +1,14 @@
 /**
  * Разовый сброс базы пользователей Mood (без ДЗ, объявлений и файлов).
  *
- * - Бэкапит текущий db/data/users.json в db/data/users.backup.json
- * - Перезаписывает файл пустой формой НОВОЙ схемы
+ * Сейчас данные живут в SQLite (`db/data/mood.sqlite`). Скрипт:
+ * - бэкапит файл БД в `db/data/users.backup.sqlite`;
+ * - бэкапит старый `users.json`, если он ещё лежит рядом;
+ * - очищает таблицу `users` (остальные таблицы не трогает);
+ * - оставляет пустой `users.json` — чтобы будущая миграция JSON → SQLite
+ *   не вернула удалённых пользователей.
  *
- * Формат изменился вместе с ключом пользователя: теперь записи лежат под
- * userId (UUID), а рядом два индекса — по Telegram ID и по хэшу логина БАРС.
- * Запись `{}` больше не читается как база, поэтому пишется полная форма.
- *
- * Для полного сброса вместе с ДЗ и файлами есть scripts/reset-db.ts
- * (npm run reset:db).
+ * Запускать при остановленном сервисе: у работающего процесса свои кэши.
  *
  * Запуск: npm run reset:users
  */
@@ -17,49 +16,47 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+import { userStore } from '../../db/storage/userStore.ts';
+import { closeDb, databaseFile } from '../../db/sqlite.ts';
+
 const DATA_DIR = path.resolve(process.cwd(), 'db', 'data');
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
 const BACKUP_FILE = path.join(DATA_DIR, 'users.backup.json');
+const DB_BACKUP = path.join(DATA_DIR, 'users.backup.sqlite');
 
-function countUsers(file: string): number {
-  try {
-    const parsed = JSON.parse(fs.readFileSync(file, 'utf-8')) as {
-      users?: Record<string, unknown>;
-    };
-    // Файл мог остаться в старой форме (плоская карта telegramId -> запись),
-    // поэтому при отсутствии поля users считаются верхнеуровневые ключи.
-    return Object.keys(parsed.users ?? parsed).length;
-  } catch {
-    return 0;
-  }
-}
+const EMPTY_USERS = {
+  users: {},
+  index: { byTelegramId: {}, byBarsLoginHash: {} },
+};
 
 async function resetUsers(): Promise<void> {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 
-  const hadFile = fs.existsSync(USERS_FILE);
-  const total = hadFile ? countUsers(USERS_FILE) : 0;
+  const total = userStore.all().length;
 
-  if (hadFile && total > 0) {
-    fs.copyFileSync(USERS_FILE, BACKUP_FILE);
-    console.log(`✅ Бэкап создан: ${path.relative(process.cwd(), BACKUP_FILE)} (записей: ${total})`);
-  } else if (hadFile) {
-    // Пустая база: предыдущий бэкап не трогаем, чтобы его не потерять
-    console.log('ℹ️  База уже пуста — бэкап не обновляется.');
-  } else {
-    console.log('ℹ️  Файл db/data/users.json не найден — бэкап не создается.');
+  if (fs.existsSync(databaseFile)) {
+    fs.copyFileSync(databaseFile, DB_BACKUP);
+    console.log(
+      `✅ Бэкап БД: ${path.relative(process.cwd(), DB_BACKUP)} (пользователей: ${total})`,
+    );
   }
 
-  // Пустая форма новой схемы: записи и оба индекса обязаны присутствовать,
-  // иначе userStore посчитает файл пустым документом и перезапишет его сам.
-  const empty = {
-    users: {},
-    index: { byTelegramId: {}, byBarsLoginHash: {} },
-  };
+  if (fs.existsSync(USERS_FILE)) {
+    fs.copyFileSync(USERS_FILE, BACKUP_FILE);
+    console.log(`✅ Бэкап старого JSON: ${path.relative(process.cwd(), BACKUP_FILE)}`);
+  }
 
-  fs.writeFileSync(USERS_FILE, `${JSON.stringify(empty, null, 2)}\n`, { mode: 0o600 });
-  console.log('🧹 База пользователей очищена: db/data/users.json — новая пустая схема');
-  console.log('ℹ️  Теперь каждый, кто напишет боту, пройдёт вход через БАРС МЭИ.');
+  userStore.reset();
+  closeDb();
+
+  // Старый файл оставляем пустым: приложение его больше не читает, но миграция
+  // не должна воскресить удалённых пользователей.
+  fs.writeFileSync(USERS_FILE, `${JSON.stringify(EMPTY_USERS, null, 2)}\n`, {
+    mode: 0o600,
+  });
+
+  console.log('🧹 База пользователей очищена: таблица users пуста');
+  console.log('ℹ️  Каждый, кто напишет боту или войдёт в PWA, заведёт запись заново.');
 }
 
 resetUsers().catch((err: unknown) => {

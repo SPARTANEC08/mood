@@ -1,68 +1,55 @@
-import fs from 'fs';
-import path from 'path';
+/**
+ * Хранилища на SQLite с прежним API `JsonStore` / `JsonDocument`.
+ *
+ * Классы оставлены с теми же методами, чтобы модули данных не переписывать:
+ * - `JsonStore<T>` — плоская карта «ключ → запись» (ДЗ, «Важное», снимки,
+ *   админы, bot flows). Пишет/читает строки `records`, а не файл целиком.
+ * - `JsonDocument<T>` — документ целиком (объявления, регистрация, статистика,
+ *   согласия). Хранится одной строкой `documents`.
+ *
+ * Исключение — `users.json`: он разложен по строкам таблицы `users` и пишется
+ * диффом (изменившиеся пользователи), а не всем документом. Это самый горячий
+ * путь: раньше любой patch переписывал ~100 КБ.
+ */
 
-const DATA_DIR = path.resolve(process.cwd(), 'db', 'data');
+import { getDb, databaseFile } from './sqlite.ts';
 
-/** В базе лежат зашифрованные креды и живые cookie-сессии — доступ только владельцу. */
-const DIR_MODE = 0o700;
-const FILE_MODE = 0o600;
+const USERS_DOCUMENT = 'users.json';
 
-function storageErrorLabel(error: unknown): string {
-  if (error && typeof error === 'object' && 'code' in error) {
-    const code = (error as { code?: unknown }).code;
-    if (typeof code === 'string') return code;
-  }
-  return error instanceof Error ? error.name : 'unknown';
+interface UserRow {
+  user_id: string;
+  data: string;
 }
 
-/**
- * Простое хранилище "ключ -> запись" в JSON-файле с атомарной записью.
- */
+/** Плоский стор: одна строка на ключ. */
 export class JsonStore<T> {
-  private readonly file: string;
+  private readonly storeKey: string;
   private cache: Record<string, T> | null = null;
-  private permissionsHardened = false;
+  private readonly dirty = new Set<string>();
+  private readonly removed = new Set<string>();
 
   constructor(fileName: string) {
-    this.file = path.join(DATA_DIR, fileName);
-  }
-
-  /**
-   * Приводит файл к 0600.
-   *
-   * Каталог и файл раньше создавались с правами по умолчанию (0644 при umask
-   * 022), то есть любой локальный пользователь, бэкап-агент или tar дистрива
-   * мог прочитать креды всех студентов. Режим выставляется и на создании, и
-   * принудительно при каждой записи — чтобы починить и уже существующие файлы.
-   */
-  private hardenPermissions(): void {
-    try {
-      fs.chmodSync(DATA_DIR, DIR_MODE);
-    } catch {
-      // нет прав — не критично, файл всё равно закрывается ниже
-    }
-    try {
-      fs.chmodSync(this.file, FILE_MODE);
-    } catch {
-      // файл ещё не существует
-    }
+    this.storeKey = fileName;
   }
 
   all(): Record<string, T> {
     if (this.cache) return this.cache;
-    if (!this.permissionsHardened) {
-      this.hardenPermissions();
-      this.permissionsHardened = true;
+
+    const rows = getDb()
+      .prepare('SELECT key, value FROM records WHERE store = ?')
+      .all(this.storeKey) as Array<{ key: string; value: string }>;
+
+    const out: Record<string, T> = {};
+    for (const row of rows) {
+      try {
+        out[row.key] = JSON.parse(row.value) as T;
+      } catch {
+        // Битая строка не должна ронять всё хранилище.
+      }
     }
-    try {
-      this.cache = fs.existsSync(this.file)
-        ? (JSON.parse(fs.readFileSync(this.file, 'utf-8')) as Record<string, T>)
-        : {};
-    } catch (e) {
-      console.error(`[JsonStore] Не удалось прочитать хранилище (${storageErrorLabel(e)}).`);
-      this.cache = {};
-    }
-    return this.cache;
+
+    this.cache = out;
+    return out;
   }
 
   values(): T[] {
@@ -74,7 +61,7 @@ export class JsonStore<T> {
   }
 
   set(key: string | number, value: T): void {
-    this.all()[String(key)] = value;
+    this.stage(key, value);
     this.save();
   }
 
@@ -84,93 +71,92 @@ export class JsonStore<T> {
     return removed;
   }
 
-  /**
-   * Кладёт значение в кэш без записи на диск. Сброс — через save().
-   * Нужен там, где за один проход накапливается много изменений одного файла.
-   */
   stage(key: string | number, value: T): void {
-    this.all()[String(key)] = value;
+    const id = String(key);
+    this.all()[id] = value;
+    this.dirty.add(id);
+    this.removed.delete(id);
   }
 
-  /**
-   * Удаляет ключ из кэша без записи на диск. Сброс — через save().
-   */
   remove(key: string | number): T | undefined {
-    const existing = this.all()[String(key)];
+    const id = String(key);
+    const existing = this.all()[id];
     if (existing !== undefined) {
-      delete this.all()[String(key)];
+      delete this.all()[id];
+      this.dirty.delete(id);
+      this.removed.add(id);
     }
     return existing;
   }
 
   save(): void {
+    if (this.dirty.size === 0 && this.removed.size === 0) return;
+
+    const db = getDb();
+    const data = this.all();
+    const upsert = db.prepare(
+      'INSERT INTO records(store, key, value) VALUES (?, ?, ?) ' +
+        'ON CONFLICT(store, key) DO UPDATE SET value = excluded.value',
+    );
+    const remove = db.prepare('DELETE FROM records WHERE store = ? AND key = ?');
+
     try {
-      fs.mkdirSync(DATA_DIR, { recursive: true, mode: DIR_MODE });
-      const tmp = `${this.file}.tmp`;
-      // mode действует только при создании, поэтому tmp-файл создаётся с
-      // правильными правами явно, а существующий — ужёстчается после записи.
-      fs.writeFileSync(tmp, JSON.stringify(this.all(), null, 2), { encoding: 'utf-8', mode: FILE_MODE });
-      fs.renameSync(tmp, this.file);
-      this.hardenPermissions();
-    } catch (e) {
-      console.error(`[JsonStore] Не удалось сохранить хранилище (${storageErrorLabel(e)}).`);
+      db.transaction(() => {
+        for (const key of this.dirty) {
+          const value = data[key];
+          if (value === undefined) continue;
+          upsert.run(this.storeKey, key, JSON.stringify(value));
+        }
+        for (const key of this.removed) remove.run(this.storeKey, key);
+      })();
+
+      this.dirty.clear();
+      this.removed.clear();
+    } catch (err: unknown) {
+      console.error(
+        `[SqliteStore] не удалось сохранить ${this.storeKey}:`,
+        err instanceof Error ? err.message : err,
+      );
     }
   }
 }
 
 /**
- * Хранилище структурированного документа: один JSON-файл с произвольной
- * верхнеуровневой формой.
- *
- * Нужно там, где файл — не плоская карта «ключ → запись», а документ с
- * несколькими разделами: у users.json рядом с записями лежат два индекса, и
- * их надо писать в одном файле и одной атомарной операцией. Иначе индекс
- * мог бы оказаться на диске без записей (или наоборот) — то есть база была бы
- * в состоянии, из которого нельзя восстановиться.
- *
- * Файл не перезаписывается, пока не вызван save(): те же правила, что у
- * JsonStore, плюс stage/remove — чтобы за один проход (например, регистрация
- * с обновлением обоих индексов) не писать файл трижды.
+ * Документ: одна строка `documents`. `users.json` — особая ветка с таблицей
+ * пользователей и записью только изменившихся строк.
  */
 export class JsonDocument<T extends object> {
-  private readonly file: string;
+  private readonly name: string;
   private cache: T | null = null;
-  private permissionsHardened = false;
+  /** Последнее сохранённое состояние пользователей: userId → JSON. */
+  private persistedUsers: Map<string, string> | null = null;
 
   constructor(fileName: string) {
-    this.file = path.join(DATA_DIR, fileName);
-  }
-
-  private hardenPermissions(): void {
-    try {
-      fs.chmodSync(DATA_DIR, DIR_MODE);
-    } catch {
-      // нет прав — не критично, файл всё равно закрывается ниже
-    }
-    try {
-      fs.chmodSync(this.file, FILE_MODE);
-    } catch {
-      // файла ещё нет
-    }
+    this.name = fileName;
   }
 
   read(): T {
     if (this.cache) return this.cache;
 
-    if (!this.permissionsHardened) {
-      this.hardenPermissions();
-      this.permissionsHardened = true;
+    if (this.name === USERS_DOCUMENT) {
+      this.cache = this.readUsers() as T;
+      return this.cache;
+    }
+
+    const row = getDb()
+      .prepare('SELECT value FROM documents WHERE name = ?')
+      .get(this.name) as { value: string } | undefined;
+
+    if (!row) {
+      this.cache = {} as T;
+      return this.cache;
     }
 
     try {
-      this.cache = fs.existsSync(this.file)
-        ? (JSON.parse(fs.readFileSync(this.file, 'utf-8')) as T)
-        : ({} as T);
-    } catch (e) {
-      console.error(`[JsonDocument] Не удалось прочитать документ (${storageErrorLabel(e)}).`);
+      this.cache = JSON.parse(row.value) as T;
+    } catch {
       this.cache = {} as T;
     }
-
     return this.cache;
   }
 
@@ -179,35 +165,137 @@ export class JsonDocument<T extends object> {
   }
 
   save(): void {
+    if (this.name === USERS_DOCUMENT) {
+      this.saveUsers();
+      return;
+    }
+
     try {
-      fs.mkdirSync(DATA_DIR, { recursive: true, mode: DIR_MODE });
-      const tmp = `${this.file}.tmp`;
-      fs.writeFileSync(tmp, JSON.stringify(this.read(), null, 2), { encoding: 'utf-8', mode: FILE_MODE });
-      fs.renameSync(tmp, this.file);
-      this.hardenPermissions();
-    } catch (e) {
-      console.error(`[JsonDocument] Не удалось сохранить документ (${storageErrorLabel(e)}).`);
+      getDb()
+        .prepare(
+          'INSERT INTO documents(name, value) VALUES (?, ?) ' +
+            'ON CONFLICT(name) DO UPDATE SET value = excluded.value',
+        )
+        .run(this.name, JSON.stringify(this.read()));
+    } catch (err: unknown) {
+      console.error(
+        `[SqliteDocument] не удалось сохранить ${this.name}:`,
+        err instanceof Error ? err.message : err,
+      );
     }
   }
 
-  /** Полностью перезаписывает файл новым документом (сброс базы). */
   replace(doc: T): void {
     this.cache = doc;
     this.save();
   }
 
-  /** Удаляет файл и сбрасывает кэш — используется при сбросе базы. */
   drop(): void {
     this.cache = null;
-    try {
-      fs.rmSync(this.file, { force: true });
-    } catch (e) {
-      console.error(`[JsonDocument] Не удалось удалить документ (${storageErrorLabel(e)}).`);
+    this.persistedUsers = null;
+
+    if (this.name === USERS_DOCUMENT) {
+      getDb().exec('DELETE FROM users');
+      return;
     }
+
+    getDb().prepare('DELETE FROM documents WHERE name = ?').run(this.name);
   }
 
-  /** Абсолютный путь к файлу — нужен тестам и скриптам сброса. */
+  /** Абсолютный путь к БД — нужен скриптам сброса/бэкапа. */
   get path(): string {
-    return this.file;
+    return databaseFile;
+  }
+
+  /* ───────────────────────────── users ───────────────────────────── */
+
+  private readUsers(): object {
+    const rows = getDb()
+      .prepare('SELECT user_id, data FROM users')
+      .all() as UserRow[];
+
+    const users: Record<string, unknown> = {};
+    const byTelegramId: Record<string, string> = {};
+    const byBarsLoginHash: Record<string, string> = {};
+    const persisted = new Map<string, string>();
+
+    for (const row of rows) {
+      persisted.set(row.user_id, row.data);
+      try {
+        const user = JSON.parse(row.data) as Record<string, unknown>;
+        users[row.user_id] = user;
+        if (typeof user.telegramId === 'number') {
+          byTelegramId[String(user.telegramId)] = row.user_id;
+        }
+        if (typeof user.barsLoginHash === 'string' && user.barsLoginHash) {
+          byBarsLoginHash[user.barsLoginHash] = row.user_id;
+        }
+      } catch {
+        // Битый JSON пользователя пропускаем, остальные остаются доступны.
+      }
+    }
+
+    this.persistedUsers = persisted;
+    return { users, index: { byTelegramId, byBarsLoginHash } };
+  }
+
+  private saveUsers(): void {
+    const doc = this.read() as unknown as {
+      users?: Record<string, Record<string, unknown>>;
+    };
+    const users = doc.users ?? {};
+
+    const next = new Map<string, string>();
+    for (const [userId, user] of Object.entries(users)) {
+      next.set(userId, JSON.stringify(user));
+    }
+
+    const previous = this.persistedUsers ?? new Map<string, string>();
+    const db = getDb();
+
+    const upsert = db.prepare(
+      'INSERT INTO users(user_id, bars_login_hash, telegram_id, data, created_at, updated_at) ' +
+        'VALUES (?, ?, ?, ?, ?, ?) ' +
+        'ON CONFLICT(user_id) DO UPDATE SET ' +
+        '  bars_login_hash = excluded.bars_login_hash, ' +
+        '  telegram_id = excluded.telegram_id, ' +
+        '  data = excluded.data, ' +
+        '  created_at = excluded.created_at, ' +
+        '  updated_at = excluded.updated_at',
+    );
+    const remove = db.prepare('DELETE FROM users WHERE user_id = ?');
+
+    try {
+      db.transaction(() => {
+        for (const [userId, json] of next) {
+          if (previous.get(userId) === json) continue;
+
+          const user = JSON.parse(json) as Record<string, unknown>;
+          const now = new Date().toISOString();
+          const telegramId = typeof user.telegramId === 'number' ? user.telegramId : null;
+          const hash = typeof user.barsLoginHash === 'string' ? user.barsLoginHash : '';
+
+          upsert.run(
+            userId,
+            hash,
+            telegramId,
+            json,
+            typeof user.createdAt === 'string' ? user.createdAt : now,
+            typeof user.updatedAt === 'string' ? user.updatedAt : now,
+          );
+        }
+
+        for (const userId of previous.keys()) {
+          if (!next.has(userId)) remove.run(userId);
+        }
+      })();
+
+      this.persistedUsers = next;
+    } catch (err: unknown) {
+      console.error(
+        '[SqliteDocument] не удалось сохранить users.json:',
+        err instanceof Error ? err.message : err,
+      );
+    }
   }
 }

@@ -27,6 +27,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createInterface } from 'node:readline/promises';
 
+import { closeDb, databaseFile, getDb } from '../../db/sqlite.ts';
+
 const DATA_DIR = path.resolve(process.cwd(), 'db', 'data');
 const BACKUP_DIR = path.join(DATA_DIR, 'backup');
 const FILES_DIR = path.join(DATA_DIR, 'files');
@@ -142,6 +144,9 @@ async function main(): Promise<void> {
   console.log(`   · homework.json — ${describe(path.join(DATA_DIR, 'homework.json'))}`);
   console.log(`   · important.json — ${describe(path.join(DATA_DIR, 'important.json'))}`);
   console.log(`   · bars_snapshots.json — ${describe(path.join(DATA_DIR, 'bars_snapshots.json'))}`);
+  console.log(
+    `   · SQLite — ${fs.existsSync(databaseFile) ? `${(fs.statSync(databaseFile).size / 1024).toFixed(0)} КБ` : 'нет файла'}`,
+  );
   console.log(`   · db/data/files — ${describeFiles()}`);
   console.log('');
 
@@ -167,6 +172,14 @@ async function main(): Promise<void> {
   resetJson('homework.json', {}, backup);
   resetJson('important.json', {}, backup);
   resetJson('bars_snapshots.json', {}, backup);
+
+  // Основное хранилище. DELETE, а не удаление файла: так SQLite сам почистит
+  // WAL и не оставит полуоткрытых страниц.
+  const db = getDb();
+  db.exec('DELETE FROM users; DELETE FROM records; DELETE FROM documents;');
+  closeDb();
+  console.log('   · SQLite: users, records, documents очищены');
+
   resetFiles(backup);
 
   // Права выставляются ещё раз: mkdir выше мог отдать каталог с umask.

@@ -205,7 +205,7 @@ check('Telegram по-прежнему не привязан', userStore.findUser
 // ── /start без адреса не создаёт запись ────────────────────────────────────────
 console.log('\n— /start без адреса —');
 
-const before = Object.keys((JSON.parse(fs.readFileSync(path.join(WORK_DIR, 'db', 'data', 'users.json'), 'utf-8')) as { users: Record<string, unknown> }).users).length;
+const before = userStore.all().length;
 
 const anon = await processTelegramMessage({ id: 888000333, firstName: 'Новый' }, '/start');
 check(
@@ -215,7 +215,7 @@ check(
 );
 check('запись в базе не создана', userStore.findUserByTelegramId(888000333) === undefined);
 
-const after = Object.keys((JSON.parse(fs.readFileSync(path.join(WORK_DIR, 'db', 'data', 'users.json'), 'utf-8')) as { users: Record<string, unknown> }).users).length;
+const after = userStore.all().length;
 check('число записей не изменилось', before === after, `${before} → ${after}`);
 
 // Привязанному /start без адреса показывает меню.
