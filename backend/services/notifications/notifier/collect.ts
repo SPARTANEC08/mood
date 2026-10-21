@@ -11,7 +11,8 @@ import type { SemesterGrades } from '../../bars/parsers/gradesParser.js';
 import type { OrderItem, ScholarshipInfo } from '../../bars/parsers/studentInfoParser.js';
 import { MailAuthError } from '../../mail/mailErrors.ts';
 import { forgetOwaClient, withOwaClient } from '../../mail/owaClientRegistry.ts';
-import type { OsepMessageBrief } from '../../mail/types.js';
+import type { OsepMessageId } from '../../mail/types.js';
+import { MAIL_CHECK_LIMIT } from '../../mail/mailStatusCache.ts';
 import type { StoredUser } from '../../../../db/storage/userStore.ts';
 import { userStore } from '../../../../db/storage/userStore.ts';
 import { safeErrorMessage } from '../../../../tg/format.ts';
@@ -21,7 +22,10 @@ export interface CollectedState {
   grades: SemesterGrades | null;
   orders: OrderItem[] | null;
   scholarship: ScholarshipInfo | null;
-  mails: OsepMessageBrief[] | null;
+  /** Идентификаторы последних писем (без темы/отправителя/тела). */
+  mailIds: OsepMessageId[] | null;
+  /** Счётчики ящика: всего и непрочитанных. */
+  mailStatus: { total: number; unread: number } | null;
 }
 
 /**
@@ -43,10 +47,19 @@ export interface FetchResult {
 export async function collectState(user: StoredUser, now: Date): Promise<FetchResult> {
   const sources = dueSources(user.userId, now);
   if (sources.length === 0) {
-    return { state: { grades: null, orders: null, scholarship: null, mails: null }, fetched: [] };
+    return {
+      state: { grades: null, orders: null, scholarship: null, mailIds: null, mailStatus: null },
+      fetched: [],
+    };
   }
 
-  const state: CollectedState = { grades: null, orders: null, scholarship: null, mails: null };
+  const state: CollectedState = {
+    grades: null,
+    orders: null,
+    scholarship: null,
+    mailIds: null,
+    mailStatus: null,
+  };
   const service = await createBarsServiceForUser(user);
   const scraper = service.getScraper();
 
@@ -88,7 +101,13 @@ export async function collectState(user: StoredUser, now: Date): Promise<FetchRe
           // Тот же клиент, что и у /api/mail: общий jar и очередь на userId,
           // иначе два параллельных входа выбивали бы сессии друг друга.
           await withOwaClient(user, async (mail) => {
-            state.mails = await mail.fetchMessageBriefs({ onlyUnread: false, limit: 15 });
+            // Только счётчики и ID: темы, отправители и тела писем не читаются.
+            const [status, ids] = await Promise.all([
+              mail.getInboxStatus(),
+              mail.fetchMessageIds({ limit: MAIL_CHECK_LIMIT }),
+            ]);
+            state.mailStatus = { total: status.total, unread: status.unread };
+            state.mailIds = ids;
             userStore.setOwaAuth(user.userId, mail.serializeCookies());
           });
         } catch (err: unknown) {
@@ -124,7 +143,7 @@ export async function collectState(user: StoredUser, now: Date): Promise<FetchRe
 
   // Неуспешный IMAP-запрос оставляет mail due: следующий цикл попробует ещё
   // раз вместо того, чтобы считать почту проверенной и терять целый интервал.
-  const fetched = sources.filter((source) => source !== 'mail' || state.mails !== null);
+  const fetched = sources.filter((source) => source !== 'mail' || state.mailIds !== null);
 
   return {
     state,

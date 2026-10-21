@@ -19,4 +19,3 @@ export {
   type BarsSnapshotOptions,
 } from './barsSnapshot/cache.ts';
 
-export { MAIL_PREVIEW_LIMIT } from './barsSnapshot/load.ts';

@@ -73,25 +73,24 @@ section('Снимок после доставки (защита от потер�
 
 section('Дифф: лимит писем и «+N за неделю»');
 {
-  const mails = Array.from({ length: 9 }, (_, index) => ({
+  const mailIds = Array.from({ length: 9 }, (_, index) => ({
     uid: 101 + index,
     date: new Date(),
-    from: `Отправитель ${index}`,
-    subject: `Письмо ${index}`,
-    hasAttachments: false,
-    isSeen: false,
   }));
 
   const mailEvents = diffSnapshots(
     snapshot({ lastSeenMailUid: 100 }),
     snapshot({ lastSeenMailUid: 109 }),
-    { mails },
+    { mailIds },
   );
   const mailEvent = mailEvents.find((event) => event.kind === 'mail');
   check('событие почты есть', Boolean(mailEvent));
-  // Заголовок + строка-разделитель отсутствует (lines — только письма); 9 писем
-  // должны обрезаться до 5.
-  check('не больше 5 писем в уведомлении', (mailEvent?.lines.length ?? 0) === 5, String(mailEvent?.lines.length));
+  check(
+    'в заголовке девять новых писем',
+    mailEvent?.title.includes('9 новых писем') === true,
+    String(mailEvent?.title),
+  );
+  check('списка писем в уведомлении нет', (mailEvent?.lines.length ?? -1) === 0);
   check('emoji письма — 📧', mailEvent?.title.includes('📧') === true, String(mailEvent?.title));
 
   const gradeEvents = diffSnapshots(

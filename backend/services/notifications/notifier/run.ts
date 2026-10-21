@@ -15,8 +15,7 @@ import { safeErrorMessage } from '../../../../tg/format.ts';
 import { snapshotStore, type UserSnapshot } from '../../../../db/storage/snapshotStore.ts';
 import { toMoscow } from '../../../utils/time.ts';
 import { forgetBarsClient, forgetBarsSessionValid } from '../../bars/barsServiceFactory.ts';
-import { MAIL_PREVIEW_LIMIT } from '../../bars/barsSnapshotCache.ts';
-import { clearMailPreview, putMailPreview } from '../../mail/mailPreviewCache.ts';
+import { clearMailStatus, putMailStatus } from '../../mail/mailStatusCache.ts';
 import { forgetOwaClient } from '../../mail/owaClientRegistry.ts';
 import { forget, markActive, markChecked, notifierPollOverrideMs } from '../pollSchedule.ts';
 import { collectState } from './collect.ts';
@@ -106,30 +105,14 @@ export async function checkUser(
   const { state, fetched } = await collectState(user, now);
   markChecked(user.userId, fetched, now);
 
-  // Превью почты для интерфейса собираем ЗДЕСЬ ЖЕ. Это единственный путь, которым
-  // почта попадает в приложение: пользователь её вручную не обновляет, а
-  // приложение читает готовое (peekMailPreview). Если на этом круге почту не
-  // смогли получить (state.mails === null), прежнее превью не трогаем — пусть
-  // останется последнее известное.
-  if (state.mails !== null) {
-    const unread = state.mails.filter((m) => !m.isSeen);
-    const messages = unread
-      .slice()
-      .sort((a, b) => b.date.getTime() - a.date.getTime() || b.uid - a.uid)
-      .slice(0, MAIL_PREVIEW_LIMIT)
-      .map((m) => ({
-        uid: m.uid,
-        from: m.from,
-        subject: m.subject,
-        date: m.date.toISOString(),
-        isSeen: m.isSeen,
-        hasAttachments: m.hasAttachments,
-      }));
-
-    putMailPreview(user.userId, {
-      total: state.mails.length,
-      unseen: unread.length,
-      messages,
+  // Статус почты для интерфейса: только числа, без содержимого писем.
+  // Если на этом круге почту получить не удалось (state.mailIds === null),
+  // прежний статус не трогаем — пусть останется последнее известное число.
+  if (state.mailIds !== null && state.mailStatus !== null) {
+    putMailStatus(user.userId, {
+      total: state.mailStatus.total,
+      unseen: state.mailStatus.unread,
+      lastUid: state.mailIds.reduce((max, message) => Math.max(max, message.uid), 0),
     });
   }
 
@@ -140,10 +123,10 @@ export async function checkUser(
     gradesHash:
       state.grades !== null ? buildGradesHash(state.grades) : (prev?.gradesHash ?? {}),
     lastSeenMailUid:
-      state.mails !== null
+      state.mailIds !== null
         ? Math.max(
             prev?.lastSeenMailUid ?? 0,
-            state.mails.reduce((max, m) => Math.max(max, m.uid), 0),
+            state.mailIds.reduce((max, message) => Math.max(max, message.uid), 0),
           )
         : (prev?.lastSeenMailUid ?? 0),
     ordersCount: state.orders !== null ? state.orders.length : (prev?.ordersCount ?? 0),
@@ -158,7 +141,7 @@ export async function checkUser(
   // где часть полей восстановлена из prev, событий не даёт.
   const events = diffSnapshots(prev, next, {
     grades: state.grades ?? undefined,
-    mails: state.mails ?? undefined,
+    mailIds: state.mailIds ?? undefined,
     orders: state.orders ?? undefined,
   });
 
@@ -282,7 +265,7 @@ export async function runCycle(): Promise<void> {
         if (/сессия/i.test(msg) || /SessionExpiredError/.test(msg)) {
           userStore.clearAuth(user.userId);
           snapshotStore.remove(user.userId);
-          clearMailPreview(user.userId);
+          clearMailStatus(user.userId);
           forget(user.userId);
           // clearAuth сбрасывает и owaAuth — клиент с прежней сессией больше
           // не нужен, иначе следующий заход пойдёт со старым jar. Кэш

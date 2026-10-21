@@ -1,32 +1,36 @@
 /**
- * /api/mail — непрочитанные письма корпоративной почты ОСЭП (источник — OWA).
+ * /api/mail — статус корпоративной почты ОСЭП (источник — OWA).
+ *
+ * Приложение не читает письма: ни темы, ни отправителя, ни тело. Маршрут отдаёт
+ * только `{ total, unseen }` — сколько всего и сколько непрочитанных. Этого
+ * достаточно для строки «Почта» в «Кабинете».
  *
  * Почту штатно обновляет фоновый нотификатор (раз в 20 минут, тот же цикл, что
- * и пуши), а маршрут отдаёт готовое превью из `mailPreviewCache`. Если превью
+ * и пуши), а маршрут отдаёт готовый статус из `mailStatusCache`. Если статуса
  * ещё нет (свежий процесс, первый заход до круга нотификатора) — маршрут сам
- * один раз забирает список через `OwaMailClient` и кэширует его, чтобы блок
- * почты не был пустым.
+ * один раз забирает счётчики и минимальные ID писем.
  *
  * IMAP (:993) не используется: его режет Forefront TMG. Источник — веб-интерфейс
  * `https://mail.mpei.ru/owa` (см. `owaMailClient.ts`).
  *
- * Контракт ответа (`MailResponse`) не менялся: `{ total, unseen, messages }`.
- * Изменился только код отказа: 409 `mail_reauth_required` вместо 401. PWA-токен
- * здесь валиден, поэтому 401 означал бы «разлогиньте всё приложение» и рано или
- * поздно сработал бы в общем обработчике. Тело содержит подтип причины, чтобы
+ * Ошибка входа в OWA — 409 `mail_reauth_required` (не 401): PWA-токен здесь
+ * валиден, и 401 разлогинил бы всё приложение. В теле — подтип причины, чтобы
  * клиент не показывал «проверьте пароль» при сломанной форме или 2FA.
  */
 
 import type { FastifyInstance } from 'fastify';
 
-import { MAIL_PREVIEW_LIMIT } from '../../services/bars/barsSnapshotCache.ts';
 import {
   MAIL_AUTH_MESSAGES,
   MailAuthError,
   MailTimeoutError,
   MailUnreachableError,
 } from '../../services/mail/mailErrors.ts';
-import { peekMailPreview, putMailPreview } from '../../services/mail/mailPreviewCache.ts';
+import {
+  MAIL_CHECK_LIMIT,
+  peekMailStatus,
+  putMailStatus,
+} from '../../services/mail/mailStatusCache.ts';
 import { forgetOwaClient, withOwaClient } from '../../services/mail/owaClientRegistry.ts';
 import { type StoredUser, userStore } from '../../../db/storage/userStore.ts';
 import { requireBars } from '../middleware/auth.ts';
@@ -36,18 +40,14 @@ export async function registerMailRoutes(app: FastifyInstance): Promise<void> {
     const student = requireBars(request);
 
     try {
-      const preview = peekMailPreview(student.userId) ?? (await loadPreview(student));
+      const status = peekMailStatus(student.userId) ?? (await loadStatus(student));
 
-      if (!preview) {
-        // Данных ещё нет и нотификатор не успел — отдаём пустой список, не ошибку.
-        return reply.send({ total: 0, unseen: 0, messages: [] });
+      if (!status) {
+        // Данных ещё нет и нотификатор не успел — отдаём нули, не ошибку.
+        return reply.send({ total: 0, unseen: 0 });
       }
 
-      return reply.send({
-        total: preview.total,
-        unseen: preview.unseen,
-        messages: preview.messages,
-      });
+      return reply.send({ total: status.total, unseen: status.unseen });
     } catch (err: unknown) {
       if (err instanceof MailUnreachableError) {
         return reply.code(503).send({ error: 'mail_unreachable', message: err.message });
@@ -71,33 +71,29 @@ export async function registerMailRoutes(app: FastifyInstance): Promise<void> {
 }
 
 /**
- * Одноразовый заход в OWA, если превью ещё нет. Бросает типизированные ошибки
+ * Одноразовый заход в OWA, если статуса ещё нет. Бросает типизированные ошибки
  * (`MailUnreachableError`/`MailAuthError`/`MailTimeoutError`) — маршрут их ловит.
  *
  * Клиент берётся из реестра на пользователя, поэтому параллельный круг
  * нотификатора не перезапишет cookies отдельного jar'а.
  */
-async function loadPreview(student: StoredUser) {
+async function loadStatus(student: StoredUser) {
   await withOwaClient(student, async (mail) => {
-    const status = await mail.getInboxStatus();
-    const briefs = await mail.fetchMessageBriefs({ limit: MAIL_PREVIEW_LIMIT, onlyUnread: true });
+    // Счётчики + минимальные ID (только дата получения). Содержимое не читаем.
+    const [status, ids] = await Promise.all([
+      mail.getInboxStatus(),
+      mail.fetchMessageIds({ limit: MAIL_CHECK_LIMIT }),
+    ]);
 
     // Сессия могла быть поднята заново — сохраняем cookies для следующих вызовов.
     userStore.setOwaAuth(student.userId, mail.serializeCookies());
 
-    putMailPreview(student.userId, {
+    putMailStatus(student.userId, {
       total: status.total,
       unseen: status.unread,
-      messages: briefs.map((b) => ({
-        uid: b.uid,
-        from: b.from,
-        subject: b.subject,
-        date: b.date.toISOString(),
-        isSeen: b.isSeen,
-        hasAttachments: b.hasAttachments,
-      })),
+      lastUid: ids.reduce((max, message) => Math.max(max, message.uid), 0),
     });
   });
 
-  return peekMailPreview(student.userId);
+  return peekMailStatus(student.userId);
 }

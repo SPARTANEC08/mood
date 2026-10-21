@@ -64,10 +64,10 @@ async function main(): Promise<void> {
     const status = await client.getInboxStatus();
     console.log(`\n✅ GetFolder: всего ${status.total}, непрочитанных ${status.unread}`);
 
-    const briefs = await client.fetchMessageBriefs({ limit: 5, onlyUnread: false });
-    console.log(`FindItem: последних писем ${briefs.length}`);
-    for (const m of briefs) {
-      console.log(`  ${m.isSeen ? ' ' : '•'} ${m.date.toISOString()} | ${m.from} | ${m.subject}`);
+    const ids = await client.fetchMessageIds({ limit: 5 });
+    console.log(`FindItem: последних писем ${ids.length}`);
+    for (const m of ids) {
+      console.log(`  ${m.date.toISOString()} | uid ${m.uid}`);
     }
   } catch (err: unknown) {
     if (err instanceof MailAuthError) {

@@ -187,11 +187,10 @@ async function main(): Promise<void> {
     mock.serviceCanaries = [];
 
     const client = new OwaMailClient({ user: 'st000001', pass: 'secret' }, { baseUrl: origin });
-    const briefs = await client.fetchMessageBriefs({ limit: 10, onlyUnread: false });
-    check('одно письмо, не обёртка', briefs.length === 1, String(briefs.length));
-    check('тема разобрана', briefs[0]?.subject === 'Тема письма', String(briefs[0]?.subject));
-    check('отправитель разобран', briefs[0]?.from === 'Деканат', String(briefs[0]?.from));
-    check('вложение отмечено', briefs[0]?.hasAttachments === true);
+    const ids = await client.fetchMessageIds({ limit: 10 });
+    check('одно письмо, не обёртка', ids.length === 1, String(ids.length));
+    check('UID — число', typeof ids[0]?.uid === 'number' && ids[0].uid > 0, String(ids[0]?.uid));
+    check('дата разобрана', ids[0]?.date instanceof Date);
   }
 
   section('449 → повтор со свежим canary');

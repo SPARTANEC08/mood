@@ -10,7 +10,7 @@ import type { FastifyInstance } from 'fastify';
 
 import { cachedBarsSessionValid, isBarsSessionValid } from '../../../services/bars/barsServiceFactory.ts';
 import { getGroupSchedule, peekScheduleDateRange } from '../../../scheduleCache.ts';
-import { peekMailPreview } from '../../../services/mail/mailPreviewCache.ts';
+import { peekMailStatus } from '../../../services/mail/mailStatusCache.ts';
 import { PWA_TOKEN_TTL_MS } from '../../../utils/pwaAuth.ts';
 import { toMoscow } from '../../../utils/time.ts';
 import { isBarsAuthorized } from '../../../../db/storage/userStore.ts';
@@ -122,7 +122,7 @@ export function registerBootstrapRoutes(app: FastifyInstance): void {
       // фоновый нотификатор, и НЕ подгружается: bootstrap открывает приложение,
       // а поход в IMAP — отдельная авторизация на сервере МЭИ. Пока превью нет,
       // значок просто не показывается.
-      mailUnread = peekMailPreview(student.userId)?.unseen ?? null;
+      mailUnread = peekMailStatus(student.userId)?.unseen ?? null;
     }
 
     const response: BootstrapResponse = {

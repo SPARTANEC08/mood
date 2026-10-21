@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
 import {
   BookOpen,
+  ChevronRight,
   CircleCheck,
   GitBranch,
   GraduationCap,
@@ -14,12 +15,13 @@ import {
 
 import { Header } from '@/components/TabBar';
 import { Page } from '@/components/Page';
-import { Card, EmptyState, ListGroup, Row, SkeletonCard, Toast } from '@/components/ui';
+import { Card, ListGroup, Row, SkeletonCard, Toast } from '@/components/ui';
 import { RefreshIndicator } from '@/components/RefreshIndicator';
 import { usePullToRefresh } from '@/components/PullToRefresh';
 import { NotificationsCard } from '@/components/profile/NotificationsCard';
 import { ThemeCard } from '@/components/profile/ThemeCard';
 import { useAppData } from '@/lib/dataContext';
+import { plural } from '@/lib/dates';
 import { haptic, openLink } from '@/lib/env';
 import { logout } from '@/auth';
 import type { BootstrapResponse } from '@/types/api';
@@ -59,6 +61,7 @@ export function ProfilePage({ profile }: { profile: BootstrapResponse }) {
   // ошибки тоже нет — показываем скелет соответствующего блока, а не ложное
   // «писем нет»/«стипендия не назначена» на первом кадре захода на вкладку.
   const mailPending = !mail && !mailError;
+  const unseen = typeof mail?.unseen === 'number' ? mail.unseen : 0;
   const morePending = !more && !moreError;
 
   const { profile: p, barsAuthorized } = profile;
@@ -132,62 +135,44 @@ export function ProfilePage({ profile }: { profile: BootstrapResponse }) {
           ) : null}
         </Card>
 
-        {/* Почта ОСЭП */}
+        {/* Почта ОСЭП — только количество, без списка и тел писем */}
         <section>
           <h2 className="mb-2 px-1 text-[13px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
             Почта ОСЭП
           </h2>
-
-          {mailPending ? (
-            <div className="space-y-2.5">
-              <SkeletonCard lines={1} />
-              <SkeletonCard lines={1} />
-              <SkeletonCard lines={1} />
-            </div>
-          ) : mailError ? (
-            // Ошибка может прийти только от транспорта (сеть/сессия): почту
-            // обновляет нотификатор, кнопки ручного повтора нет намеренно.
-            <Card className="px-4 py-4">
-              <div className="flex items-center gap-2">
-                <Mail size={16} style={{ color: 'var(--danger)' }} aria-hidden />
-                <p className="flex-1 text-[13px]" style={{ color: 'var(--danger)' }}>
-                  {mailError}
-                </p>
-              </div>
-            </Card>
-          ) : mail && mail.messages.length > 0 ? (
-            <ListGroup>
-              {mail.messages.map((message) => (
-                <Row key={message.uid}>
-                  <div className="flex items-start gap-3">
-                    <Mail
-                      size={15}
-                      className="mt-0.5 shrink-0"
-                      style={{ color: message.isSeen ? 'var(--text-tertiary)' : 'var(--accent)' }}
-                      aria-hidden
-                    />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-baseline justify-between gap-2">
-                        <span className="truncate text-[14px] font-medium">{message.from}</span>
-                        <span className="shrink-0 text-[11px] text-[var(--text-tertiary)]">
-                          {formatTime(message.date)}
-                        </span>
-                      </div>
-                      <p
-                        className="mt-0.5 truncate text-[13px]"
-                        style={{ color: message.isSeen ? 'var(--text-secondary)' : 'var(--text-primary)' }}
-                      >
-                        {message.subject}
-                      </p>
-                    </div>
-                  </div>
-                </Row>
-              ))}
-            </ListGroup>
-          ) : (
-            <EmptyState icon={<Mail size={30} aria-hidden />} title="Непрочитанных писем нет" />
-          )}
-
+          <Card className="overflow-hidden">
+            <button
+              type="button"
+              onClick={() => {
+                haptic('light');
+                openLink('https://mail.mpei.ru/owa');
+              }}
+              className="pressable flex w-full items-center gap-3 px-4 py-3 text-left active:pressable-active"
+            >
+              <Mail
+                size={18}
+                className="shrink-0"
+                style={{ color: unseen > 0 ? 'var(--accent)' : 'var(--text-tertiary)' }}
+                aria-hidden
+              />
+              <span className="min-w-0 flex-1">
+                <span className="block text-[14px] font-medium">Почта</span>
+                <span
+                  className="block text-[12px]"
+                  style={{ color: mailError ? 'var(--danger)' : 'var(--text-tertiary)' }}
+                >
+                  {mailError
+                    ? mailError
+                    : mailPending
+                      ? 'Проверяем…'
+                      : unseen > 0
+                        ? `${unseen} ${plural(unseen, 'новое письмо', 'новых письма', 'новых писем')}`
+                        : 'Нет новых писем'}
+                </span>
+              </span>
+              <ChevronRight size={16} className="shrink-0" style={{ color: 'var(--text-tertiary)' }} aria-hidden />
+            </button>
+          </Card>
         </section>
 
         <NotificationsCard profile={p} />
@@ -433,18 +418,3 @@ export function NeedLoginScreen({ onReLogin }: { onReLogin: () => void }) {
   );
 }
 
-/** «9 окт, 14:30» → «9 окт» или «сегодня» */
-function formatTime(iso: string): string {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return '';
-
-  const now = new Date();
-  const sameDay = date.toDateString() === now.toDateString();
-
-  if (sameDay) {
-    return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
-  }
-
-  const months = ['янв', 'фев', 'мар', 'апр', 'мая', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
-  return `${date.getDate()} ${months[date.getMonth()]}`;
-}

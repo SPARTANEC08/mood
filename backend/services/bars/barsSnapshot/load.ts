@@ -11,41 +11,22 @@
  */
 
 import { buildSubjectReport } from '../../../gradeCalculator.ts';
-import type { BarsSnapshotResponse, BarsMoreResponse, ApiMailMessage } from '../../../server/types.ts';
+import type { BarsSnapshotResponse, BarsMoreResponse } from '../../../server/types.ts';
 import type { AttendanceSummary } from '../parsers/attendanceParser.js';
 import type { SemesterGrades, SubjectGrade } from '../parsers/gradesParser.js';
 import type { BarsService } from '../barsService.ts';
 import { emptyAcademic, summarizeAcademic } from './summarize.ts';
 
 /**
- * Источник почты для снимка (структурный тип).
+ * Один полный обход БАРС.
  *
- * Снимок БАРС почту больше не собирает (её ведёт нотификатор в
- * `mailPreviewCache`), поэтому жёсткая зависимость от конкретного клиента не
- * нужна: параметр оставлен структурным, чтобы не тянуть в снимок ни IMAP-, ни
- * OWA-клиент. Фактически всегда передаётся `null`.
+ * Почта в снимок больше не входит: она не читается, а её счётчики ведёт
+ * нотификатор (`mailStatusCache`). Параметр оставлен ради совместимости
+ * сигнатуры и намеренно не используется.
  */
-interface MailSource {
-  getInboxStatus: () => Promise<{ total: number; unseen: number }>;
-  fetchMessages: (options: { onlyUnread: boolean; limit: number }) => Promise<
-    Array<{
-      uid: number;
-      from: string;
-      subject: string;
-      date: Date;
-      isSeen: boolean;
-      hasAttachments: boolean;
-    }>
-  >;
-}
-
-/** Сколько последних писем отдавать в превью. */
-export const MAIL_PREVIEW_LIMIT = 8;
-
-/** Один полный обход: БАРС обязательно, почта — по возможности. */
 export async function loadSnapshot(
   barsService: BarsService,
-  mailClient: MailSource | null,
+  _mailClient: unknown = null,
 ): Promise<BarsSnapshotResponse> {
   const scraper = barsService.getScraper();
 
@@ -59,31 +40,23 @@ export async function loadSnapshot(
   // Обязательные разделы идут в одном allSettled вместе с необязательными:
   // рейтинг и успеваемость для /api/bars/more необязательны, а без них
   // блок отдаётся пустым — потерянный рейтинг лучше пустой полоски.
-  const [gradesRes, attendanceRes, moreRes, mailRes] = await Promise.allSettled([
+  const [gradesRes, attendanceRes, moreRes] = await Promise.allSettled([
     gradesPromise,
     scraper.getAttendance(),
     collectMore(scraper, gradesPromise),
-    // Почта в снимок не собирается: её обновляет только фоновый нотификатор
-    // (preview для интерфейса — mailPreviewCache). mailClient здесь всегда null,
-    // а отсутствие почты в снимке — не ошибка.
-    mailClient
-      ? collectMail(mailClient)
-      : Promise.resolve({ value: null, error: null }),
   ]);
 
   if (gradesRes.status === 'rejected') throw gradesRes.reason;
   if (attendanceRes.status === 'rejected') throw attendanceRes.reason;
   if (moreRes.status === 'rejected') throw moreRes.reason;
 
-  const mail = mailRes.status === 'fulfilled' ? mailRes.value.value : null;
-  const mailError = mailRes.status === 'fulfilled' ? mailRes.value.error : messageOf(mailRes.reason);
-
   return {
     grades: buildGrades(gradesRes.value),
     attendance: buildAttendance(attendanceRes.value),
     more: moreRes.value,
-    mail,
-    mailError,
+    // Почта в снимке БАРС не участвует: её статус живёт в mailStatusCache.
+    mail: null,
+    mailError: null,
     fetchedAt: new Date().toISOString(),
   };
 }
@@ -129,43 +102,6 @@ async function collectMore(
     rating: rating.status === 'fulfilled' ? rating.value : emptyRating(),
     academic: academic.status === 'fulfilled' ? summarizeAcademic(academic.value.subjects) : emptyAcademic(),
   });
-}
-
-/** Превью писем без вложений и тел — только то, что видно в списке. */
-async function collectMail(mail: MailSource): Promise<{
-  value: BarsSnapshotResponse['mail'];
-  error: string | null;
-}> {
-  try {
-    const [status, messages] = await Promise.all([
-      mail.getInboxStatus(),
-      mail.fetchMessages({ onlyUnread: true, limit: MAIL_PREVIEW_LIMIT }),
-    ]);
-
-    return {
-      value: {
-        total: status.total,
-        unseen: status.unseen,
-        messages: messages.map<ApiMailMessage>((m) => ({
-          uid: m.uid,
-          from: m.from,
-          subject: m.subject,
-          date: m.date instanceof Date ? m.date.toISOString() : new Date().toISOString(),
-          isSeen: m.isSeen,
-          hasAttachments: m.hasAttachments,
-        })),
-      },
-      error: null,
-    };
-  } catch (err: unknown) {
-    // Почта — единственный раздел, который может упасть, не уронив снимок:
-    // человек всё равно увидит оценки и приказы.
-    return { value: null, error: messageOf(err) };
-  }
-}
-
-function messageOf(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
 }
 
 /** Оценки в форму API: тот же расчёт, что и в боте. */

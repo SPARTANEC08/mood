@@ -15,5 +15,11 @@ export {
   type MailAuthReason,
 } from './mailErrors.ts';
 export { forgetOwaClient, owaClientCacheStats, withOwaClient } from './owaClientRegistry.ts';
-export { peekMailPreview, putMailPreview, clearMailPreview, type MailPreview } from './mailPreviewCache.ts';
-export type { OsepCredentials, OsepMessageBrief, OsepFolderStatus, OsepMessage, FetchMessagesOptions } from './types.js';
+export {
+  peekMailStatus,
+  putMailStatus,
+  clearMailStatus,
+  MAIL_CHECK_LIMIT,
+  type MailStatus,
+} from './mailStatusCache.ts';
+export type { OsepCredentials, OsepMessageId, OsepFolderStatus } from './types.js';

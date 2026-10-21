@@ -235,22 +235,12 @@ export interface BarsMoreResponse {
   };
 }
 
-/** Письмо ОСЭП в API. */
-export interface ApiMailMessage {
-  uid: number;
-  from: string;
-  subject: string;
-  /** ISO-дата для форматирования на клиенте. */
-  date: string;
-  isSeen: boolean;
-  hasAttachments: boolean;
-}
-
 /** Ответ GET /api/mail. */
 export interface MailResponse {
+  /** Всего писем в ящике (для диагностики). */
   total: number | null;
+  /** Непрочитанных сейчас — это число показывает строка «Почта». */
   unseen: number | null;
-  messages: ApiMailMessage[];
 }
 
 /**

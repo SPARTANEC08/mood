@@ -106,7 +106,6 @@ export function Shell({
         active={tab}
         onChange={onTab}
         onAdd={() => onOpenAddSheet('homework')}
-        badges={{ profile: profile.mailUnread ?? undefined }}
       />
 
       {/*

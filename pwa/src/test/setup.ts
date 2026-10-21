@@ -343,32 +343,6 @@ const more: BarsMoreResponse = {
 const mail: MailResponse = {
   total: 42,
   unseen: 2,
-  messages: [
-    {
-      uid: 3,
-      from: 'Деканат ИЭТЭ',
-      subject: 'Собрание группы в четверг',
-      date: new Date(nowMs - 2 * 3_600_000).toISOString(),
-      isSeen: false,
-      hasAttachments: false,
-    },
-    {
-      uid: 2,
-      from: 'Преподаватель Петров П. П.',
-      subject: 'Материалы к лабораторной',
-      date: new Date(nowMs - 6 * 3_600_000).toISOString(),
-      isSeen: false,
-      hasAttachments: true,
-    },
-    {
-      uid: 1,
-      from: 'Библиотека НТБ',
-      subject: 'Напоминание о возврате книги',
-      date: new Date(nowMs - DAY).toISOString(),
-      isSeen: true,
-      hasAttachments: false,
-    },
-  ],
 };
 
 const bootstrap: BootstrapResponse = {

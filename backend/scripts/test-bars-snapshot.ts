@@ -27,7 +27,6 @@ import {
 
 /** Счётчики вызовов подмены: по ним видно, ходили ли мы куда-нибудь. */
 let barsCalls = 0;
-let mailCalls = 0;
 
 const scraper = {
   async getCurrentSemesterGrades() {
@@ -85,26 +84,6 @@ const service = { getScraper: () => scraper } as unknown as Parameters<
   typeof getBarsSnapshot
 >[1];
 
-const mailClient = {
-  async getInboxStatus() {
-    mailCalls += 1;
-    return { total: 3, unseen: 2 };
-  },
-  async fetchMessages() {
-    mailCalls += 1;
-    return [
-      {
-        uid: 1,
-        from: 'dean@mpei.ru',
-        subject: 'О приёме',
-        date: new Date(),
-        isSeen: false,
-        hasAttachments: false,
-      },
-    ];
-  },
-} as unknown as Parameters<typeof getBarsSnapshot>[2];
-
 let failures = 0;
 let checks = 0;
 
@@ -128,10 +107,9 @@ console.log('\n=== Снимок БАРС и почты в памяти ===\n');
 
 console.log('— Первая загрузка —');
 {
-  const snapshot = await getBarsSnapshot('u1', service, mailClient);
+  const snapshot = await getBarsSnapshot('u1', service, null);
 
   check('сделан полный обход БАРС', barsCalls === CALLS_PER_LOAD, String(barsCalls));
-  check('сделан поход в IMAP', mailCalls === 2, String(mailCalls));
   check('оценки посчитаны', snapshot.grades.overallAverage === 5);
   check(
     'задолженности и закрытые КМ посчитаны',
@@ -139,15 +117,15 @@ console.log('— Первая загрузка —');
     JSON.stringify(snapshot.more.academic),
   );
   check('приказы на месте', snapshot.more.orders.length === 1);
-  check('почта внутри снимка', snapshot.mail?.unseen === 2 && snapshot.mailError === null);
+  check('почта не входит в снимок', snapshot.mail === null && snapshot.mailError === null);
   check('проставлено время загрузки', typeof snapshot.fetchedAt === 'string');
 }
 
 console.log('\n— Повторный запрос читает кэш —');
 {
-  const again = await getBarsSnapshot('u1', service, mailClient);
+  const again = await getBarsSnapshot('u1', service, null);
 
-  check('в сеть не сходили', barsCalls === CALLS_PER_LOAD && mailCalls === 2);
+  check('в сеть не сходили', barsCalls === CALLS_PER_LOAD, String(barsCalls));
   check('отдан тот же объект снимка', again === (peekBarsSnapshot('u1') ?? null));
 }
 
@@ -157,8 +135,8 @@ console.log('\n— Дедупликация параллельных запро�
   const before = barsCalls;
 
   const [first, second] = await Promise.all([
-    getBarsSnapshot('u1', service, mailClient),
-    getBarsSnapshot('u1', service, mailClient),
+    getBarsSnapshot('u1', service, null),
+    getBarsSnapshot('u1', service, null),
   ]);
 
   check('оба вызова получили один промис', first === second);
@@ -167,10 +145,10 @@ console.log('\n— Дедупликация параллельных запро�
 
 console.log('\n— force пробивает TTL —');
 {
-  const warm = await getBarsSnapshot('u1', service, mailClient);
+  const warm = await getBarsSnapshot('u1', service, null);
   const before = barsCalls;
 
-  const forced = await getBarsSnapshot('u1', service, mailClient, { force: true });
+  const forced = await getBarsSnapshot('u1', service, null, { force: true });
 
   check('force ушёл в сеть', barsCalls - before === CALLS_PER_LOAD, String(barsCalls - before));
   // Ключевое: stale-while-revalidate не должен срабатывать на форсированном
@@ -192,16 +170,9 @@ console.log('\n— Изоляция ошибок —');
 {
   invalidateBarsSnapshot('u2');
 
-  const brokenMail = {
-    getInboxStatus: async () => {
-      throw new Error('imap недоступен');
-    },
-    fetchMessages: async () => [],
-  } as unknown as Parameters<typeof getBarsSnapshot>[2];
-
-  const snapshot = await getBarsSnapshot('u2', service, brokenMail);
-  check('упавшая почта не роняет снимок', snapshot.grades.subjects.length === 1);
-  check('почта помечена недоступной', snapshot.mail === null && snapshot.mailError !== null);
+  const snapshot = await getBarsSnapshot('u2', service, null);
+  check('снимок собирается без почты', snapshot.grades.subjects.length === 1);
+  check('почта в снимке не участвует', snapshot.mail === null && snapshot.mailError === null);
 
   invalidateBarsSnapshot('u3');
 
@@ -216,7 +187,7 @@ console.log('\n— Изоляция ошибок —');
 
   let caught: unknown = null;
   try {
-    await getBarsSnapshot('u3', brokenBars, mailClient);
+    await getBarsSnapshot('u3', brokenBars, null);
   } catch (err: unknown) {
     caught = err;
   }

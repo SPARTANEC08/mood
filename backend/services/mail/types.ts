@@ -12,34 +12,14 @@ export interface OsepFolderStatus {
   unseen: number;
 }
 
-export interface OsepMessage {
-  uid: number;
-  date: Date;
-  from: string;      // ФИО или email отправителя
-  fromAddress: string;
-  subject: string;
-  snippet: string;   // Первые 150 символов текста без переносов и HTML
-  hasAttachments: boolean;
-  attachmentNames: string[];
-  isSeen: boolean;
-}
-
-export interface FetchMessagesOptions {
-  onlyUnread: boolean;
-  limit: number;
-}
-
 /**
- * Краткая карточка письма — только метаданные из IMAP ENVELOPE и BODYSTRUCTURE.
+ * Минимум для проверки «есть ли новое письмо».
  *
- * Тело письма при этом не скачивается. Нужна там, где требуется лишь понять,
- * что письмо новое: отправитель, тема, дата, наличие вложений и прочитано ли оно.
+ * Тема, отправитель, вложения и тело не запрашиваются: приложению нужно только
+ * понять, что письмо появилось, и посчитать количество. UID — время получения
+ * в миллисекундах (OWA ItemId сессионный и для диффа не годится).
  */
-export interface OsepMessageBrief {
+export interface OsepMessageId {
   uid: number;
   date: Date;
-  from: string;
-  subject: string;
-  hasAttachments: boolean;
-  isSeen: boolean;
 }

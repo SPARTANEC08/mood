@@ -48,7 +48,7 @@ import { CookieJar } from 'tough-cookie';
 import * as cheerio from 'cheerio';
 
 import { MailAuthError, MailTimeoutError, MailUnreachableError } from './mailErrors.ts';
-import type { OsepMessageBrief } from './types.js';
+import type { OsepMessageId } from './types.js';
 
 const OWA_ORIGIN = 'https://mail.mpei.ru';
 const OWA_TIMEOUT_MS = 20_000;
@@ -454,7 +454,14 @@ export class OwaMailClient {
    * FindItem умеет Restriction, но для превью и нотификатора достаточно взять
    * последние `limit` и отфильтровать прочитанные на месте.
    */
-  async fetchMessageBriefs(options: { limit: number; onlyUnread?: boolean }): Promise<OsepMessageBrief[]> {
+  /**
+   * Запрашивает идентификаторы последних писем — без темы, отправителя и тела.
+   *
+   * Нужно только для проверки «пришло ли новое»: сервер возвращает ItemId и
+   * дату получения, по которой считается UID. Никакого содержимого письма
+   * приложение не читает.
+   */
+  async fetchMessageIds(options: { limit: number }): Promise<OsepMessageId[]> {
     await this.ensureSession();
 
     const json = await this.serviceRequest('FindItem', {
@@ -465,15 +472,10 @@ export class OwaMailClient {
         ItemShape: {
           __type: 'ItemResponseShape:#Exchange',
           BaseShape: 'IdOnly',
-          // Точные FieldURI: `item:From` и `item:IsRead` сервер отвергает
-          // («Invalid value … for enum PropertyUriEnum») — у From и IsRead
-          // пространство имён `message:`, а не `item:`.
+          // Только дата получения: по ней считается стабильный UID. Тему,
+          // отправителя, IsRead и вложения не запрашиваем.
           AdditionalProperties: [
-            { __type: 'PropertyUri:#Exchange', FieldURI: 'item:Subject' },
             { __type: 'PropertyUri:#Exchange', FieldURI: 'item:DateTimeReceived' },
-            { __type: 'PropertyUri:#Exchange', FieldURI: 'message:From' },
-            { __type: 'PropertyUri:#Exchange', FieldURI: 'item:HasAttachments' },
-            { __type: 'PropertyUri:#Exchange', FieldURI: 'message:IsRead' },
           ],
         },
         ParentFolderIds: [{ __type: 'DistinguishedFolderId:#Exchange', Id: 'inbox' }],
@@ -494,15 +496,9 @@ export class OwaMailClient {
       },
     });
 
-    /*
-     * Письма лежат в `Body.ResponseMessages.Items[0].RootFolder.Items`.
-     *
-     * Старый `firstArray(json, 'Items')` брал первый массив с именем `Items` —
-     * а это и есть `ResponseMessages.Items`, то есть обёртки ответа, а не
-     * письма. В результате превью состояло из одной «пустой» карточки
-     * («Неизвестный отправитель», «Без темы»). Разбираем путь явно, с откатом на
-     * прежний поиск, если сервер вернул другую форму.
-     */
+    // Форма ответа та же, что была у списка писем: элементы лежат в
+    // ResponseMessages[].RootFolder.Items. Разбираем путь явно, с откатом на
+    // прежний поиск, если сервер вернул другую форму.
     const messages = owaResponseMessages(json);
     const items: Array<Record<string, unknown>> = [];
 
@@ -519,10 +515,10 @@ export class OwaMailClient {
       items.push(...firstArray(json, 'Items'));
     }
 
-    const briefs: OsepMessageBrief[] = items.map((item) => mapItem(item));
-
-    if (options.onlyUnread) return briefs.filter((b) => !b.isSeen);
-    return briefs;
+    return items.map((item) => {
+      const date = parseOwaDate(item.DateTimeReceived);
+      return { uid: date.getTime(), date };
+    });
   }
 
   // ── низкоуровневое ────────────────────────────────────────────────────────
@@ -857,34 +853,6 @@ function owaFaultMessage(root: unknown): string | null {
   }
 
   return null;
-}
-
-/** Разбор одного OWA-элемента в brief. */
-function mapItem(item: Record<string, unknown>): OsepMessageBrief {
-  const date = parseOwaDate(item.DateTimeReceived);
-  const from = extractFrom(item.From);
-  const subject = typeof item.Subject === 'string' ? item.Subject.trim() : '';
-
-  return {
-    // OWA ItemId сессионный (меняется при перелогине), поэтому как стабильный
-    // ключ для диффа «новых писем» берём время получения в миллисекундах.
-    uid: date.getTime(),
-    date,
-    from: from || 'Неизвестный отправитель',
-    subject: subject || '(Без темы)',
-    hasAttachments: item.HasAttachments === true,
-    isSeen: item.IsRead === true,
-  };
-}
-
-function extractFrom(value: unknown): string {
-  if (!value || typeof value !== 'object') return '';
-  const mailbox = (value as Record<string, unknown>).Mailbox;
-  if (!mailbox || typeof mailbox !== 'object') return '';
-  const m = mailbox as Record<string, unknown>;
-  const name = typeof m.Name === 'string' ? m.Name.trim() : '';
-  const address = typeof m.EmailAddress === 'string' ? m.EmailAddress.trim() : '';
-  return name || address;
 }
 
 function parseOwaDate(value: unknown): Date {

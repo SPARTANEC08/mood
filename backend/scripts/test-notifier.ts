@@ -161,17 +161,21 @@ async function run(): Promise<void> {
       scholarshipStatus: 'нет',
     }),
     {
-      mails: [
-        { uid: 100, date: new Date(), from: 'Старое письмо', subject: 'Старое', hasAttachments: false, isSeen: true },
-        { uid: 101, date: new Date(), from: 'Деканат', subject: 'Новое письмо 1', hasAttachments: false, isSeen: false },
-        { uid: 102, date: new Date(), from: 'Преподаватель', subject: 'Новое письмо 2', hasAttachments: true, isSeen: false },
-        { uid: 103, date: new Date(), from: 'Библиотека', subject: 'Новое письмо 3', hasAttachments: false, isSeen: false },
+      mailIds: [
+        { uid: 100, date: new Date() },
+        { uid: 101, date: new Date() },
+        { uid: 102, date: new Date() },
+        { uid: 103, date: new Date() },
       ],
     },
   );
   check('новый mail UID -> событие mail', mailEvent.length === 1 && mailEvent[0].kind === 'mail');
-  check('дифф содержит три письма с новыми UID', mailEvent[0]?.lines.length === 3);
-  check('старое письмо не попало в уведомление', mailEvent[0]?.lines.every((line) => !line.includes('Старое')) === true);
+  check(
+    'в заголовке три новых письма',
+    mailEvent[0]?.title.includes('3 новых письма') === true,
+    String(mailEvent[0]?.title),
+  );
+  check('списка писем в уведомлении нет', (mailEvent[0]?.lines.length ?? -1) === 0);
 
   const orderEvent = diffSnapshots(
     prev,

@@ -10,7 +10,7 @@ import { b, esc, fmtNum, i, RULE } from '../../../../tg/format.js';
 import { isBaselineSnapshot, type UserSnapshot } from '../../../../db/storage/snapshotStore.js';
 import type { SemesterGrades } from '../../bars/parsers/gradesParser.js';
 import type { OrderItem, ScholarshipInfo } from '../../bars/parsers/studentInfoParser.js';
-import type { OsepMessageBrief } from '../../mail/types.js';
+import type { OsepMessageId } from '../../mail/types.js';
 
 /**
  * Собирает ключи баллов вида "Дисциплина_КТ1" из страницы успеваемости.
@@ -77,7 +77,7 @@ export function diffSnapshots(
   next: UserSnapshot,
   context: {
     grades?: SemesterGrades;
-    mails?: OsepMessageBrief[];
+    mailIds?: OsepMessageId[];
     orders?: OrderItem[];
   } = {},
 ): NotificationEvent[] {
@@ -126,24 +126,15 @@ export function diffSnapshots(
     });
   }
 
-  // 2. Новые письма ОСЭП
+  // 2. Новые письма ОСЭП — только факт и количество, без тем и отправителей.
   if (next.lastSeenMailUid > prev.lastSeenMailUid) {
-    const fresh = (context.mails ?? [])
-      .filter((m) => m.uid > prev.lastSeenMailUid)
-      .sort((a, b) => a.uid - b.uid)
-      .slice(0, 5);
-
-    const lines = fresh.length > 0
-      ? fresh.map((m) => {
-          const att = m.hasAttachments ? '  📎' : '';
-          return `• ${b(esc(truncate(m.subject, 60)))}${att}\n   ${i(esc(truncate(m.from, 40)))}`;
-        })
-      : [i('Подробнее — в приложении, раздел «Кабинет».')];
+    const fresh = (context.mailIds ?? []).filter((m) => m.uid > prev.lastSeenMailUid).length;
+    const count = Math.max(1, fresh);
 
     events.push({
       kind: 'mail',
-      title: `📧 ${b('Новое письмо на почте МЭИ')}`,
-      lines,
+      title: `📧 ${b(mailTitle(count))}`,
+      lines: [],
     });
   }
 
@@ -175,6 +166,19 @@ export function diffSnapshots(
   return events;
 }
 
+/** Заголовок уведомления о почте с правильной формой слова. */
+function mailTitle(count: number): string {
+  if (count === 1) return 'У вас новое письмо';
+
+  const mod10 = count % 10;
+  const mod100 = count % 100;
+  const word =
+    mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)
+      ? 'новых письма'
+      : 'новых писем';
+  return `У вас ${count} ${word}`;
+}
+
 /**
  * Собирает текст сообщения из событий.
  *
@@ -183,6 +187,8 @@ export function diffSnapshots(
  * выглядит неожиданно, и часть пользователей просто её не нажимает.
  */
 export function renderNotification(events: NotificationEvent[]): string {
-  const blocks = events.map((event) => [event.title, RULE, ...event.lines].join('\n'));
+  const blocks = events.map((event) =>
+    [event.title, ...(event.lines.length > 0 ? [RULE, ...event.lines] : [])].join('\n'),
+  );
   return [...blocks, i('Управление — кнопками ниже.')].join('\n\n');
 }

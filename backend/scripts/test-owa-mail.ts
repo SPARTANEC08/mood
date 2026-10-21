@@ -109,19 +109,15 @@ async function main(): Promise<void> {
       return;
     }
 
-    const briefs = await client.fetchMessageBriefs({ limit: 10, onlyUnread: true });
-    if (briefs.length === 0) {
-      console.log('✅ Непрочитанных писем нет.');
+    const ids = await client.fetchMessageIds({ limit: 10 });
+    if (ids.length === 0) {
+      console.log('✅ Писем нет.');
       return;
     }
 
-    console.log(`Непрочитанные (${briefs.length}):`);
-    for (const m of briefs) {
-      console.log('--------------------------------------------------');
+    console.log(`Последние письма (${ids.length}):`);
+    for (const m of ids) {
       console.log(`📩 [uid ${m.uid}] ${formatDate(m.date)}`);
-      console.log(`От: ${m.from}`);
-      console.log(`Тема: ${m.subject}`);
-      console.log(`Вложения: ${m.hasAttachments ? 'да' : 'нет'}`);
     }
   } finally {
     rl.close();
