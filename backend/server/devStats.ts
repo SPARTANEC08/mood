@@ -46,6 +46,28 @@ const MINUTE_MS = 60_000;
 /** Запись в файл окна — не чаще раза в 5 минут: сервер слабый, I/O бережём. */
 const SAVE_THROTTLE_MS = 5 * 60 * 1000;
 
+/**
+ * Окно, в течение которого повторный bootstrap не считается новым заходом.
+ * Приложение может перезапросить bootstrap (перелогин, возврат вкладки), и без
+ * этого «Заходов» становилось бы больше, чем реальных открытий.
+ */
+const VISIT_DEBOUNCE_MS = 30 * 60 * 1000;
+
+/**
+ * Служебные запросы: опросы уведомлений, обновление токена и превью файлов —
+ * это не действия человека. Раньше они попадали в «запросы» и обновляли
+ * «последнюю активность», из-за чего фоновые процессы выглядели как заходы.
+ */
+function isBackgroundRequest(path: string): boolean {
+  return (
+    path === '/api/announcements/next' ||
+    path === '/api/notifications/state' ||
+    path === '/api/auth/refresh' ||
+    path === '/api/auth/config' ||
+    path.endsWith('/preview')
+  );
+}
+
 interface MinuteBucket {
   /** Начало минуты, ms. */
   at: number;
@@ -67,6 +89,8 @@ interface MinuteBucket {
 const buckets = new Map<number, MinuteBucket>();
 /** Последняя активность пользователя — для «онлайн сейчас». */
 const lastSeen = new Map<string, number>();
+/** Когда пользователю последний раз засчитывали заход (антидубль bootstrap). */
+const lastVisit = new Map<string, number>();
 
 let savedAt = 0;
 
@@ -106,6 +130,9 @@ function prune(now: number): void {
   }
   for (const [id, ts] of lastSeen) {
     if (ts < now - 60 * 60 * 1000) lastSeen.delete(id);
+  }
+  for (const [id, ts] of lastVisit) {
+    if (ts < now - 24 * 60 * 60 * 1000) lastVisit.delete(id);
   }
 }
 
@@ -150,18 +177,28 @@ function load(): void {
 
 /* ──────────────────────────── запись метрик ──────────────────────────── */
 
-/** Активность: запрос пользователя. */
+/** Активность: запрос пользователя. Служебные опросы сюда не входят. */
 export function recordActivity(userId: string | undefined, url = '', ts: number = Date.now()): void {
   if (!userId) return;
+
+  const path = url.split('?')[0] || '';
+  if (isBackgroundRequest(path)) return;
 
   const bucket = bucketFor(ts);
   bucket.requests += 1;
   pushUnique(bucket.users, userId);
   lastSeen.set(userId, ts);
 
-  // Заход в приложение: загрузка приложения всегда начинается с bootstrap, и
-  // это ровно один запрос на открытие — отдельного эндпоинта не заводим.
-  if (url.split('?')[0] === '/api/bootstrap') bucket.visits += 1;
+  // Заход в приложение: загрузка приложения всегда начинается с bootstrap.
+  // Считаем его один раз в VISIT_DEBOUNCE_MS — повторные bootstrap (перелогин,
+  // возврат вкладки) не должны раздувать число заходов.
+  if (path === '/api/bootstrap') {
+    const previous = lastVisit.get(userId) ?? 0;
+    if (ts - previous >= VISIT_DEBOUNCE_MS) {
+      bucket.visits += 1;
+      lastVisit.set(userId, ts);
+    }
+  }
 
   save();
 }
@@ -294,10 +331,16 @@ function barsState(user: StoredUser): StatsSessionRow['bars'] {
   return hasBars ? 'expired' : 'none';
 }
 
-/** Последний заход: запись в сторе пишется при активности, плюс живые счётчики. */
-function lastSeenAt(user: StoredUser): number {
-  const stored = Date.parse(user.updatedAt ?? '');
-  return Math.max(Number.isNaN(stored) ? 0 : stored, lastSeen.get(user.userId) ?? 0);
+/**
+ * Последняя активность человека.
+ *
+ * Раньше здесь брался `user.updatedAt`, но его меняет фоновый нотификатор
+ * (сохранение OWA-сессии при проверке почты), и чужая фоновая работа выглядела
+ * как заход. Теперь только реальные запросы: живые счётчики плюс минутные
+ * корзины, восстановленные после рестарта.
+ */
+function lastSeenAt(user: StoredUser, fromBuckets: Map<string, number>): number {
+  return Math.max(lastSeen.get(user.userId) ?? 0, fromBuckets.get(user.userId) ?? 0);
 }
 
 /** Файлы пользователей с кэшем на минуту: скан диска не должен идти на запрос. */
@@ -359,6 +402,13 @@ export function getStats(options: { windowEnd?: number } = {}): StatsResponse {
   const inWindow = [...buckets.values()]
     .filter((bucket) => bucket.at + MINUTE_MS > windowStart && bucket.at <= windowEnd)
     .sort((a, b) => a.at - b.at);
+
+  // Последняя активность по корзинам: после рестарта живой map пуст, но окно
+  // восстанавливается из stats_window.json, и человек не «пропадает» из среза.
+  const lastFromBuckets = new Map<string, number>();
+  for (const bucket of inWindow) {
+    for (const id of bucket.users) lastFromBuckets.set(id, bucket.at);
+  }
 
   let requests = 0;
   let visits = 0;
@@ -444,7 +494,7 @@ export function getStats(options: { windowEnd?: number } = {}): StatsResponse {
         id: user.userId,
         name: displayName(user),
         group: user.groupName ?? user.studentProfile?.groupName ?? '',
-        lastSeenAt: lastSeenAt(user),
+        lastSeenAt: lastSeenAt(user, lastFromBuckets),
         bars: barsState(user),
         telegram: typeof user.telegramId === 'number',
         notifications: typeof user.telegramId === 'number' && user.notificationsEnabled !== false,
