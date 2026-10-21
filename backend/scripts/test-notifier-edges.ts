@@ -86,8 +86,8 @@ section('Дифф: лимит писем и «+N за неделю»');
   const mailEvent = mailEvents.find((event) => event.kind === 'mail');
   check('событие почты есть', Boolean(mailEvent));
   check(
-    'в заголовке девять новых писем',
-    mailEvent?.title.includes('9 новых писем') === true,
+    'в заголовке только тип — новое письмо',
+    mailEvent?.title.includes('Новое письмо') === true,
     String(mailEvent?.title),
   );
   check('списка писем в уведомлении нет', (mailEvent?.lines.length ?? -1) === 0);
@@ -120,10 +120,9 @@ section('Базовая линия и подпись');
   const baseline = diffSnapshots(undefined, snapshot({ lastSeenMailUid: 5 }), {});
   check('без прежнего снимка событий нет', baseline.length === 0);
 
-  const text = renderNotification([
-    { kind: 'order', title: '📄 Приказы', lines: ['• №1'] },
-  ]);
-  check('подпись про кнопки', text.includes('кнопками ниже'));
+  const text = renderNotification({ kind: 'order', title: '📄 Новый приказ', lines: ['• №1'] });
+  check('в Telegram уходит только тип', text === '📄 Новый приказ', text);
+  check('деталей нет', !text.includes('№1'));
 }
 
 section('Границы окна и состояние цикла');

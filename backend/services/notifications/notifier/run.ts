@@ -58,7 +58,11 @@ const PER_USER_TIMEOUT_MS = 60 * 1000;
  * Функция отправки сообщения конкретному пользователю.
  * Регистрируется telegramService, чтобы сервис не зависел от grammY.
  */
-export type NotificationSender = (chatId: number, text: string) => Promise<void>;
+export type NotificationSender = (
+  chatId: number,
+  text: string,
+  kind?: NotificationEvent['kind'],
+) => Promise<void>;
 
 let sender: NotificationSender | null = null;
 let timer: NodeJS.Timeout | null = null;
@@ -164,7 +168,11 @@ export async function checkUser(
       console.log(
         `[Notifier] → Telegram ${user.telegramId}: ${events.map((event) => event.kind).join(', ')}`,
       );
-      await sender(user.telegramId, renderNotification(events));
+      // Каждое событие — отдельным сообщением: в Telegram уходит только тип,
+      // без деталей, поэтому смешивать их в одну пачку незачем.
+      for (const event of events) {
+        await sender(user.telegramId, renderNotification(event), event.kind);
+      }
       delivered = true;
       console.log(`[Notifier] доставлено (${user.telegramId})`);
     } catch (err: unknown) {

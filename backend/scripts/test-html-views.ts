@@ -321,13 +321,12 @@ section('Тексты пуш-уведомлений');
 
   check('найдены события', events.length > 0, `получено ${events.length}`);
 
-  const rendered = renderNotification(events);
+  const rendered = events.map(renderNotification).join('\n');
   auditAll('Уведомления', rendered);
   check('emoji баллов', rendered.includes('🎓'));
   check('emoji приказов', rendered.includes('📄'));
   check('emoji стипендии', rendered.includes('💰'));
-  check('есть прирост за неделю', /За неделю:.*\+/.test(rendered));
-  check('есть подпись про кнопки', rendered.includes('кнопками ниже'));
+  check('в Telegram только типы, без деталей', !rendered.includes('За неделю') && !rendered.includes('№1'));
 }
 
 section('Разделительные полосы: перенос на узких экранах');

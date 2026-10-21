@@ -144,16 +144,22 @@ export async function initTelegramBot(): Promise<void> {
      */
     const osepLoginUrl = 'https://mail.mpei.ru/owa/#path=/mail';
 
-    setNotificationSender(async (chatId, text) => {
+    setNotificationSender(async (chatId, text, kind) => {
+      // В Telegram — только тип события. Кнопка «Скрыть» убрана: сообщение
+      // остаётся в переписке, как обычное уведомление, и не требует уборки.
+      // «Перейти в ОСЭП» показываем только для писем — для оценок и приказов
+      // она бессмысленна.
+      const keyboard =
+        kind === 'mail'
+          ? [
+              [{ text: '📧 Перейти в ОСЭП', url: osepLoginUrl }],
+              [{ text: '🏠 В главное меню', callback_data: 'notif_menu' }],
+            ]
+          : [[{ text: '🏠 В главное меню', callback_data: 'notif_menu' }]];
+
       await bot.api.sendMessage(chatId, text, {
         parse_mode: HTML_PARSE_MODE,
-        reply_markup: {
-          inline_keyboard: [
-            [{ text: '📧 Перейти в ОСЭП', url: osepLoginUrl }],
-            [{ text: '🏠 В главное меню', callback_data: 'notif_menu' }],
-            [{ text: '✕ Скрыть', callback_data: 'notif_dismiss' }],
-          ],
-        },
+        reply_markup: { inline_keyboard: keyboard },
       });
     });
 

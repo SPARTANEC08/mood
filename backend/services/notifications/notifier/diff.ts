@@ -6,7 +6,7 @@
  * уведомлений не порождает.
  */
 
-import { b, esc, fmtNum, i, RULE } from '../../../../tg/format.js';
+import { b, esc, fmtNum, i } from '../../../../tg/format.js';
 import { isBaselineSnapshot, type UserSnapshot } from '../../../../db/storage/snapshotStore.js';
 import type { SemesterGrades } from '../../bars/parsers/gradesParser.js';
 import type { OrderItem, ScholarshipInfo } from '../../bars/parsers/studentInfoParser.js';
@@ -121,7 +121,7 @@ export function diffSnapshots(
 
     events.push({
       kind: 'grade',
-      title: `🎓 ${b('Новые баллы')}`,
+      title: `🎓 ${b('Новые оценки')}`,
       lines,
     });
   }
@@ -133,7 +133,7 @@ export function diffSnapshots(
 
     events.push({
       kind: 'mail',
-      title: `📧 ${b(mailTitle(count))}`,
+      title: `📧 ${b('Новое письмо')}`,
       lines: [],
     });
   }
@@ -149,7 +149,7 @@ export function diffSnapshots(
 
     events.push({
       kind: 'order',
-      title: `📄 ${b('Новые приказы')}`,
+      title: `📄 ${b('Новый приказ')}`,
       lines: [`Новых приказов: ${b(String(added))}`, ...latest],
     });
   }
@@ -158,7 +158,7 @@ export function diffSnapshots(
   if (next.scholarshipStatus !== prev.scholarshipStatus) {
     events.push({
       kind: 'scholarship',
-      title: `💰 ${b('Изменение стипендии')}`,
+      title: `💰 ${b('Изменилась стипендия')}`,
       lines: [`Статус: ${esc(next.scholarshipStatus)}`],
     });
   }
@@ -166,29 +166,13 @@ export function diffSnapshots(
   return events;
 }
 
-/** Заголовок уведомления о почте с правильной формой слова. */
-function mailTitle(count: number): string {
-  if (count === 1) return 'У вас новое письмо';
-
-  const mod10 = count % 10;
-  const mod100 = count % 100;
-  const word =
-    mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)
-      ? 'новых письма'
-      : 'новых писем';
-  return `У вас ${count} ${word}`;
-}
-
 /**
- * Собирает текст сообщения из событий.
+ * Текст уведомления для Telegram.
  *
- * Снизу добавляется подпись: главное сообщение бота перезаписывается при каждом
- * действии, а уведомление остаётся в переписке. Без пояснения кнопка «Скрыть»
- * выглядит неожиданно, и часть пользователей просто её не нажимает.
+ * Только тип события: без дисциплин, баллов, тем писем, номеров приказов и
+ * статусов стипендии. Детали остаются в объекте события (`lines`) — их сможет
+ * показать приложение, но в Telegram они не уходят.
  */
-export function renderNotification(events: NotificationEvent[]): string {
-  const blocks = events.map((event) =>
-    [event.title, ...(event.lines.length > 0 ? [RULE, ...event.lines] : [])].join('\n'),
-  );
-  return [...blocks, i('Управление — кнопками ниже.')].join('\n\n');
+export function renderNotification(event: NotificationEvent): string {
+  return event.title;
 }

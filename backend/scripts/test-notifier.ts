@@ -171,8 +171,8 @@ async function run(): Promise<void> {
   );
   check('новый mail UID -> событие mail', mailEvent.length === 1 && mailEvent[0].kind === 'mail');
   check(
-    'в заголовке три новых письма',
-    mailEvent[0]?.title.includes('3 новых письма') === true,
+    'в заголовке только тип — новое письмо',
+    mailEvent[0]?.title.includes('Новое письмо') === true,
     String(mailEvent[0]?.title),
   );
   check('списка писем в уведомлении нет', (mailEvent[0]?.lines.length ?? -1) === 0);
@@ -223,7 +223,7 @@ async function run(): Promise<void> {
   check('null -> null не даёт события', unclosed.length === 0);
 
   section('Рендер уведомления');
-  const text = renderNotification(multi);
+  const text = multi.map(renderNotification).join('\n');
   check('рендер содержит заголовок', text.includes('🎓'));
   check('рендер не пустой', text.trim().length > 0);
 
