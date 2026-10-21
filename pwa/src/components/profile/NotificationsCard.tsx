@@ -11,7 +11,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { Bell, BellOff, ChevronRight, Mail } from 'lucide-react';
+import { Bell, BellOff } from 'lucide-react';
 
 import { Card } from '@/components/ui';
 import { api } from '@/lib/api';
@@ -26,20 +26,6 @@ import type { BootstrapProfile } from '@/types/api';
  * используется бот по умолчанию — кнопка не должна исчезать из-за .env.
  */
 const TELEGRAM_BOT_USERNAME = import.meta.env.VITE_TELEGRAM_BOT_USERNAME || 'mood_mpei_bot';
-
-/**
- * Ссылка на почту ОСЭП.
- *
- * Та же, что в кнопке уведомления в боте: ведёт сразу в папку «Почта»
- * веб-интерфейса OWA. Прежние адреса (голый `/owa` и FBA-эндпоинт
- * `CookieAuth.dll`) давали лишний шаг с выбором компьютера и ошибку после него.
- *
- * Логина и пароля в ссылке нет: приложение не входит в почту за человека,
- * оно только даёт адрес. Уходит из приложения через openLink: в браузере — в
- * новой вкладке, в установленном приложении (iOS/TWA) — во внешний браузер,
- * а не в webview без адресной строки.
- */
-const OSEP_LOGIN_URL = 'https://mail.mpei.ru/owa/#path=/mail';
 
 export function NotificationsCard({ profile }: { profile: BootstrapProfile }) {
   const [telegramId, setTelegramId] = useState<number | null>(profile.telegramId ?? null);
@@ -130,24 +116,6 @@ export function NotificationsCard({ profile }: { profile: BootstrapProfile }) {
         </button>
       </div>
 
-      {/*
-        Прямая ссылка на почту. Без памяток и пояснений: человеку нужен адрес,
-        а инструкции про VPN и формат логина только мешают.
-      */}
-      <div className="mt-3 border-t border-[var(--separator-soft)] pt-3">
-        <button
-          type="button"
-          onClick={() => {
-            haptic('light');
-            openLink(OSEP_LOGIN_URL);
-          }}
-          className="pressable flex w-full items-center gap-3 text-left active:pressable-active"
-        >
-          <Mail size={18} className="shrink-0" style={{ color: 'var(--accent)' }} aria-hidden />
-          <span className="min-w-0 flex-1 text-[14px] font-medium">Открыть почту ОСЭП</span>
-          <ChevronRight size={16} className="shrink-0" style={{ color: 'var(--text-tertiary)' }} aria-hidden />
-        </button>
-      </div>
     </Card>
   );
 }
