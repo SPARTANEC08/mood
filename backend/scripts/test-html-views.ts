@@ -316,7 +316,6 @@ section('Тексты пуш-уведомлений');
       ordersCount: 3,
       scholarshipStatus: 'Академическая, 01.09.2026-31.01.2027',
     }),
-    { grades },
   );
 
   check('найдены события', events.length > 0, `получено ${events.length}`);

@@ -81,7 +81,6 @@ section('Дифф: лимит писем и «+N за неделю»');
   const mailEvents = diffSnapshots(
     snapshot({ lastSeenMailUid: 100 }),
     snapshot({ lastSeenMailUid: 109 }),
-    { mailIds },
   );
   const mailEvent = mailEvents.find((event) => event.kind === 'mail');
   check('событие почты есть', Boolean(mailEvent));
@@ -90,37 +89,23 @@ section('Дифф: лимит писем и «+N за неделю»');
     mailEvent?.title.includes('Новое письмо') === true,
     String(mailEvent?.title),
   );
-  check('списка писем в уведомлении нет', (mailEvent?.lines.length ?? -1) === 0);
   check('emoji письма — 📧', mailEvent?.title.includes('📧') === true, String(mailEvent?.title));
 
   const gradeEvents = diffSnapshots(
     snapshot({ gradesHash: { 'Матан_КТ1': 10, 'Физика_КТ1': 20 } }),
     snapshot({ gradesHash: { 'Матан_КТ1': 25, 'Физика_КТ1': 20 } }),
-    {
-      grades: grades([
-        {
-          discipline: 'Матан',
-          controlType: 'Экзамен',
-          controlPoints: [{ number: 1, score: 25, weight: 100 }],
-          weekScores: [],
-          totalScore: 25,
-        },
-      ]),
-    },
   );
   const gradeEvent = gradeEvents.find((event) => event.kind === 'grade');
-  const gainedLine = gradeEvent?.lines.find((line) => line.includes('За неделю'));
-  check('есть прирост за неделю', Boolean(gainedLine), JSON.stringify(gradeEvent?.lines));
-  check('прирост = +15 (только рост)', gainedLine?.includes('+15') === true, String(gainedLine));
+  check('событие оценок есть', Boolean(gradeEvent));
   check('emoji баллов — 🎓', gradeEvent?.title.includes('🎓') === true, String(gradeEvent?.title));
 }
 
 section('Базовая линия и подпись');
 {
-  const baseline = diffSnapshots(undefined, snapshot({ lastSeenMailUid: 5 }), {});
+  const baseline = diffSnapshots(undefined, snapshot({ lastSeenMailUid: 5 }));
   check('без прежнего снимка событий нет', baseline.length === 0);
 
-  const text = renderNotification({ kind: 'order', title: '📄 Новый приказ', lines: ['• №1'] });
+  const text = renderNotification({ kind: 'order', title: '📄 Новый приказ' });
   check('в Telegram уходит только тип', text === '📄 Новый приказ', text);
   check('деталей нет', !text.includes('№1'));
 }

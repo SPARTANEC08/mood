@@ -150,7 +150,7 @@ async function run(): Promise<void> {
     }),
   );
   check('изменение балла -> событие grade', gradeEvent.length === 1 && gradeEvent[0].kind === 'grade');
-  check('в событии указан дельтa', gradeEvent[0]?.lines[0]?.includes('+5') === true);
+  check('тип события — новые оценки', gradeEvent[0]?.title.includes('Новые оценки') === true, String(gradeEvent[0]?.title));
 
   const mailEvent = diffSnapshots(
     prev,
@@ -160,14 +160,6 @@ async function run(): Promise<void> {
       ordersCount: 5,
       scholarshipStatus: 'нет',
     }),
-    {
-      mailIds: [
-        { uid: 100, date: new Date() },
-        { uid: 101, date: new Date() },
-        { uid: 102, date: new Date() },
-        { uid: 103, date: new Date() },
-      ],
-    },
   );
   check('новый mail UID -> событие mail', mailEvent.length === 1 && mailEvent[0].kind === 'mail');
   check(
@@ -175,7 +167,6 @@ async function run(): Promise<void> {
     mailEvent[0]?.title.includes('Новое письмо') === true,
     String(mailEvent[0]?.title),
   );
-  check('списка писем в уведомлении нет', (mailEvent[0]?.lines.length ?? -1) === 0);
 
   const orderEvent = diffSnapshots(
     prev,
@@ -187,7 +178,7 @@ async function run(): Promise<void> {
     }),
   );
   check('рост числа приказов -> событие order', orderEvent.length === 1 && orderEvent[0].kind === 'order');
-  check('в событии указано число новых', orderEvent[0]?.lines[0]?.includes('2') === true);
+  check('тип события — новый приказ', orderEvent[0]?.title.includes('Новый приказ') === true, String(orderEvent[0]?.title));
 
   const scholEvent = diffSnapshots(
     prev,

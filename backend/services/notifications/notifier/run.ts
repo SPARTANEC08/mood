@@ -143,11 +143,7 @@ export async function checkUser(
 
   // Уведомления строим только по фактически полученным данным: дифф со снимком,
   // где часть полей восстановлена из prev, событий не даёт.
-  const events = diffSnapshots(prev, next, {
-    grades: state.grades ?? undefined,
-    mailIds: state.mailIds ?? undefined,
-    orders: state.orders ?? undefined,
-  });
+  const events = diffSnapshots(prev, next);
 
   /*
    * Отправляем только тем, кто подключил уведомления и не выключил их.
