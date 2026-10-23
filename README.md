@@ -271,7 +271,7 @@ Mood/
 ├── db/                         # 🗄 Данные
 │   ├── sqlite.ts               #   подключение, WAL и схема SQLite
 │   ├── jsonStore.ts            #   адаптер прежнего API поверх SQLite
-│   ├── storage/                #   users, files, homework, important, snapshots, admins
+│   ├── storage/                #   users, files, homework, homeworkDone, important, snapshots, admins
 │   └── data/                   #   рантайм-данные (в git не попадают)
 │       ├── mood.sqlite         #     пользователи, ДЗ, объявления, снимки, статистика
 │       ├── files/<userId>/     #     файлы: <fileId>.bin, .meta.json, .preview-<w>.jpg
@@ -380,6 +380,9 @@ Mood/
   (`homeworkManager.findNextLesson`) — пары, которые уже начались, пропускаются.
   Тип (`лекция`/`практика`/`лаба`) влияет на подбор.
 - **«Важное»** (`db/storage/importantStore.ts`): объявления группы, новые сверху.
+- **«Сделано»** (`db/storage/homeworkDoneStore.ts`, таблица `homework_done`):
+  личная отметка студента, а не общая на группу. Просроченные задания отметить
+  нельзя; выполненные уезжают в свёрнутую секцию внизу списка.
 - **Изоляция по группе** — сравнение `trim().toLowerCase()`; пустая группа не
   видит ничего. Проверка дублируется в роуте перед изменением/удалением.
 - **Антифлуд** — общий счётчик `30 записей/час` на пользователя (ДЗ и «Важное»
@@ -543,6 +546,7 @@ IMAP `mail.mpei.ru:993` режется Forefront TMG (RST на ClientHello), п�
 | POST | `/api/bars/refresh` | токен + БАРС |
 | GET | `/api/mail` | токен + БАРС (409 `mail_reauth_required` при отказе OWA) |
 | GET/POST/PATCH/DELETE | `/api/homework`, `/api/important` | токен + БАРС + группа |
+| POST/DELETE | `/api/homework/:id/done` | токен + БАРС + группа |
 | POST/GET/DELETE | `/api/files/…` (upload, meta, preview, share) | токен |
 | GET | `/api/files/share/:token` | токен в URL |
 | POST/GET | `/api/notifications/toggle`, `/state` | токен |
