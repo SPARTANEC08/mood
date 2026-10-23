@@ -103,9 +103,12 @@ export const LessonCard = memo(function LessonCard({
           ? {
               // Обводка и свечение идут по скруглению карточки, без боковой
               // полосы: она ломала геометрию на rounded-углах.
-              background: 'linear-gradient(135deg, var(--accent-soft), var(--surface) 62%)',
+              // Обводка — по контуру, а свечение — внутри фона: inset-тень
+              // не выходит за карточку и не выглядит ореолом вокруг неё.
+              background:
+                'radial-gradient(130% 150% at 0% 50%, var(--accent-soft), var(--surface) 62%)',
               boxShadow:
-                '0 0 0 1.5px var(--accent), 0 0 26px 2px rgba(139, 92, 246, 0.35)',
+                '0 0 0 1.5px var(--accent), inset 0 0 30px rgba(139, 92, 246, 0.24)',
             }
           : undefined
       }
