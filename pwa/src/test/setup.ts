@@ -83,7 +83,26 @@ const TIMES: Array<[string, string]> = [
   ['14:20', '15:50'],
 ];
 
-function slotsFor(dayIndex: number, withHomework = false): ApiLessonSlot[] {
+/**
+ * Пара «прямо сейчас» для тестовой страницы.
+ *
+ * Время считается в момент открытия /test/, а не на сборке: благодаря этому
+ * подсветка текущей пары видна независимо от того, когда открыли страницу.
+ */
+function currentSlotTimes(): [string, string] {
+  const minutes = msk.getUTCHours() * 60 + msk.getUTCMinutes();
+  const start = Math.max(0, Math.min(minutes - 20, 23 * 60 + 30));
+  const end = Math.min(23 * 60 + 59, Math.max(minutes + 40, start + 15));
+  const format = (value: number): string =>
+    `${String(Math.floor(value / 60)).padStart(2, '0')}:${String(value % 60).padStart(2, '0')}`;
+  return [format(start), format(end)];
+}
+
+function slotsFor(
+  dayIndex: number,
+  withHomework = false,
+  firstTimes?: [string, string],
+): ApiLessonSlot[] {
   const plans: Array<Array<ApiLessonVariant>> = [
     [
       variant('Математический анализ', 'practice', 'Практическое занятие', 'Г-312', 'Иванов И. И.', 'Иванов Иван Иванович'),
@@ -115,8 +134,8 @@ function slotsFor(dayIndex: number, withHomework = false): ApiLessonSlot[] {
 
   return dayPlan.map((v, index) => ({
     lessonNumber: index + 1,
-    timeStart: TIMES[index]![0],
-    timeEnd: TIMES[index]![1],
+    timeStart: index === 0 && firstTimes ? firstTimes[0] : TIMES[index]![0],
+    timeEnd: index === 0 && firstTimes ? firstTimes[1] : TIMES[index]![1],
     variants: [v],
     homework:
       withHomework && index === 0
@@ -141,7 +160,11 @@ const schedule: ScheduleResponse = {
     dayOfWeek: index + 1,
     dayShort: DAY_SHORT[index]!,
     dayName: DAY_NAME[index]!,
-    slots: index < 5 ? slotsFor(index, index === 1) : [],
+    // В тесте у сегодняшнего дня пара гарантированно идёт прямо сейчас.
+    slots:
+      index < 5 || index === dowFromMonday
+        ? slotsFor(index, index === 1, index === dowFromMonday ? currentSlotTimes() : undefined)
+        : [],
   })),
 };
 
