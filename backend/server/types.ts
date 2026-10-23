@@ -282,6 +282,8 @@ export interface ApiHomework {
   files: ServerFileRef[];
   /** Текущий пользователь — автор записи: только он может править и удалять. */
   canEdit: boolean;
+  /** Личная отметка «Сделано» (у разных студентов группы разная). */
+  done: boolean;
 }
 
 /** Ответ GET /api/homework. */

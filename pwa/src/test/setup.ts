@@ -184,6 +184,7 @@ const homework: ApiHomework[] = [
     createdAt: new Date(nowMs - 2 * DAY).toISOString(),
     files: [],
     canEdit: false,
+    done: false,
   },
   {
     id: 'hw-phys-1',
@@ -198,6 +199,7 @@ const homework: ApiHomework[] = [
     createdAt: new Date(nowMs - DAY).toISOString(),
     files: [],
     canEdit: true,
+    done: false,
   },
   {
     id: 'hw-hist-1',
@@ -210,6 +212,7 @@ const homework: ApiHomework[] = [
     createdAt: new Date(nowMs - 3 * DAY).toISOString(),
     files: [],
     canEdit: false,
+    done: true,
   },
   {
     id: 'hw-inf-1',
@@ -222,6 +225,7 @@ const homework: ApiHomework[] = [
     createdAt: new Date(nowMs - 5 * DAY).toISOString(),
     files: [],
     canEdit: false,
+    done: false,
   },
 ];
 
@@ -499,6 +503,17 @@ window.fetch = (async (input: RequestInfo | URL, init?: RequestInit): Promise<Re
   if (path === '/api/auth/config') return json({ tokenTtlMs: 90 * DAY });
 
   if (path === '/api/schedule') return json(schedule);
+  if (path.startsWith('/api/homework/') && path.endsWith('/done')) {
+    const id = decodeURIComponent(path.split('/')[3] ?? '');
+    const item = homework.find((hw) => hw.id === id);
+    if (!item) return json({ error: 'not_found', message: 'Задание не найдено.' }, 404);
+    if (item.targetDate < TODAY_RAW) {
+      return json({ error: 'overdue', message: 'Просроченное задание нельзя отметить.' }, 409);
+    }
+    item.done = method === 'POST';
+    return json({ id, done: item.done });
+  }
+
   if (path === '/api/homework') return json({ items: homework });
   if (path === '/api/important') return json({ items: important });
   if (path === '/api/subjects') {

@@ -76,6 +76,13 @@ export function getDb(): Database.Database {
 
     CREATE INDEX IF NOT EXISTS idx_user_events_user
       ON user_events(user_id, created_at);
+
+    CREATE TABLE IF NOT EXISTS homework_done (
+      user_id     TEXT NOT NULL,
+      homework_id TEXT NOT NULL,
+      done_at     TEXT NOT NULL,
+      PRIMARY KEY (user_id, homework_id)
+    );
   `);
 
   try {

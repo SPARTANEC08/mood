@@ -9,11 +9,12 @@
  * как и в боте.
  */
 
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
 import { safeErrorMessage } from '../../../tg/format.ts';
 import { getCachedScheduleForUser } from './scheduleCacheBridge.ts';
 import { homeworkStore, type LessonKindType, type HomeworkRecord } from '../../../db/storage/homeworkStore.ts';
+import { homeworkDoneStore } from '../../../db/storage/homeworkDoneStore.ts';
 import { makeRecordId } from '../../../tg/format.ts';
 import { findNextLesson } from '../../homeworkManager.ts';
 import { requireBars } from '../middleware/auth.ts';
@@ -42,6 +43,8 @@ export async function registerHomeworkRoutes(app: FastifyInstance): Promise<void
     const query = (request.query ?? {}) as { from?: string };
     const from = /^\d{4}\.\d{2}\.\d{2}$/.test(query.from ?? '') ? query.from! : todayRaw();
 
+    const done = homeworkDoneStore.doneIds(student.userId);
+
     const items: ApiHomework[] = homeworkStore
       .getUpcoming(group.groupName, from)
       .map<ApiHomework>((hw) => ({
@@ -58,6 +61,8 @@ export async function registerHomeworkRoutes(app: FastifyInstance): Promise<void
         files: hw.files ?? [],
         // Право правки считает сервер: клиент не знает чужие userId и не должен.
         canEdit: canEditRecord(hw.authorId, student.userId),
+        // Отметка «Сделано» личная: у группы она разная.
+        done: done.has(hw.id),
       }));
 
     const response: HomeworkResponse = { items };
@@ -100,10 +105,47 @@ export async function registerHomeworkRoutes(app: FastifyInstance): Promise<void
     // Файлы удаляются вместе с записью. Иначе они остались бы на диске навсегда:
     // ссылок на них нет, но квота пользователя (500 МБ) расходуется, и через
     // semester приложение начало бы отказывать в загрузке «место закончилось».
+    homeworkDoneStore.removeForHomework(removed.id);
     await dropRecordFiles(removed.files, '[API homework]');
 
     return reply.send({ id: removed.id, deleted: true });
   });
+
+  /**
+   * POST/DELETE /api/homework/:id/done — личная отметка «Сделано».
+   *
+   * Просроченные задания отмечать нельзя: они показываются серым и без
+   * чекбокса. Проверка продублирована здесь, потому что клиенту доверять
+   * нельзя — запрос можно отправить руками.
+   */
+  const setDone = async (
+    request: FastifyRequest,
+    reply: FastifyReply,
+    done: boolean,
+  ) => {
+    const student = requireBars(request);
+    const group = requireStudentGroup(student);
+    const id = (request.params as { id?: string }).id ?? '';
+
+    const target = homeworkStore.getForGroupAndId(group.groupName, id);
+    if (!target || !canAccessGroup(target.groupName, group.groupName)) {
+      return reply.code(404).send({ error: 'not_found', message: 'Задание не найдено.' });
+    }
+
+    if (target.targetDate < todayRaw()) {
+      return reply.code(409).send({
+        error: 'overdue',
+        message: 'Просроченное задание нельзя отметить выполненным.',
+      });
+    }
+
+    homeworkDoneStore.setDone(student.userId, id, done);
+    return reply.send({ id, done });
+  };
+
+  app.post('/api/homework/:id/done', (request, reply) => setDone(request, reply, true));
+
+  app.delete('/api/homework/:id/done', (request, reply) => setDone(request, reply, false));
 
   app.post('/api/homework', async (request, reply) => {
     const student = requireBars(request);

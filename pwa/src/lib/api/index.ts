@@ -108,6 +108,12 @@ export const api = {
       { method: 'PATCH', body },
     ),
 
+  /** Личная отметка «Сделано»: POST — поставить, DELETE — снять. */
+  setHomeworkDone: (id: string, done: boolean) =>
+    request<{ id: string; done: boolean }>(`/homework/${encodeURIComponent(id)}/done`, {
+      method: done ? 'POST' : 'DELETE',
+    }),
+
   important: () => request<{ items: ApiImportant[] }>('/important'),
 
   /** Все предметы из расписания — источник для выбора в форме ДЗ. */

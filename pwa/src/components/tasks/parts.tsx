@@ -7,7 +7,9 @@
  */
 
 import type { ReactNode } from 'react';
-import { ChevronRight, Paperclip, Pencil, Trash2 } from 'lucide-react';
+import { Check, ChevronRight, Paperclip, Pencil, Trash2 } from 'lucide-react';
+
+import { cn } from '@/lib/cn';
 
 import { KindBadge } from '@/components/ui';
 import { formatCreatedAt, formatTargetDate, plural } from '@/lib/dates';
@@ -53,11 +55,19 @@ export function HomeworkCard({
   onOpen,
   onEdit,
   onDelete,
+  done = false,
+  overdue = false,
+  onToggleDone,
 }: {
   item: ApiHomework;
   onOpen: () => void;
   onEdit: () => void;
   onDelete: () => void;
+  done?: boolean;
+  /** Просроченное задание: серое, без чекбокса. */
+  overdue?: boolean;
+  /** Отметить/снять «Сделано»; для просроченных не передаётся. */
+  onToggleDone?: () => void;
 }) {
   return (
     <div
@@ -70,30 +80,72 @@ export function HomeworkCard({
           onOpen();
         }
       }}
-      className="surface pressable cursor-pointer px-4 py-3 active:pressable-active"
+      className={cn(
+        'surface pressable cursor-pointer px-4 py-3 active:pressable-active',
+        overdue ? 'opacity-60' : done ? 'opacity-75' : undefined,
+      )}
     >
-      <div className="flex items-start justify-between gap-2">
-        <span className="flex-1 text-[15px] font-medium leading-snug">{item.discipline}</span>
-        <KindBadge kind={item.kind} />
-      </div>
-
-      {item.text ? (
-        <p className="mt-1 line-clamp-2 text-[14px] leading-relaxed whitespace-pre-wrap">{item.text}</p>
-      ) : null}
-
-      <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[12px] text-[var(--text-tertiary)]">
-        <span>к {formatTargetDate(item.targetDate)}</span>
-        {item.lessonNumber ? (
-          <span>
-            {item.lessonNumber} {plural(item.lessonNumber, 'пара', 'пары', 'пар')}
-          </span>
+      <div className="flex items-start gap-3">
+        {onToggleDone && !overdue ? (
+          <button
+            type="button"
+            aria-label={done ? 'Вернуть в работу' : 'Отметить выполненным'}
+            aria-pressed={done}
+            onClick={(event) => {
+              event.stopPropagation();
+              haptic('light');
+              onToggleDone();
+            }}
+            onKeyDown={(event) => event.stopPropagation()}
+            className="pressable mt-0.5 flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-[7px] border active:pressable-active"
+            style={{
+              borderColor: done ? 'var(--accent)' : 'var(--separator)',
+              background: done ? 'var(--accent)' : 'transparent',
+              color: done ? '#fff' : 'transparent',
+            }}
+          >
+            <Check size={13} strokeWidth={3} aria-hidden />
+          </button>
         ) : null}
-        {item.authorName ? <span>{item.authorName}</span> : null}
-        <FilesBadge count={item.files.length} />
-      </div>
 
-      {/* Правка и удаление — только у своих записей; чужие открываются на просмотр. */}
-      {item.canEdit ? <CardActions onEdit={onEdit} onDelete={onDelete} /> : null}
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-2">
+            <span
+              className="flex-1 text-[15px] font-medium leading-snug"
+              style={{ textDecoration: done ? 'line-through' : undefined }}
+            >
+              {item.discipline}
+            </span>
+            <KindBadge kind={item.kind} />
+          </div>
+
+          {item.text ? (
+            <p
+              className="mt-1 line-clamp-2 text-[14px] leading-relaxed whitespace-pre-wrap"
+              style={{ textDecoration: done ? 'line-through' : undefined }}
+            >
+              {item.text}
+            </p>
+          ) : null}
+
+          <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[12px] text-[var(--text-tertiary)]">
+            <span style={{ color: overdue ? 'var(--danger)' : undefined }}>
+              к {formatTargetDate(item.targetDate)}
+            </span>
+            {overdue ? <span style={{ color: 'var(--danger)' }}>просрочено</span> : null}
+            {item.lessonNumber ? (
+              <span>
+                {item.lessonNumber} {plural(item.lessonNumber, 'пара', 'пары', 'пар')}
+              </span>
+            ) : null}
+            {item.authorName ? <span>{item.authorName}</span> : null}
+            <FilesBadge count={item.files.length} />
+          </div>
+
+          {/* Правка и удаление — только у своих записей; чужие открываются на просмотр. */}
+          {item.canEdit ? <CardActions onEdit={onEdit} onDelete={onDelete} /> : null}
+        </div>
+      </div>
     </div>
   );
 }
