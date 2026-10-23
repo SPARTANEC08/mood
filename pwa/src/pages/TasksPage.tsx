@@ -180,6 +180,9 @@ export function TasksPage({ listsRevision = 0 }: { listsRevision?: number }) {
 
       try {
         await api.setHomeworkDone(hw.id, next);
+        // Обновляем общий кэш: иначе после ухода с экрана и возврата карточка
+        // снова выглядела бы невыполненной до следующей фоновой загрузки.
+        void reloadLists();
       } catch (err: unknown) {
         setDoneOverrides((prev) => {
           const copy = { ...prev };
@@ -190,7 +193,7 @@ export function TasksPage({ listsRevision = 0 }: { listsRevision?: number }) {
         setToast(err instanceof ApiError ? err.message : 'Не удалось обновить задание.');
       }
     },
-    [doneOverrides],
+    [doneOverrides, reloadLists],
   );
 
   useEffect(() => {
