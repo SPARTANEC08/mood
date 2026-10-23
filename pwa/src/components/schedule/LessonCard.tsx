@@ -101,8 +101,11 @@ export const LessonCard = memo(function LessonCard({
       style={
         isNow
           ? {
-              borderLeft: '4px solid var(--accent)',
-              background: 'linear-gradient(90deg, var(--accent-soft), var(--surface) 60%)',
+              // Обводка и свечение идут по скруглению карточки, без боковой
+              // полосы: она ломала геометрию на rounded-углах.
+              background: 'linear-gradient(135deg, var(--accent-soft), var(--surface) 62%)',
+              boxShadow:
+                '0 0 0 1.5px var(--accent), 0 0 26px 2px rgba(139, 92, 246, 0.35)',
             }
           : undefined
       }
