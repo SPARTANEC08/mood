@@ -25,12 +25,52 @@ import { readLastDay, writeLastDay } from '@/lib/lastDay';
 import { perfLog } from '@/lib/perf';
 import type { ApiHomework, ApiSubjectGrade } from '@/types/api';
 import { haptic } from '@/lib/env';
-import type { ApiScheduleDay, ScheduleResponse } from '@/types/api';
+import type { ApiLessonSlot, ApiScheduleDay, ScheduleResponse } from '@/types/api';
 
 /**
  * Ответ API на попытку обновления. `refreshing` живёт отдельно: его читает
  * индикатор в шапке, а не состояние экрана.
  */
+/** Сдвиг Москвы: всё время приложения считается по нему, а не по TZ сервера. */
+const MSK_OFFSET_MS = 3 * 60 * 60 * 1000;
+
+/** Минуты от начала суток по Москве. */
+function moscowMinutes(ts: number): number {
+  const date = new Date(ts + MSK_OFFSET_MS);
+  return date.getUTCHours() * 60 + date.getUTCMinutes();
+}
+
+/** «10:40» → 640. null — если формат неожиданный. */
+function parseClock(value: string): number | null {
+  const match = /^(\d{1,2}):(\d{2})$/.exec(value.trim());
+  if (!match) return null;
+  return Number(match[1]) * 60 + Number(match[2]);
+}
+
+/**
+ * Идёт ли пара прямо сейчас.
+ *
+ * Подсветка только для сегодняшнего дня: на других днях «сейчас» не бывает.
+ * Возвращает и остаток до конца — его показывает карточка.
+ */
+function currentLessonState(
+  slot: ApiLessonSlot,
+  dayRaw: string,
+  todayRaw: string,
+  now: number,
+): { isNow: boolean; minutesLeft: number } {
+  if (dayRaw !== todayRaw) return { isNow: false, minutesLeft: 0 };
+
+  const start = parseClock(slot.timeStart);
+  const end = parseClock(slot.timeEnd);
+  if (start === null || end === null) return { isNow: false, minutesLeft: 0 };
+
+  const current = moscowMinutes(now);
+  if (current < start || current >= end) return { isNow: false, minutesLeft: 0 };
+
+  return { isNow: true, minutesLeft: Math.max(1, end - current) };
+}
+
 interface ScheduleState {
   data: ScheduleResponse | null;
   loading: boolean;
@@ -195,6 +235,8 @@ export function SchedulePage() {
    * Date, который ломал сравнения в useMemo ниже по файлу.
    */
   const [today, setToday] = useState(() => toMoscowRaw());
+  /** Обновляется раз в минуту: от него зависит подсветка текущей пары. */
+  const [now, setNow] = useState(() => Date.now());
 
   /**
    * Дата «сегодня» должна меняться сама.
@@ -208,6 +250,7 @@ export function SchedulePage() {
     const timer = setInterval(() => {
       const current = toMoscowRaw();
       setToday((prev) => (prev === current ? prev : current));
+      setNow(Date.now());
     }, 60_000);
 
     return () => clearInterval(timer);
@@ -592,6 +635,7 @@ export function SchedulePage() {
         <div className="flex flex-col gap-2.5">
           {day.slots.map((slot, index) => {
             const lunch = index > 0 ? findLunchBreak(day.slots[index - 1], slot) : null;
+            const lesson = currentLessonState(slot, day.rawDate, today, now);
 
             return (
               <div key={`${day.rawDate}-${slot.lessonNumber}`}>
@@ -605,6 +649,8 @@ export function SchedulePage() {
                   onToggleHomework={toggleHomework}
                   onOpenSubject={openDiscipline}
                   homeworkById={homeworkById}
+                  isNow={lesson.isNow}
+                  minutesLeft={lesson.minutesLeft}
                 />
               </div>
             );
@@ -612,7 +658,7 @@ export function SchedulePage() {
         </div>
       );
     },
-    [expandedHomework, toggleHomework, openDiscipline, homeworkById],
+    [expandedHomework, toggleHomework, openDiscipline, homeworkById, today, now],
   );
 
   // Экран предмета заменяет ленту целиком: у него своя шапка с кнопкой «Назад».

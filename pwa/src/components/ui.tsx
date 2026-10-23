@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useEffect, useRef, type CSSProperties, type ReactNode } from 'react';
 
 import { cn } from '@/lib/cn';
 import { haptic } from '@/lib/env';
@@ -13,15 +13,21 @@ interface CardProps {
   children: ReactNode;
   onPress?: () => void;
   className?: string;
+  /** Инлайновые стили — например, акцентная рамка текущей пары. */
+  style?: CSSProperties;
   /** Отключить тактильный отклик (для навигационных переходов внутри карточки). */
   silent?: boolean;
 }
 
-export function Card({ children, onPress, className, silent }: CardProps) {
+export function Card({ children, onPress, className, style, silent }: CardProps) {
   const surfaceClass = cn('surface overflow-hidden', className);
 
   if (!onPress) {
-    return <div className={surfaceClass}>{children}</div>;
+    return (
+      <div className={surfaceClass} style={style}>
+        {children}
+      </div>
+    );
   }
 
   return (
@@ -32,6 +38,7 @@ export function Card({ children, onPress, className, silent }: CardProps) {
         onPress();
       }}
       className={cn(surfaceClass, 'pressable w-full text-left active:pressable-active')}
+      style={style}
     >
       {children}
     </button>

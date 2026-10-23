@@ -34,6 +34,10 @@ interface LessonCardProps {
   onOpenSubject: (discipline: string) => void;
   /** Полные записи ДЗ — нужны ради вложений, которых нет в метаданных пары. */
   homeworkById: Map<string, ApiHomework>;
+  /** Идёт ли эта пара прямо сейчас (только для сегодняшнего дня). */
+  isNow?: boolean;
+  /** Сколько минут осталось до конца текущей пары. */
+  minutesLeft?: number;
 }
 
 /**
@@ -49,6 +53,8 @@ export const LessonCard = memo(function LessonCard({
   onToggleHomework,
   onOpenSubject,
   homeworkById,
+  isNow = false,
+  minutesLeft = 0,
 }: LessonCardProps) {
   const variant = slot.variants[0];
   const extraCount = slot.variants.length - 1;
@@ -91,7 +97,16 @@ export const LessonCard = memo(function LessonCard({
       }}
       className="cursor-pointer rounded-[var(--radius-card)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
     >
-    <Card>
+    <Card
+      style={
+        isNow
+          ? {
+              borderLeft: '4px solid var(--accent)',
+              background: 'linear-gradient(90deg, var(--accent-soft), var(--surface) 60%)',
+            }
+          : undefined
+      }
+    >
       {/* Время и номер пары — вторичный слой, как в iOS-карточках событий */}
       <div className="flex items-center gap-2 px-4 pt-3 pb-1">
         {/* Номер пары залит акцентом: раньше он был того же синего, что и
@@ -105,6 +120,14 @@ export const LessonCard = memo(function LessonCard({
         <span className="text-[13px] tabular-nums text-[var(--text-secondary)]">
           {slot.timeStart} — {slot.timeEnd}
         </span>
+        {isNow ? (
+          <span
+            className="rounded-full px-2 py-0.5 text-[11px] font-semibold"
+            style={{ background: 'var(--accent)', color: '#fff' }}
+          >
+            Сейчас
+          </span>
+        ) : null}
         {/* Бейдж типа пары живёт в строке времени, то есть НАД серой линией
             (верхняя граница Row). Раньше он стоял под линией рядом с названием
             предмета и читался как часть названия, а не как метка типа занятия. */}
@@ -124,6 +147,11 @@ export const LessonCard = memo(function LessonCard({
             >
               <h3 className="text-[16px] font-semibold leading-snug">{variant.discipline}</h3>
             </button>
+            {isNow ? (
+              <p className="mt-1 text-[12px] font-medium" style={{ color: 'var(--accent)' }}>
+                до конца {Math.max(1, minutesLeft)} мин
+              </p>
+            ) : null}
           </div>
 
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] text-[var(--text-secondary)]">
@@ -242,7 +270,9 @@ function areLessonCardPropsEqual(prev: LessonCardProps, next: LessonCardProps): 
     prev.slot !== next.slot ||
     prev.homeworkById !== next.homeworkById ||
     prev.onToggleHomework !== next.onToggleHomework ||
-    prev.onOpenSubject !== next.onOpenSubject
+    prev.onOpenSubject !== next.onOpenSubject ||
+    prev.isNow !== next.isNow ||
+    prev.minutesLeft !== next.minutesLeft
   ) {
     return false;
   }
