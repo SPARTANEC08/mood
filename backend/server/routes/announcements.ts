@@ -9,10 +9,11 @@
 import type { FastifyInstance } from 'fastify';
 
 import { announcementStore } from '../../../db/storage/announcementStore.ts';
+import { userEventStore } from '../../../db/storage/userEventStore.ts';
 import { requireBars } from '../middleware/auth.ts';
 
 export function registerAnnouncementRoutes(app: FastifyInstance): void {
-  /** Следующее непрочитанное объявление (или null). */
+  /** Следующее непрочитанное объявление (или null). Старый контракт. */
   app.get('/api/announcements/next', async (request, reply) => {
     const student = requireBars(request);
     return reply.send({ item: announcementStore.nextFor(student.userId) });
@@ -24,6 +25,50 @@ export function registerAnnouncementRoutes(app: FastifyInstance): void {
     const { id } = request.params as { id: string };
 
     announcementStore.dismiss(student.userId, id);
+    return reply.send({ ok: true });
+  });
+
+  /**
+   * Следующее уведомление для приложения: сначала рассылка админа, затем
+   * события (оценки/письмо/приказ/стипендия) с деталями.
+   */
+  app.get('/api/notifications/next', async (request, reply) => {
+    const student = requireBars(request);
+
+    const broadcast = announcementStore.nextFor(student.userId);
+    if (broadcast) {
+      return reply.send({
+        item: {
+          kind: 'broadcast',
+          id: broadcast.id,
+          text: broadcast.text,
+          createdAt: broadcast.createdAt,
+        },
+      });
+    }
+
+    const event = userEventStore.nextFor(student.userId);
+    return reply.send({
+      item: event
+        ? {
+            kind: event.kind,
+            id: event.id,
+            label: event.label,
+            details: event.details,
+            createdAt: event.createdAt,
+          }
+        : null,
+    });
+  });
+
+  /** «Закрыть»: рассылка откладывается, событие помечается прочитанным. */
+  app.post('/api/notifications/:id/read', async (request, reply) => {
+    const student = requireBars(request);
+    const { id } = request.params as { id: string };
+
+    const eventRead = userEventStore.markRead(student.userId, id);
+    if (!eventRead) announcementStore.dismiss(student.userId, id);
+
     return reply.send({ ok: true });
   });
 }

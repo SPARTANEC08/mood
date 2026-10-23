@@ -105,7 +105,7 @@ section('Базовая линия и подпись');
   const baseline = diffSnapshots(undefined, snapshot({ lastSeenMailUid: 5 }));
   check('без прежнего снимка событий нет', baseline.length === 0);
 
-  const text = renderNotification({ kind: 'order', title: '📄 Новый приказ' });
+  const text = renderNotification({ title: '📄 Новый приказ' });
   check('в Telegram уходит только тип', text === '📄 Новый приказ', text);
   check('деталей нет', !text.includes('№1'));
 }

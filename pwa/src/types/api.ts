@@ -376,3 +376,24 @@ export interface AppAnnouncement {
 export interface NextAnnouncementResponse {
   item: AppAnnouncement | null;
 }
+
+/** Тип уведомления внутри приложения. */
+export type AppNotificationKind = 'broadcast' | 'grade' | 'mail' | 'order' | 'scholarship';
+
+/** Уведомление для показа в PWA: рассылка или событие с деталями. */
+export interface AppNotification {
+  kind: AppNotificationKind;
+  id: string;
+  createdAt: string;
+  /** Текст рассылки (только kind === 'broadcast'). */
+  text?: string;
+  /** Тип события для приложения (только события). */
+  label?: string;
+  /** Детали события: дисциплина/балл, приказ, статус стипендии. */
+  details?: string[];
+}
+
+/** Ответ GET /api/notifications/next. */
+export interface NextNotificationResponse {
+  item: AppNotification | null;
+}

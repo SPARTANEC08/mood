@@ -13,6 +13,7 @@
 import { isBarsAuthorized, type StoredUser, userStore } from '../../../../db/storage/userStore.ts';
 import { safeErrorMessage } from '../../../../tg/format.ts';
 import { snapshotStore, type UserSnapshot } from '../../../../db/storage/snapshotStore.ts';
+import { userEventStore } from '../../../../db/storage/userEventStore.ts';
 import { toMoscow } from '../../../utils/time.ts';
 import { forgetBarsClient, forgetBarsSessionValid } from '../../bars/barsServiceFactory.ts';
 import { clearMailStatus, putMailStatus } from '../../mail/mailStatusCache.ts';
@@ -143,7 +144,23 @@ export async function checkUser(
 
   // Уведомления строим только по фактически полученным данным: дифф со снимком,
   // где часть полей восстановлена из prev, событий не даёт.
-  const events = diffSnapshots(prev, next);
+  const events = diffSnapshots(prev, next, { orders: state.orders ?? undefined });
+
+  // In-app уведомления: детали храним для PWA, Telegram получает только тип.
+  // Ключ события стабилен, поэтому повтор круга после сбоя не создаёт дубль.
+  if (events.length > 0 && (user.pwaTokens?.length ?? 0) > 0) {
+    const createdAt = now.toISOString();
+    for (const event of events) {
+      userEventStore.add({
+        userId: user.userId,
+        key: event.key,
+        kind: event.kind,
+        label: event.label,
+        details: event.details,
+        createdAt,
+      });
+    }
+  }
 
   /*
    * Отправляем только тем, кто подключил уведомления и не выключил их.

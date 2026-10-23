@@ -23,6 +23,7 @@ import type {
   UpdateHomeworkBody,
   UpdateImportantBody,
   NextAnnouncementResponse,
+  NextNotificationResponse,
 } from '@/types/api';
 import {
   deleteFile,
@@ -166,6 +167,14 @@ export const api = {
   /** «Закрыть»: объявление больше не показывается этому пользователю. */
   dismissAnnouncement: (id: string) =>
     request<{ ok: true }>(`/announcements/${encodeURIComponent(id)}/dismiss`, { method: 'POST' }),
+
+  // ── уведомления в приложении (рассылки + события) ────────────────────────
+  /** Следующее уведомление: сначала рассылка, затем событие с деталями. */
+  notificationNext: () => request<NextNotificationResponse>('/notifications/next'),
+
+  /** «Закрыть»: рассылка скрывается, событие помечается прочитанным. */
+  readNotification: (id: string) =>
+    request<{ ok: true }>(`/notifications/${encodeURIComponent(id)}/read`, { method: 'POST' }),
 };
 
 export type Api = typeof api;

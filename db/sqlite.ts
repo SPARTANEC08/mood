@@ -63,6 +63,19 @@ export function getDb(): Database.Database {
 
     CREATE INDEX IF NOT EXISTS idx_users_bars_hash ON users(bars_login_hash);
     CREATE INDEX IF NOT EXISTS idx_users_telegram  ON users(telegram_id);
+
+    CREATE TABLE IF NOT EXISTS user_events (
+      id         TEXT PRIMARY KEY,
+      user_id    TEXT NOT NULL,
+      kind       TEXT NOT NULL,
+      label      TEXT NOT NULL,
+      details    TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      read_at    TEXT
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_user_events_user
+      ON user_events(user_id, created_at);
   `);
 
   try {

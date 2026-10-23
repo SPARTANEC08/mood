@@ -1,30 +1,27 @@
 /**
- * Уведомления от админа внутри приложения.
+ * Уведомления внутри приложения: рассылки админа и события (оценки, письмо,
+ * приказ, стипендия).
  *
- * Пока приложение открыто, раз в 30 секунд спрашиваем сервер: есть ли
- * непрочитанное объявление. Показываем его модальным окном с текстом и кнопкой
- * «Закрыть»; после закрытия сразу берём следующее из очереди.
+ * В Telegram уходит только тип события, а здесь показываются детали: дисциплина
+ * и балл, номер/дата приказа, статус стипендии. Для почты деталей нет — только
+ * «Новое письмо». После «Закрыть» рассылка скрывается, событие помечается
+ * прочитанным, и сразу показывается следующее из очереди.
  *
- * Почему опрос, а не push: у PWA нет своего push-канала в этой сборке, а одно
- * лёгкое GET-сравнение (файл читается из памяти процесса) дешевле, чем
- * поддержка WebPush и разрешений. Запрос идёт только когда вкладка видима.
- *
- * Компонент монтируется только для авторизованных в БАРС: сервер всё равно
- * отвечает 401 bars_login_required остальным, но лишний запрос на экране входа
- * не нужен.
+ * Опрос раз в 30 секунд, пока вкладка видима: у PWA нет своего push-канала, а
+ * один лёгкий GET дешевле, чем WebPush и разрешения.
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { api } from '@/lib/api';
 import { haptic } from '@/lib/env';
-import type { AppAnnouncement } from '@/types/api';
+import type { AppNotification } from '@/types/api';
 
 /** Период опроса, пока приложение открыто. */
 const POLL_MS = 30_000;
 
 export function AnnouncementGate() {
-  const [item, setItem] = useState<AppAnnouncement | null>(null);
+  const [item, setItem] = useState<AppNotification | null>(null);
   const [closing, setClosing] = useState(false);
   /** Что показано прямо сейчас — чтобы опрос не подменял открытое окно. */
   const showing = useRef(false);
@@ -32,7 +29,7 @@ export function AnnouncementGate() {
   const load = useCallback(async () => {
     if (showing.current) return;
     try {
-      const { item: next } = await api.announcementNext();
+      const { item: next } = await api.notificationNext();
       if (next && !showing.current) {
         showing.current = true;
         setItem(next);
@@ -69,26 +66,30 @@ export function AnnouncementGate() {
 
     setClosing(true);
     try {
-      await api.dismissAnnouncement(current.id);
+      await api.readNotification(current.id);
     } catch {
       // Сервер недоступен: закрываем локально, иначе окно не убрать.
     } finally {
       showing.current = false;
       setItem(null);
       setClosing(false);
-      // Очередь: если админ отправил несколько — сразу показываем следующее.
+      // Очередь: сразу берём следующее уведомление, если оно есть.
       void load();
     }
   }, [closing, item, load]);
 
   if (!item) return null;
 
+  const isBroadcast = item.kind === 'broadcast';
+  const title = isBroadcast ? 'Уведомление' : (item.label ?? 'Уведомление');
+  const details = item.details ?? [];
+
   return (
     <div
       className="fixed inset-0 z-[60] flex items-center justify-center px-5"
       role="dialog"
       aria-modal="true"
-      aria-label="Уведомление"
+      aria-label={title}
     >
       <button
         type="button"
@@ -101,13 +102,28 @@ export function AnnouncementGate() {
         className="relative w-full max-w-[420px] rounded-[20px] p-5"
         style={{ background: 'var(--surface)', boxShadow: '0 12px 40px rgba(0,0,0,0.35)' }}
       >
-        <h2 className="text-[17px] font-semibold">Уведомление</h2>
-        <p
-          className="mt-2 whitespace-pre-wrap break-words text-[15px] leading-relaxed"
-          style={{ color: 'var(--text-secondary)' }}
-        >
-          {item.text}
-        </p>
+        <h2 className="text-[17px] font-semibold">{title}</h2>
+
+        {isBroadcast ? (
+          <p
+            className="mt-2 whitespace-pre-wrap break-words text-[15px] leading-relaxed"
+            style={{ color: 'var(--text-secondary)' }}
+          >
+            {item.text}
+          </p>
+        ) : details.length > 0 ? (
+          <ul className="mt-2 space-y-1">
+            {details.map((line, index) => (
+              <li
+                key={`${index}-${line}`}
+                className="whitespace-pre-wrap break-words text-[14px] leading-relaxed"
+                style={{ color: 'var(--text-secondary)' }}
+              >
+                {line}
+              </li>
+            ))}
+          </ul>
+        ) : null}
 
         <button
           type="button"

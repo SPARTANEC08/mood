@@ -151,6 +151,12 @@ async function run(): Promise<void> {
   );
   check('изменение балла -> событие grade', gradeEvent.length === 1 && gradeEvent[0].kind === 'grade');
   check('тип события — новые оценки', gradeEvent[0]?.title.includes('Новые оценки') === true, String(gradeEvent[0]?.title));
+  check(
+    'для приложения есть детали оценки',
+    gradeEvent[0]?.details.some((line) => line.includes('Математический анализ')) === true,
+    JSON.stringify(gradeEvent[0]?.details),
+  );
+  check('у события есть стабильный ключ', gradeEvent[0]?.key.startsWith('grade:') === true, String(gradeEvent[0]?.key));
 
   const mailEvent = diffSnapshots(
     prev,
@@ -167,6 +173,8 @@ async function run(): Promise<void> {
     mailEvent[0]?.title.includes('Новое письмо') === true,
     String(mailEvent[0]?.title),
   );
+  check('у письма нет деталей', (mailEvent[0]?.details.length ?? -1) === 0);
+  check('письмо — ключ по UID', mailEvent[0]?.key.startsWith('mail:') === true, String(mailEvent[0]?.key));
 
   const orderEvent = diffSnapshots(
     prev,
@@ -179,6 +187,11 @@ async function run(): Promise<void> {
   );
   check('рост числа приказов -> событие order', orderEvent.length === 1 && orderEvent[0].kind === 'order');
   check('тип события — новый приказ', orderEvent[0]?.title.includes('Новый приказ') === true, String(orderEvent[0]?.title));
+  check(
+    'для приложения есть детали приказа',
+    orderEvent[0]?.details[0]?.includes('Новых приказов') === true,
+    JSON.stringify(orderEvent[0]?.details),
+  );
 
   const scholEvent = diffSnapshots(
     prev,
@@ -190,6 +203,11 @@ async function run(): Promise<void> {
     }),
   );
   check('смена стипендии -> событие scholarship', scholEvent.length === 1 && scholEvent[0].kind === 'scholarship');
+  check(
+    'для приложения есть статус стипендии',
+    scholEvent[0]?.details[0]?.includes('Статус') === true,
+    JSON.stringify(scholEvent[0]?.details),
+  );
 
   const multi = diffSnapshots(
     prev,
@@ -217,6 +235,7 @@ async function run(): Promise<void> {
   const text = multi.map(renderNotification).join('\n');
   check('рендер содержит заголовок', text.includes('🎓'));
   check('рендер не пустой', text.trim().length > 0);
+  check('в Telegram не уходят детали', !text.includes('Математический анализ'));
 
   section('Классификация сетевых ошибок');
   check('ETIMEDOUT -> сетевая', isTransientNetworkError(Object.assign(new Error('ETIMEDOUT'), { code: 'ETIMEDOUT' })));
