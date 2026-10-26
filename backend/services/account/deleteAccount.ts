@@ -71,7 +71,11 @@ export async function deleteAccount(user: StoredUser): Promise<void> {
   // человек, поэтому после удаления аккаунта они не должны остаться с его
   // именем и вложенными файлами.
   for (const record of homeworkStore.all()) {
-    if (record.authorId === userId) homeworkStore.delete(record.id);
+    if (record.authorId !== userId) continue;
+    // Чужие отметки «Сделано» ссылаются на это задание. Удаляем и их, иначе
+    // после удаления автора у одногруппников остались бы битые идентификаторы.
+    homeworkDoneStore.removeForHomework(record.id);
+    homeworkStore.delete(record.id);
   }
   for (const record of importantStore.all()) {
     if (record.authorId === userId) importantStore.delete(record.id);

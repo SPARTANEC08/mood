@@ -115,6 +115,9 @@ const homework = {
 homeworkStore.save(homework);
 homeworkDoneStore.setDone(userId, homework.id, true);
 
+const groupmate = userStore.create({ barsLoginHash: computeBarsLoginHash('delete-account-groupmate') });
+homeworkDoneStore.setDone(groupmate.userId, homework.id, true);
+
 const important = {
   id: 'important-delete-test',
   groupName: 'ИЭ-11-26',
@@ -190,6 +193,10 @@ check(
 check(
   'homework_done удалены',
   count('SELECT COUNT(*) AS count FROM homework_done WHERE user_id = ?', userId) === 0,
+);
+check(
+  'отметки одногруппников по удалённому ДЗ убраны',
+  count('SELECT COUNT(*) AS count FROM homework_done WHERE homework_id = ?', homework.id) === 0,
 );
 check(
   'снимок БАРС удалён из records',
