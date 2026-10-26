@@ -46,6 +46,25 @@ interface EventRow {
   read_at: string | null;
 }
 
+/**
+ * Приводит старые детали к нынешнему виду.
+ *
+ * До этой версии в базе лежали строки «Дисциплина КТ2: 15 (+5)» и сводка
+ * «За неделю: +N». Переписывать историю в SQLite ради подписи не нужно:
+ * нормализуем при чтении. Новые записи уже приходят в нужном формате и
+ * проходят через ту же функцию без изменений.
+ */
+function normalizeDetails(details: string[]): string[] {
+  return details
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0 && !line.startsWith('За неделю:'))
+    .map((line) => {
+      const grade = /^(.*?)\s+КТ(\d+):(.*)$/.exec(line);
+      if (grade) return `${grade[1]} · КМ${grade[2]}:${grade[3]}`;
+      return line.replace(/КТ(\d+)/g, 'КМ$1');
+    });
+}
+
 function fromRow(row: EventRow): UserEvent {
   let details: string[] = [];
   try {
@@ -60,7 +79,7 @@ function fromRow(row: EventRow): UserEvent {
     userId: row.user_id,
     kind: row.kind as UserEventKind,
     label: row.label,
-    details,
+    details: normalizeDetails(details),
     createdAt: row.created_at,
     readAt: row.read_at,
   };

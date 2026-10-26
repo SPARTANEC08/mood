@@ -443,6 +443,17 @@ console.log('\n— Уведомления в приложении —');
     createdAt: new Date().toISOString(),
   });
 
+  // Старая запись из прежней версии: КТ и сводка «За неделю» должны
+  // нормализоваться при чтении, без переписывания истории в SQLite.
+  userEventStore.add({
+    userId: barred.userId,
+    key: 'feed:legacy-grade',
+    kind: 'grade',
+    label: 'Новые оценки',
+    details: ['Математический анализ КТ2: 15 (+5)', 'За неделю: +5'],
+    createdAt: new Date().toISOString(),
+  });
+
   const feed = await app.inject({
     method: 'GET',
     url: '/api/notifications',
@@ -461,7 +472,7 @@ console.log('\n— Уведомления в приложении —');
   const feedItems = feedBody.items ?? [];
 
   check('GET /api/notifications → 200', feed.statusCode === 200, String(feed.statusCode));
-  check('в ленте объявления и событие', feedItems.length === 3, String(feedItems.length));
+  check('в ленте объявления и события', feedItems.length === 4, String(feedItems.length));
   check('закрытое объявление помечено прочитанным', feedItems.find((item) => item.id === first.id)?.read === true);
   check('новое объявление не прочитано', feedItems.find((item) => item.id === second.id)?.read === false);
   check(
@@ -469,7 +480,13 @@ console.log('\n— Уведомления в приложении —');
     feedItems.find((item) => item.kind === 'mail')?.details?.[0] === 'Новых писем: 2',
     JSON.stringify(feedItems.find((item) => item.kind === 'mail')),
   );
-  check('счётчик непрочитанных в ленте', feedBody.unread === 2, String(feedBody.unread));
+  check(
+    'старые детали: КТ заменён на КМ, «За неделю» убрана',
+    JSON.stringify(feedItems.find((item) => item.kind === 'grade')?.details) ===
+      JSON.stringify(['Математический анализ · КМ2: 15 (+5)']),
+    JSON.stringify(feedItems.find((item) => item.kind === 'grade')?.details),
+  );
+  check('счётчик непрочитанных в ленте', feedBody.unread === 3, String(feedBody.unread));
 
   const unreadCount = await app.inject({
     method: 'GET',
@@ -478,8 +495,8 @@ console.log('\n— Уведомления в приложении —');
   });
   const unreadBody = unreadCount.json<{ unread?: number; events?: number; broadcasts?: number }>();
   check('GET /api/notifications/unread-count → 200', unreadCount.statusCode === 200, String(unreadCount.statusCode));
-  check('счётчик: 2 непрочитанных', unreadBody.unread === 2, JSON.stringify(unreadBody));
-  check('счётчик: 1 событие', unreadBody.events === 1, JSON.stringify(unreadBody));
+  check('счётчик: 3 непрочитанных', unreadBody.unread === 3, JSON.stringify(unreadBody));
+  check('счётчик: 2 события', unreadBody.events === 2, JSON.stringify(unreadBody));
   check('счётчик: 1 объявление', unreadBody.broadcasts === 1, JSON.stringify(unreadBody));
 
   const readAll = await app.inject({
