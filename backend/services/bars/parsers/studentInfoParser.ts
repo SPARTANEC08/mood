@@ -151,10 +151,9 @@ export function parseScholarship(
     return text.includes('стипенди') || (text.includes('дата начала') && text.includes('вид'));
   }).first();
 
-  if (!table.length) {
-    table = $('table').first();
-  }
-
+  // Никакого fallback на первую таблицу: на странице оценок она тоже есть, и
+  // тогда КМ/даты выдаются за стипендии. Если таблицы с нужными заголовками
+  // нет — пусть разбор вернёт пусто, а scraper повторит запрос.
   const items: ScholarshipItem[] = [];
 
   if (table.length) {
@@ -188,7 +187,10 @@ export function parseScholarship(
       const rawType = typeCol !== -1 ? cleanText($(tds[typeCol]).text()) : cleanText($(tds[2]).text());
       const amount = amountCol !== -1 ? cleanText($(tds[amountCol]).text()) : '';
 
-      if (!rawType) return;
+      // В БАРС бывают строки с пустым «Видом», но с суммой и периодом —
+      // например, социальная выплата без заполненного вида. Это всё равно
+      // назначение, и терять его нельзя.
+      if (!rawType && !amount && !startDate && !endDate) return;
 
       const lowerType = rawType.toLowerCase();
       if (
@@ -201,6 +203,8 @@ export function parseScholarship(
         return;
       }
 
+      const type = rawType || 'Стипендия (вид не указан)';
+
       let period: string | undefined = undefined;
       if (startDate && endDate) {
         period = `${startDate} — ${endDate}`;
@@ -208,12 +212,12 @@ export function parseScholarship(
         period = startDate || endDate;
       }
 
-      const key = `${rawType}|${period ?? ''}|${amount}`;
+      const key = `${type}|${period ?? ''}|${amount}`;
       if (seen.has(key)) return;
       seen.add(key);
 
       items.push({
-        type: rawType,
+        type,
         period,
         amount: amount || undefined,
         startDate: startDate || undefined,

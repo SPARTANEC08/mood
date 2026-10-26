@@ -1,3 +1,5 @@
+import type { CheerioAPI } from 'cheerio';
+
 import { BarsClient } from './barsClient.js';
 import { parseGradesPage, type SemesterGrades } from './parsers/gradesParser.js';
 import { parseAttendancePage, type AttendanceSummary } from './parsers/attendanceParser.js';
@@ -10,6 +12,26 @@ import {
   type ScholarshipInfo,
   type LibraryBook,
 } from './parsers/studentInfoParser.js';
+
+/**
+ * Похожа ли страница на раздел стипендий.
+ *
+ * Первый запрос после восстановления сессии БАРС иногда редиректит на дашборд
+ * с оценками. У страницы оценок тоже есть таблицы, поэтому проверяем именно
+ * заголовки раздела стипендий, а не наличие таблицы вообще.
+ */
+function looksLikeScholarshipPage($: CheerioAPI): boolean {
+  const headers = $('table th')
+    .map((_, th) => $(th).text().replace(/\s+/g, ' ').trim().toLowerCase())
+    .get()
+    .join(' ');
+
+  if (headers.includes('дата начала') && (headers.includes('вид') || headers.includes('стипенд'))) {
+    return true;
+  }
+
+  return $('[class*="stipend"]').length > 0;
+}
 
 /**
  * Высокоуровневый сервис скрапинга и обработки данных из личного кабинета БАРС МЭИ.
@@ -86,7 +108,17 @@ export class BarsScraper {
     const targetUrl = studentId
       ? `/bars_web/ST_LK/ScholarshipEvent/ListStudent__ScholarshipEvent?studentID=${studentId}`
       : '/bars_web/ST_LK/ScholarshipEvent/ListStudent__ScholarshipEvent';
-    const $ = await client.getHtml(targetUrl);
+
+    let $ = await client.getHtml(targetUrl);
+
+    // Первый заход после восстановления сессии может отдать дашборд с
+    // оценками. Прогреваем сессию текущей страницей и повторяем один раз.
+    if (!looksLikeScholarshipPage($)) {
+      const session = client.getSavedSession();
+      await client.getHtml(session?.finalUrl || '/bars_web/ST_Study/Main/Main');
+      $ = await client.getHtml(targetUrl);
+    }
+
     return parseScholarship($);
   }
 
