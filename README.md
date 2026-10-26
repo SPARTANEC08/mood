@@ -665,6 +665,7 @@ bash pwa/scripts/dev-tunnel.sh   # vite + cloudflared + бот одним про
 | `test:files` | загрузка/скачивание файлов |
 | `test:notifications` | включение/выключение уведомлений |
 | `test:account-delete` | полное удаление аккаунта: SQLite-строки, файлы, бот, статистика |
+| `test:scholarship` | разбор нескольких стипендий из таблицы БАРС |
 | `test:owa` | OWA на мок-сервере: вход, перелогин с новым canary, все подтипы `MailAuthError`, `/api/mail` → 409 |
 | `test:owa:live` | вход в живой OWA (нужны креды и сеть МЭИ) |
 | `test:owa:user` | живой OWA по сохранённым кредам пользователя (`--user <userId>`), без записи в базу |

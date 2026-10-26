@@ -193,28 +193,60 @@ export function ProfilePage({ profile }: { profile: BootstrapResponse }) {
               </p>
             </Card>
           ) : more ? (
-            <Card className="flex items-center gap-3 px-4 py-4">
-              {more.scholarship.isAppointed ? (
-                <CircleCheck size={22} style={{ color: 'var(--success)' }} aria-hidden />
-              ) : (
-                <GraduationCap size={22} style={{ color: 'var(--text-tertiary)' }} aria-hidden />
-              )}
-              <div className="min-w-0 flex-1">
-                <p className="text-[15px] font-medium">
-                  {more.scholarship.isAppointed
-                    ? (more.scholarship.type ?? 'Стипендия назначена')
-                    : 'Стипендия не назначена'}
-                </p>
-                {more.scholarship.period ? (
-                  <p className="mt-0.5 text-[13px] text-[var(--text-secondary)]">
-                    Период: {more.scholarship.period}
+            <Card className="px-4 py-4">
+              <div className="flex items-start gap-3">
+                {more.scholarship.isAppointed ? (
+                  <CircleCheck size={22} style={{ color: 'var(--success)' }} aria-hidden />
+                ) : (
+                  <GraduationCap size={22} style={{ color: 'var(--text-tertiary)' }} aria-hidden />
+                )}
+
+                <div className="min-w-0 flex-1">
+                  <p className="text-[15px] font-medium">
+                    {more.scholarship.isAppointed ? 'Стипендия' : 'Стипендия не назначена'}
                   </p>
-                ) : null}
-                {more.scholarship.amount ? (
-                  <p className="mt-0.5 text-[13px] text-[var(--text-secondary)]">
-                    Сумма: {more.scholarship.amount}
-                  </p>
-                ) : null}
+
+                  {more.scholarship.items && more.scholarship.items.length > 0 ? (
+                    <div className="mt-2 space-y-2">
+                      {more.scholarship.items.map((item, index) => (
+                        <div
+                          key={`${item.type}-${item.period ?? ''}-${index}`}
+                          className={item.isActive ? undefined : 'opacity-55'}
+                        >
+                          <p className="text-[14px] font-medium">{item.type}</p>
+                          {item.period ? (
+                            <p className="mt-0.5 text-[13px] text-[var(--text-secondary)]">
+                              Период: {item.period}
+                            </p>
+                          ) : null}
+                          {item.amount ? (
+                            <p className="mt-0.5 text-[13px] text-[var(--text-secondary)]">
+                              Сумма: {item.amount}
+                            </p>
+                          ) : null}
+                          {!item.isActive ? (
+                            <p className="mt-0.5 text-[12px] text-[var(--text-tertiary)]">
+                              Не действует
+                            </p>
+                          ) : null}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <>
+                      {more.scholarship.period ? (
+                        <p className="mt-0.5 text-[13px] text-[var(--text-secondary)]">
+                          Период: {more.scholarship.period}
+                        </p>
+                      ) : null}
+                      {more.scholarship.amount ? (
+                        <p className="mt-0.5 text-[13px] text-[var(--text-secondary)]">
+                          Сумма: {more.scholarship.amount}
+                        </p>
+                      ) : null}
+                    </>
+                  )}
+                </div>
               </div>
             </Card>
           ) : null}

@@ -197,6 +197,15 @@ export interface BarsMoreResponse {
     type?: string;
     period?: string;
     amount?: string;
+    /** Все назначения из БАРС: академическая, социальная, повышенная и т.д. */
+    items?: Array<{
+      type: string;
+      period?: string;
+      amount?: string;
+      startDate?: string;
+      endDate?: string;
+      isActive: boolean;
+    }>;
   };
   libraryBooks: Array<{
     title: string;

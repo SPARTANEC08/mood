@@ -9,11 +9,23 @@ export interface OrderItem {
   status?: string;
 }
 
-export interface ScholarshipInfo {
-  isAppointed: boolean; // Назначена ли стипендия
-  type?: string;        // Академическая, социальная, повышенная
+export interface ScholarshipItem {
+  type: string;         // Академическая, социальная, повышенная
   period?: string;      // Срок действия назначения
   amount?: string;      // Сумма (если отображается)
+  startDate?: string;   // Как в БАРС, DD.MM.YYYY
+  endDate?: string;
+  /** Действует ли назначение на момент разбора. */
+  isActive: boolean;
+}
+
+export interface ScholarshipInfo {
+  isAppointed: boolean; // Назначена ли хотя бы одна действующая стипендия
+  type?: string;        // Первое активное назначение — для старых потребителей
+  period?: string;
+  amount?: string;
+  /** Все назначения из таблицы БАРС, включая завершённые. */
+  items?: ScholarshipItem[];
 }
 
 export interface LibraryBook {
@@ -27,13 +39,31 @@ export interface LibraryBook {
 /**
  * Парсит дату формата DD.MM.YYYY в объект Date.
  */
-function parseDate(dateStr: string): Date | null {
+function parseDate(dateStr: string, endOfDay = true): Date | null {
   const match = dateStr.trim().match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})/);
   if (!match) return null;
   const day = parseInt(match[1], 10);
   const month = parseInt(match[2], 10) - 1;
   const year = parseInt(match[3], 10);
-  return new Date(year, month, day, 23, 59, 59, 999);
+  return endOfDay
+    ? new Date(year, month, day, 23, 59, 59, 999)
+    : new Date(year, month, day, 0, 0, 0, 0);
+}
+
+/**
+ * Действует ли стипендия в указанный момент.
+ *
+ * Если дат нет вовсе — считаем действующей: БАРС иногда отдаёт сокращённую
+ * таблицу без периода. Если дата одна, ограничиваем только ей.
+ */
+function isScholarshipActive(startDate: string, endDate: string, now: Date): boolean {
+  const start = parseDate(startDate, false);
+  const end = parseDate(endDate, true);
+
+  if (!start && !end) return true;
+  if (start && now.getTime() < start.getTime()) return false;
+  if (end && now.getTime() > end.getTime()) return false;
+  return true;
 }
 
 /**
@@ -111,7 +141,10 @@ export function parseOrders($: cheerio.CheerioAPI): OrderItem[] {
 /**
  * Парсит данные о назначенной стипендии студента.
  */
-export function parseScholarship($: cheerio.CheerioAPI): ScholarshipInfo {
+export function parseScholarship(
+  $: cheerio.CheerioAPI,
+  now: Date = new Date(),
+): ScholarshipInfo {
   // 1. Поиск таблицы со стипендиями
   let table = $('table').filter((_, t) => {
     const text = $(t).text().toLowerCase();
@@ -121,6 +154,8 @@ export function parseScholarship($: cheerio.CheerioAPI): ScholarshipInfo {
   if (!table.length) {
     table = $('table').first();
   }
+
+  const items: ScholarshipItem[] = [];
 
   if (table.length) {
     let startCol = -1;
@@ -136,36 +171,71 @@ export function parseScholarship($: cheerio.CheerioAPI): ScholarshipInfo {
       else if (text.includes('размер') || text.includes('сумма')) amountCol = idx;
     });
 
-    const rows = table.find('tbody tr');
-    if (rows.length > 0) {
-      // Ищем действующую стипендию (где текущая дата между началом и концом) или берем последнюю/первую
-      for (let i = 0; i < rows.length; i++) {
-        const tr = rows.eq(i);
-        const tds = tr.find('td');
-        if (tds.length < 3) continue;
-
-        const startDate = startCol !== -1 ? cleanText($(tds[startCol]).text()) : '';
-        const endDate = endCol !== -1 ? cleanText($(tds[endCol]).text()) : '';
-        const rawType = typeCol !== -1 ? cleanText($(tds[typeCol]).text()) : cleanText($(tds[2]).text());
-        const amount = amountCol !== -1 ? cleanText($(tds[amountCol]).text()) : undefined;
-
-        let period: string | undefined = undefined;
-        if (startDate && endDate) {
-          period = `${startDate} — ${endDate}`;
-        } else if (startDate || endDate) {
-          period = startDate || endDate;
-        }
-
-        if (rawType) {
-          return {
-            isAppointed: true,
-            type: rawType,
-            period,
-            amount: amount || undefined,
-          };
-        }
-      }
+    // Не у всех таблиц БАРС есть tbody. Берём строки с td в любом случае.
+    let rows = table.find('tbody tr');
+    if (rows.length === 0) {
+      rows = table.find('tr').filter((_, tr) => $(tr).find('td').length > 0);
     }
+
+    const seen = new Set<string>();
+
+    rows.each((_, tr) => {
+      const tds = $(tr).find('td');
+      if (tds.length < 3) return;
+
+      const startDate = startCol !== -1 ? cleanText($(tds[startCol]).text()) : '';
+      const endDate = endCol !== -1 ? cleanText($(tds[endCol]).text()) : '';
+      const rawType = typeCol !== -1 ? cleanText($(tds[typeCol]).text()) : cleanText($(tds[2]).text());
+      const amount = amountCol !== -1 ? cleanText($(tds[amountCol]).text()) : '';
+
+      if (!rawType) return;
+
+      const lowerType = rawType.toLowerCase();
+      if (
+        lowerType.includes('не назначена') ||
+        lowerType === 'нет' ||
+        lowerType === '—' ||
+        lowerType.startsWith('итого') ||
+        lowerType.startsWith('всего')
+      ) {
+        return;
+      }
+
+      let period: string | undefined = undefined;
+      if (startDate && endDate) {
+        period = `${startDate} — ${endDate}`;
+      } else if (startDate || endDate) {
+        period = startDate || endDate;
+      }
+
+      const key = `${rawType}|${period ?? ''}|${amount}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+
+      items.push({
+        type: rawType,
+        period,
+        amount: amount || undefined,
+        startDate: startDate || undefined,
+        endDate: endDate || undefined,
+        isActive: isScholarshipActive(startDate, endDate, now),
+      });
+    });
+  }
+
+  if (items.length > 0) {
+    // Старые потребители (уведомления, скрипты) ждут одно «главное» назначение.
+    // Берём первое действующее, а если таких нет — первую строку как историю.
+    const active = items.filter((item) => item.isActive);
+    const primary = active[0] ?? items[0];
+
+    return {
+      isAppointed: active.length > 0,
+      type: primary?.type,
+      period: primary?.period,
+      amount: primary?.amount,
+      items,
+    };
   }
 
   // 2. Резервный поиск по текстовым карточкам или алертам
@@ -176,12 +246,15 @@ export function parseScholarship($: cheerio.CheerioAPI): ScholarshipInfo {
     if (text.toLowerCase().includes('стипенди')) {
       const isNotAppointed = text.toLowerCase().includes('не назначена');
       if (isNotAppointed) {
-        foundFromText = { isAppointed: false };
+        foundFromText = { isAppointed: false, items: [] };
       } else {
         const typeMatch = text.match(/(академическая|социальная|повышенная)[^\n,.]*/i);
+        const type = typeMatch ? cleanText(typeMatch[0]) : undefined;
+        const item: ScholarshipItem = { type: type ?? 'Стипендия', isActive: true };
         foundFromText = {
           isAppointed: true,
-          type: typeMatch ? cleanText(typeMatch[0]) : undefined,
+          type: item.type,
+          items: [item],
         };
       }
     }
@@ -193,6 +266,7 @@ export function parseScholarship($: cheerio.CheerioAPI): ScholarshipInfo {
 
   return {
     isAppointed: false,
+    items: [],
   };
 }
 

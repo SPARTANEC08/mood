@@ -156,6 +156,7 @@ export class BarsService {
       console.warn(`[BarsService] Ошибка выгрузки стипендии: ${err}`);
       scholarship = {
         isAppointed: false,
+        items: [],
       };
     }
 

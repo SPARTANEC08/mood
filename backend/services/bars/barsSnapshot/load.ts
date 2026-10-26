@@ -65,7 +65,20 @@ export async function loadSnapshot(
 async function collectMore(
   scraper: {
     getOrders: () => Promise<Array<{ number: string; date: string; title: string; status?: string }>>;
-    getScholarship: () => Promise<{ isAppointed: boolean; type?: string; period?: string; amount?: string }>;
+    getScholarship: () => Promise<{
+      isAppointed: boolean;
+      type?: string;
+      period?: string;
+      amount?: string;
+      items?: Array<{
+        type: string;
+        period?: string;
+        amount?: string;
+        startDate?: string;
+        endDate?: string;
+        isActive: boolean;
+      }>;
+    }>;
     getLibraryBooks: () => Promise<
       Array<{ title: string; author?: string; issueDate: string; dueDate: string; isOverdue: boolean }>
     >;
@@ -173,7 +186,20 @@ function buildAttendance(summary: AttendanceSummary): BarsSnapshotResponse['atte
 
 function buildMore(input: {
   orders: Array<{ number: string; date: string; title: string; status?: string }>;
-  scholarship: { isAppointed: boolean; type?: string; period?: string; amount?: string };
+  scholarship: {
+    isAppointed: boolean;
+    type?: string;
+    period?: string;
+    amount?: string;
+    items?: Array<{
+      type: string;
+      period?: string;
+      amount?: string;
+      startDate?: string;
+      endDate?: string;
+      isActive: boolean;
+    }>;
+  };
   books: Array<{
     title: string;
     author?: string;
