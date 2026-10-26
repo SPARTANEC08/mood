@@ -98,9 +98,8 @@ export function DeleteAccountCard() {
 
       <BottomSheet
         open={open}
-        onClose={() => {
-          if (!busy) setOpen(false);
-        }}
+        onClose={() => setOpen(false)}
+        dismissible={!busy}
         title="Удалить аккаунт?"
         closeLabel="Отмена"
         footer={

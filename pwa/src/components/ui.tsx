@@ -321,6 +321,7 @@ export function BottomSheet({
   closeLabel = 'Отмена',
   headerRight,
   height,
+  dismissible = true,
 }: {
   open: boolean;
   onClose: () => void;
@@ -346,6 +347,13 @@ export function BottomSheet({
    * задают и остаются адаптивными.
    */
   height?: string;
+  /**
+   * Можно ли закрыть лист жестом, подложкой или кнопкой.
+   *
+   * false — на время необратимой операции: иначе запрос продолжится без
+   * видимого результата, а лист останется за экраном с заблокированным фоном.
+   */
+  dismissible?: boolean;
 }) {
   // Скролл фона блокируется, пока лист открыт, иначе жест прокрутки уезжает
   // на подложку под листом.
@@ -433,7 +441,7 @@ export function BottomSheet({
     };
 
     const onStart = (event: TouchEvent): void => {
-      if (!enteredRef.current || sheet.scrollTop > 0) return;
+      if (!dismissible || !enteredRef.current || sheet.scrollTop > 0) return;
 
       // Поля ввода не должны закрывать лист свайпом: там вертикальный жест —
       // это выделение текста или прокрутка внутри поля.
@@ -533,7 +541,7 @@ export function BottomSheet({
       sheet.removeEventListener('touchend', onEnd);
       sheet.removeEventListener('touchcancel', onEnd);
     };
-  }, [open]);
+  }, [open, dismissible]);
 
   if (!open) return null;
 
@@ -544,6 +552,7 @@ export function BottomSheet({
         type="button"
         aria-label="Закрыть"
         onClick={() => {
+          if (!dismissible) return;
           haptic('light');
           onClose();
         }}
@@ -577,8 +586,9 @@ export function BottomSheet({
         <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 px-5 pb-1">
           <button
             type="button"
+            disabled={!dismissible}
             onClick={onClose}
-            className="pressable justify-self-start text-[17px] active:pressable-active"
+            className="pressable justify-self-start text-[17px] active:pressable-active disabled:opacity-40"
             style={{ color: 'var(--accent)' }}
           >
             {closeLabel}
