@@ -16,6 +16,12 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '@/lib/api';
 import { haptic } from '@/lib/env';
 import type { AppNotification } from '@/types/api';
+import {
+  NotificationActions,
+  NotificationContent,
+  notificationTitle,
+} from '@/components/notifications/NotificationContent';
+import { useNotifications } from '@/components/notifications/NotificationsProvider';
 
 /** Период опроса, пока приложение открыто. */
 const POLL_MS = 30_000;
@@ -25,6 +31,7 @@ export function AnnouncementGate() {
   const [closing, setClosing] = useState(false);
   /** Что показано прямо сейчас — чтобы опрос не подменял открытое окно. */
   const showing = useRef(false);
+  const notifications = useNotifications();
 
   const load = useCallback(async () => {
     if (showing.current) return;
@@ -73,16 +80,17 @@ export function AnnouncementGate() {
       showing.current = false;
       setItem(null);
       setClosing(false);
+      // Событие прочитано: обновляем бейдж и кэш ленты, если она открыта.
+      notifications?.invalidateFeed();
+      void notifications?.refreshUnread();
       // Очередь: сразу берём следующее уведомление, если оно есть.
       void load();
     }
-  }, [closing, item, load]);
+  }, [closing, item, load, notifications]);
 
   if (!item) return null;
 
-  const isBroadcast = item.kind === 'broadcast';
-  const title = isBroadcast ? 'Уведомление' : (item.label ?? 'Уведомление');
-  const details = item.details ?? [];
+  const title = notificationTitle(item);
 
   return (
     <div
@@ -102,28 +110,8 @@ export function AnnouncementGate() {
         className="relative w-full max-w-[420px] rounded-[20px] p-5"
         style={{ background: 'var(--surface)', boxShadow: '0 12px 40px rgba(0,0,0,0.35)' }}
       >
-        <h2 className="text-[17px] font-semibold">{title}</h2>
-
-        {isBroadcast ? (
-          <p
-            className="mt-2 whitespace-pre-wrap break-words text-[15px] leading-relaxed"
-            style={{ color: 'var(--text-secondary)' }}
-          >
-            {item.text}
-          </p>
-        ) : details.length > 0 ? (
-          <ul className="mt-2 space-y-1">
-            {details.map((line, index) => (
-              <li
-                key={`${index}-${line}`}
-                className="whitespace-pre-wrap break-words text-[14px] leading-relaxed"
-                style={{ color: 'var(--text-secondary)' }}
-              >
-                {line}
-              </li>
-            ))}
-          </ul>
-        ) : null}
+        <NotificationContent item={item} />
+        <NotificationActions item={item} />
 
         <button
           type="button"

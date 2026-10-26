@@ -1,5 +1,6 @@
 import { CalendarDays, ChartNoAxesColumn, NotebookPen, Plus, UserRound, type LucideIcon } from 'lucide-react';
 
+import { NotificationBell } from '@/components/notifications/NotificationBell';
 import { cn } from '@/lib/cn';
 import { haptic } from '@/lib/env';
 
@@ -286,7 +287,16 @@ export function Header({
             <p className="truncate text-[13px] text-[var(--text-secondary)]">{subtitle}</p>
           ) : null}
         </div>
-        {right ? <div className="flex shrink-0 items-center gap-1">{right}</div> : null}
+        <div className="flex shrink-0 items-center gap-1">
+          {right}
+          {/*
+            Колокольчик стоит последним во всех шапках: у расписания он
+            оказывается справа от «Сегодня» и календаря, у остальных вкладок —
+            рядом с индикатором обновления. Сам компонент решает, рисоваться ли
+            ему: на экране входа провайдера нет.
+          */}
+          <NotificationBell />
+        </div>
       </div>
     </header>
   );

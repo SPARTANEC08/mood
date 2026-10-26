@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { ArrowLeft, MapPin, User } from 'lucide-react';
 
 import { FileAttachmentList } from '@/components/FileAttachmentList';
+import { NotificationBell } from '@/components/notifications/NotificationBell';
 import { Page } from '@/components/Page';
 import { Card, KindBadge, SkeletonLesson } from '@/components/ui';
 import { formatTargetDate, plural } from '@/lib/dates';
@@ -99,6 +100,8 @@ export function SubjectScreen({
                   : ''}
               </p>
             </div>
+
+            <NotificationBell />
           </div>
         </header>
       }

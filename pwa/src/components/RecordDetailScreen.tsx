@@ -1,6 +1,7 @@
 import { ArrowLeft, Pencil, Trash2 } from 'lucide-react';
 
 import { FileAttachmentList } from '@/components/FileAttachmentList';
+import { NotificationBell } from '@/components/notifications/NotificationBell';
 import { KindBadge } from '@/components/ui';
 import { formatCreatedAt, formatTargetDate, plural } from '@/lib/dates';
 import { haptic } from '@/lib/env';
@@ -83,6 +84,8 @@ export function RecordDetailScreen({
               </button>
             </>
           ) : null}
+
+          <NotificationBell />
         </div>
       </header>
 

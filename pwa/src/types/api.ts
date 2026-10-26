@@ -393,9 +393,24 @@ export interface AppNotification {
   label?: string;
   /** Детали события: дисциплина/балл, приказ, статус стипендии. */
   details?: string[];
+  /** Прочитано. Приходит из ленты; у «следующего» всегда false. */
+  read?: boolean;
 }
 
 /** Ответ GET /api/notifications/next. */
 export interface NextNotificationResponse {
   item: AppNotification | null;
+}
+
+/** Ответ GET /api/notifications — вся лента. */
+export interface NotificationsFeedResponse {
+  items: AppNotification[];
+  unread: number;
+}
+
+/** Ответ GET /api/notifications/unread-count. */
+export interface NotificationsUnreadResponse {
+  unread: number;
+  events: number;
+  broadcasts: number;
 }

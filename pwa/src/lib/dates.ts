@@ -124,3 +124,48 @@ export function shiftRawDate(raw: string, days: number): string {
   date.setUTCDate(date.getUTCDate() + days);
   return formatRawDate(date);
 }
+
+/**
+ * Московское время события: «14:32».
+ *
+ * Часовой пояс устройства здесь не подходит: сервер и все данные живут по
+ * Москве, а телефон студента может быть в другом поясе (поездка, эмулятор).
+ */
+const MOSCOW_TIME = new Intl.DateTimeFormat('ru-RU', {
+  timeZone: 'Europe/Moscow',
+  hour: '2-digit',
+  minute: '2-digit',
+});
+
+export function formatMoscowTime(value: string | number | Date): string {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return MOSCOW_TIME.format(date);
+}
+
+/** Календарный день события по Москве в формате «YYYY.MM.DD». */
+export function moscowRawDate(value: string | number | Date): string {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+
+  const parts = MOSCOW_DAY.formatToParts(date);
+  const get = (type: string): string => parts.find((p) => p.type === type)?.value ?? '';
+  return `${get('year')}.${get('month')}.${get('day')}`;
+}
+
+/**
+ * Подпись дня для группировки уведомлений: «Сегодня», «Вчера» или «26 окт».
+ */
+export function formatMoscowDayLabel(
+  value: string | number | Date,
+  now: Date = new Date(),
+): string {
+  const day = moscowRawDate(value);
+  if (!day) return '';
+
+  const today = todayRawMoscow(now);
+  if (day === today) return 'Сегодня';
+  if (day === shiftRawDate(today, -1)) return 'Вчера';
+
+  return formatTargetDate(day);
+}

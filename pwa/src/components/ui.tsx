@@ -318,6 +318,8 @@ export function BottomSheet({
   title,
   children,
   footer,
+  closeLabel = 'Отмена',
+  headerRight,
 }: {
   open: boolean;
   onClose: () => void;
@@ -331,6 +333,10 @@ export function BottomSheet({
    * прокрутку листа вслепую ради единственного действия.
    */
   footer?: ReactNode;
+  /** Надпись левой кнопки. По умолчанию «Отмена» — как у форм. */
+  closeLabel?: string;
+  /** Действие справа в заголовке, например «Прочитать все». */
+  headerRight?: ReactNode;
 }) {
   // Скролл фона блокируется, пока лист открыт, иначе жест прокрутки уезжает
   // на подложку под листом.
@@ -376,17 +382,24 @@ export function BottomSheet({
           <div className="h-1 w-9 rounded-full" style={{ background: 'var(--separator)' }} />
         </div>
 
-        <div className="flex items-center justify-between px-5 pb-1">
+        {/*
+          Три колонки одинаковой ширины: заголовок остаётся по центру, даже
+          когда справа появляется «Прочитать все», а слева — «Закрыть».
+          flex с пустым правым краем сдвигал бы заголовок влево.
+        */}
+        <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 px-5 pb-1">
           <button
             type="button"
             onClick={onClose}
-            className="pressable text-[17px] active:pressable-active"
+            className="pressable justify-self-start text-[17px] active:pressable-active"
             style={{ color: 'var(--accent)' }}
           >
-            Отмена
+            {closeLabel}
           </button>
-          <h3 className="text-[17px] font-semibold">{title}</h3>
-          <span className="w-[52px]" />
+          <h3 className="min-w-0 max-w-[60vw] truncate text-center text-[17px] font-semibold">
+            {title}
+          </h3>
+          <div className="flex items-center justify-end">{headerRight}</div>
         </div>
 
         <div className="px-5 pt-3">{children}</div>

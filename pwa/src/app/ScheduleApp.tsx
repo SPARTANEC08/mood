@@ -20,6 +20,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { TabBar, type TabId } from '@/components/TabBar';
 import { TelegramPrompt } from '@/components/TelegramPrompt';
 import { AnnouncementGate } from '@/components/AnnouncementGate';
+import { NotificationsProvider } from '@/components/notifications/NotificationsProvider';
 import { ErrorState } from '@/components/ui';
 import { clearPwaToken, SIGNED_OUT_EVENT } from '@/auth';
 import { ApiError, api } from '@/lib/api';
@@ -116,11 +117,13 @@ export function ScheduleApp({ onReLogin }: { onReLogin: () => void }) {
   // скелет расписания — но никогда не пустой белый фон.
   if (!bootstrap) {
     return (
-      <DataProvider bootstrap={EMPTY_BOOTSTRAP}>
-        <Tier2Gate tab={tab} />
-        {tab === 'schedule' ? <SchedulePage /> : null}
-        <TabBar active={tab} onChange={setTab} onAdd={() => setAddSheetOpen(true)} />
-      </DataProvider>
+      <NotificationsProvider>
+        <DataProvider bootstrap={EMPTY_BOOTSTRAP}>
+          <Tier2Gate tab={tab} />
+          {tab === 'schedule' ? <SchedulePage /> : null}
+          <TabBar active={tab} onChange={setTab} onAdd={() => setAddSheetOpen(true)} />
+        </DataProvider>
+      </NotificationsProvider>
     );
   }
 
@@ -129,31 +132,33 @@ export function ScheduleApp({ onReLogin }: { onReLogin: () => void }) {
   }
 
   return (
-    <DataProvider bootstrap={bootstrap}>
-      <Shell
-        profile={bootstrap}
-        tab={tab}
-        onTab={setTab}
-        addSheetOpen={addSheetOpen}
-        addKind={addKind}
-        onOpenAddSheet={(kind) => {
-          setAddKind(kind);
-          setAddSheetOpen(true);
-        }}
-        onCloseAddSheet={() => setAddSheetOpen(false)}
-      />
+    <NotificationsProvider>
+      <DataProvider bootstrap={bootstrap}>
+        <Shell
+          profile={bootstrap}
+          tab={tab}
+          onTab={setTab}
+          addSheetOpen={addSheetOpen}
+          addKind={addKind}
+          onOpenAddSheet={(kind) => {
+            setAddKind(kind);
+            setAddSheetOpen(true);
+          }}
+          onCloseAddSheet={() => setAddSheetOpen(false)}
+        />
 
-      {/*
-        Приглашение подключить Telegram. Показывается при каждом заходе, пока бот
-        не привязан: внутри компонента и монтирование, и возврат из фона.
-      */}
-      <TelegramPrompt
-        userId={bootstrap.profile.userId}
-        telegramId={bootstrap.profile.telegramId}
-      />
+        {/*
+          Приглашение подключить Telegram. Показывается при каждом заходе, пока бот
+          не привязан: внутри компонента и монтирование, и возврат из фона.
+        */}
+        <TelegramPrompt
+          userId={bootstrap.profile.userId}
+          telegramId={bootstrap.profile.telegramId}
+        />
 
-      {/* Объявления админа: только для авторизованных в БАРС. */}
-      <AnnouncementGate />
-    </DataProvider>
+        {/* Объявления админа: только для авторизованных в БАРС. */}
+        <AnnouncementGate />
+      </DataProvider>
+    </NotificationsProvider>
   );
 }
