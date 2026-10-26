@@ -146,6 +146,9 @@ export function NotificationsSheet({
       onClose={onClose}
       title="Уведомления"
       closeLabel="Закрыть"
+      // Высота зафиксирована: иначе при смене фильтра список становится короче,
+      // и всё окно прыгает вверх-вниз. Внутри лента прокручивается сама.
+      height="min(720px, 85dvh)"
       headerRight={
         unread > 0 ? (
           <button

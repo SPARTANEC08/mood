@@ -1,4 +1,4 @@
-import { useEffect, useRef, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 
 import { cn } from '@/lib/cn';
 import { haptic } from '@/lib/env';
@@ -320,6 +320,7 @@ export function BottomSheet({
   footer,
   closeLabel = 'Отмена',
   headerRight,
+  height,
 }: {
   open: boolean;
   onClose: () => void;
@@ -337,22 +338,200 @@ export function BottomSheet({
   closeLabel?: string;
   /** Действие справа в заголовке, например «Прочитать все». */
   headerRight?: ReactNode;
+  /**
+   * Фиксированная высота листа, например `min(720px, 85dvh)`.
+   *
+   * Нужна лентам с фильтрами: без неё лист сжимается под короткий список, и
+   * переключение фильтра выглядит как прыжок всего окна. Формы высоту не
+   * задают и остаются адаптивными.
+   */
+  height?: string;
 }) {
   // Скролл фона блокируется, пока лист открыт, иначе жест прокрутки уезжает
   // на подложку под листом.
-  const scrollLocked = useRef(false);
+  const sheetRef = useRef<HTMLDivElement | null>(null);
+  const backdropRef = useRef<HTMLButtonElement | null>(null);
+  const [entered, setEntered] = useState(false);
+  const enteredRef = useRef(false);
+  const closeTimer = useRef<number | null>(null);
+  const onCloseRef = useRef(onClose);
+
+  // Родитель часто передаёт новую стрелку на каждый рендер. Через ref жест не
+  // пересоздаётся посреди движения из-за обновления счётчика уведомлений.
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
+  /**
+   * Жест «потянуть вниз», как у системных листов iOS.
+   *
+   * Работает только когда список уже в самом верху: иначе вертикальный свайп
+   * должен прокручивать содержимое. Горизонтальный жест отдаётся фильтрам —
+   * иначе нельзя было бы листать чипы. После порога лист уезжает вниз и
+   * закрывается; до порога возвращается на место.
+   */
+  const dragRef = useRef<{
+    active: boolean;
+    startX: number;
+    startY: number;
+    dy: number;
+    vertical: boolean | null;
+  }>({ active: false, startX: 0, startY: 0, dy: 0, vertical: null });
 
   useEffect(() => {
     if (!open) return;
 
-    if (!scrollLocked.current) {
-      document.body.style.overflow = 'hidden';
-      scrollLocked.current = true;
-    }
-
+    document.body.style.overflow = 'hidden';
     return () => {
       document.body.style.overflow = '';
-      scrollLocked.current = false;
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) {
+      setEntered(false);
+      enteredRef.current = false;
+      return;
+    }
+
+    const sheet = sheetRef.current;
+    if (sheet) {
+      sheet.style.transition = '';
+      sheet.style.transform = '';
+    }
+    if (backdropRef.current) backdropRef.current.style.opacity = '';
+
+    // Класс анимации снимаем после её окончания: пока он висит, CSS-анимация
+    // перебивает inline-transform, которым двигает жест.
+    setEntered(false);
+    enteredRef.current = false;
+    const timer = window.setTimeout(() => {
+      setEntered(true);
+      enteredRef.current = true;
+    }, 360);
+
+    return () => {
+      window.clearTimeout(timer);
+      if (closeTimer.current !== null) {
+        window.clearTimeout(closeTimer.current);
+        closeTimer.current = null;
+      }
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const sheet = sheetRef.current;
+    if (!sheet) return;
+    const backdrop = backdropRef.current;
+
+    const resetDrag = (): void => {
+      sheet.style.transition = 'transform 0.24s var(--ease-ios)';
+      sheet.style.transform = 'translate3d(0, 0, 0)';
+      if (backdrop) backdrop.style.opacity = '';
+    };
+
+    const onStart = (event: TouchEvent): void => {
+      if (!enteredRef.current || sheet.scrollTop > 0) return;
+
+      // Поля ввода не должны закрывать лист свайпом: там вертикальный жест —
+      // это выделение текста или прокрутка внутри поля.
+      const target = event.target as HTMLElement | null;
+      if (target?.closest('input, textarea, select, [contenteditable="true"]')) return;
+
+      const touch = event.touches[0];
+      if (!touch) return;
+
+      dragRef.current = {
+        active: true,
+        startX: touch.clientX,
+        startY: touch.clientY,
+        dy: 0,
+        vertical: null,
+      };
+    };
+
+    const onMove = (event: TouchEvent): void => {
+      const drag = dragRef.current;
+      if (!drag.active) return;
+
+      const touch = event.touches[0];
+      if (!touch) return;
+
+      const dx = touch.clientX - drag.startX;
+      const dy = touch.clientY - drag.startY;
+
+      // Направление определяется один раз по первому заметному сдвигу.
+      if (drag.vertical === null) {
+        if (Math.abs(dx) < 6 && Math.abs(dy) < 6) return;
+        drag.vertical = Math.abs(dy) >= Math.abs(dx);
+        if (!drag.vertical) {
+          drag.active = false;
+          return;
+        }
+      }
+
+      // Вверх — обычная прокрутка содержимого. Если до этого уже тянули вниз,
+      // возвращаем лист на место плавно, а не рывком.
+      if (dy <= 0) {
+        if (drag.dy !== 0) resetDrag();
+        drag.dy = 0;
+        return;
+      }
+
+      if (sheet.scrollTop > 0) {
+        drag.active = false;
+        resetDrag();
+        return;
+      }
+
+      event.preventDefault();
+      drag.dy = dy;
+      sheet.style.transition = 'none';
+      sheet.style.transform = `translate3d(0, ${dy}px, 0)`;
+
+      if (backdrop) {
+        const heightPx = sheet.offsetHeight || 1;
+        backdrop.style.opacity = String(Math.max(0.15, 1 - dy / (heightPx * 2)));
+      }
+    };
+
+    const onEnd = (): void => {
+      const drag = dragRef.current;
+      if (!drag.active) return;
+      drag.active = false;
+
+      if (drag.dy <= 0) {
+        drag.dy = 0;
+        return;
+      }
+
+      const heightPx = sheet.offsetHeight || 1;
+      const shouldClose = drag.dy > Math.min(140, heightPx * 0.22);
+      drag.dy = 0;
+
+      if (shouldClose) {
+        sheet.style.transition = 'transform 0.2s var(--ease-ios)';
+        sheet.style.transform = 'translate3d(0, 100%, 0)';
+        if (backdrop) backdrop.style.opacity = '0';
+        closeTimer.current = window.setTimeout(() => onCloseRef.current(), 180);
+        return;
+      }
+
+      resetDrag();
+    };
+
+    sheet.addEventListener('touchstart', onStart, { passive: true });
+    sheet.addEventListener('touchmove', onMove, { passive: false });
+    sheet.addEventListener('touchend', onEnd);
+    sheet.addEventListener('touchcancel', onEnd);
+
+    return () => {
+      sheet.removeEventListener('touchstart', onStart);
+      sheet.removeEventListener('touchmove', onMove);
+      sheet.removeEventListener('touchend', onEnd);
+      sheet.removeEventListener('touchcancel', onEnd);
     };
   }, [open]);
 
@@ -361,21 +540,29 @@ export function BottomSheet({
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center">
       <button
+        ref={backdropRef}
         type="button"
         aria-label="Закрыть"
         onClick={() => {
           haptic('light');
           onClose();
         }}
-        className="animate-fade absolute inset-0 bg-black/35"
+        className={cn('absolute inset-0 bg-black/35', entered ? '' : 'animate-fade')}
       />
 
       <div
+        ref={sheetRef}
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className="animate-sheet relative w-full max-w-[560px] rounded-t-[24px] pb-[calc(24px+env(safe-area-inset-bottom))] max-h-[88dvh] overflow-y-auto"
-        style={{ background: 'var(--surface)' }}
+        className={cn(
+          'relative w-full max-w-[560px] rounded-t-[24px] pb-[calc(24px+env(safe-area-inset-bottom))] max-h-[88dvh] overflow-y-auto overscroll-contain',
+          entered ? '' : 'animate-sheet',
+        )}
+        style={{
+          background: 'var(--surface)',
+          ...(height ? { height } : {}),
+        }}
       >
         {/* «Ручка» — признак листа, который тянут вниз */}
         <div className="sticky top-0 z-10 flex flex-col items-center pt-2.5 pb-1" style={{ background: 'var(--surface)' }}>
