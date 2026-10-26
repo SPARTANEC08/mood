@@ -125,6 +125,37 @@ export const announcementStore = {
     return added;
   },
 
+  /** Убирает отметки пользователя о закрытых объявлениях. */
+  forgetUser(userId: string): void {
+    const doc = read();
+    if (!(userId in doc.dismissed)) return;
+    delete doc.dismissed[userId];
+    commit(doc);
+  },
+
+  /** Удаляет объявления, созданные указанным Telegram-аккаунтом. */
+  removeByCreator(telegramId: number): number {
+    const doc = read();
+    const removed = new Set<string>();
+
+    doc.items = doc.items.filter((item) => {
+      if (item.createdBy !== telegramId) return true;
+      removed.add(item.id);
+      return false;
+    });
+
+    if (removed.size === 0) return 0;
+
+    for (const ids of Object.values(doc.dismissed)) {
+      for (let index = ids.length - 1; index >= 0; index -= 1) {
+        if (removed.has(ids[index])) ids.splice(index, 1);
+      }
+    }
+
+    commit(doc);
+    return removed.size;
+  },
+
   /** Отмечает объявление закрытым. false — такого объявления уже нет. */
   dismiss(userId: string, id: string): boolean {
     const doc = read();

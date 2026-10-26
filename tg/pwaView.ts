@@ -171,6 +171,7 @@ export function buildClientMenu(user: StoredUser, admin: boolean): BotViewResult
         : btn('🔔 Включить уведомления', 'notif_on', 'success'),
     ],
     [btn('🔗 Отвязать аккаунт', 'unlink')],
+    [btn('🗑 Удалить аккаунт', 'delete_account', 'danger')],
     ...(getPwaUrl() ? [appButtonRow()] : []),
     supportRow(),
   ];
@@ -212,6 +213,37 @@ export function buildUnlinkedView(): BotViewResult {
       'PWA продолжает работать, данные не тронуты.',
       '',
       'Чтобы вернуть уведомления: открой приложение → профиль → «Подключить уведомления в Telegram».',
+      '',
+      appLink(),
+    ]),
+    keyboard: [[btn('🏠 В меню', 'menu')], ...(getPwaUrl() ? [appButtonRow()] : [])],
+  };
+}
+
+/** Подтверждение полного удаления аккаунта. */
+export function buildDeleteAccountConfirmView(): BotViewResult {
+  return {
+    text: joinBlocks([
+      `🗑 ${b('Удалить аккаунт?')}`,
+      'Будут удалены аккаунт, сохранённый вход в БАРС, привязка Telegram, файлы, созданные тобой задания и объявления, история уведомлений, отметки «Сделано» и статистика.',
+      '',
+      i('Это не «отвязать». Отменить удаление нельзя.'),
+    ]),
+    keyboard: [
+      [
+        btn('🗑 Да, удалить всё', 'delete_account_yes', 'danger'),
+        btn('✕ Нет', 'menu'),
+      ],
+    ],
+  };
+}
+
+/** Результат полного удаления аккаунта. */
+export function buildAccountDeletedView(): BotViewResult {
+  return {
+    text: joinBlocks([
+      `✅ ${b('Аккаунт удалён')}`,
+      'Все связанные данные стёрты. При следующем входе в приложение создастся новая запись.',
       '',
       appLink(),
     ]),

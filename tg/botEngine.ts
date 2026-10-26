@@ -43,9 +43,11 @@ import { clearFlow, getFlow, setFlow, setFlowData, takeExpiredNotice } from './b
 import { broadcastText, validateBroadcastText, type BroadcastSend } from './broadcast.ts';
 import { esc, safeErrorMessage } from './format.ts';
 import {
+  buildAccountDeletedView,
   buildAccountNotFoundView,
   buildAndroidGuideView,
   buildClientMenu,
+  buildDeleteAccountConfirmView,
   buildIosGuideView,
   buildTargetLinkedElsewhereView,
   buildTgLinkedElsewhereView,
@@ -57,6 +59,7 @@ import {
 import { findReport, listReports } from './reports.ts';
 import { getStats } from '../backend/server/devStats.ts';
 import { renderReportHtml } from '../backend/services/notifications/reportHtml.ts';
+import { deleteAccount } from '../backend/services/account/deleteAccount.ts';
 
 /** От кого пришло сообщение/нажатие. */
 export interface TelegramSender {
@@ -267,6 +270,28 @@ export async function processTelegramCallback(
     });
     clearFlow(sender.id);
     return { view: buildUnlinkedView(), toast: 'Аккаунт отвязан' };
+  }
+
+  if (data === 'delete_account') {
+    if (!user) return { view: buildAccountNotFoundView(), toast: 'Аккаунт не найден' };
+    return { view: buildDeleteAccountConfirmView() };
+  }
+
+  if (data === 'delete_account_yes') {
+    if (!user) return { view: buildAccountNotFoundView(), toast: 'Аккаунт не найден' };
+
+    try {
+      await deleteAccount(user);
+    } catch (err: unknown) {
+      console.error('[Account] не удалось удалить аккаунт:', safeErrorMessage(err));
+      return {
+        view: buildDeleteAccountConfirmView(),
+        toast: 'Не удалось удалить аккаунт. Попробуйте ещё раз.',
+      };
+    }
+
+    clearFlow(sender.id);
+    return { view: buildAccountDeletedView(), toast: 'Аккаунт удалён' };
   }
 
   if (data === 'platform_ios') return { view: buildIosGuideView() };

@@ -18,6 +18,7 @@ import { Page } from '@/components/Page';
 import { Card, ListGroup, Row, SkeletonCard, Toast } from '@/components/ui';
 import { RefreshIndicator } from '@/components/RefreshIndicator';
 import { usePullToRefresh } from '@/components/PullToRefresh';
+import { DeleteAccountCard } from '@/components/profile/DeleteAccountCard';
 import { NotificationsCard } from '@/components/profile/NotificationsCard';
 import { ThemeCard } from '@/components/profile/ThemeCard';
 import { useAppData } from '@/lib/dataContext';
@@ -343,6 +344,8 @@ export function ProfilePage({ profile }: { profile: BootstrapResponse }) {
           его с другого. В боте выход делает другое — освобождает логин БАРС для
           входа в PWA.
         */}
+        <DeleteAccountCard />
+
         <div className="mt-4 flex justify-center">
           <button
             type="button"

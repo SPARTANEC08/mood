@@ -93,6 +93,8 @@
   вся история, фильтры по типам, «Прочитать все»; события (оценки, письма,
   приказы, стипендия) с деталями, по почте — только количество новых писем.
 - **Управление подпиской** на Telegram-уведомления в «Кабинете».
+- **Удаление аккаунта** — отдельный блок в «Кабинете» и в боте, с подтверждением;
+  стирает запись, файлы, созданные задания, историю и статистику.
 - **Три уровня скорости**: мгновенный старт из `localStorage` (stale-while-
   revalidate), фоновое обновление, предзагрузка файлов.
 
@@ -544,6 +546,7 @@ IMAP `mail.mpei.ru:993` режется Forefront TMG (RST на ClientHello), п�
 | POST | `/api/auth/login` · `/register` · `/2fa` | — |
 | POST | `/api/auth/logout` · `/refresh` | токен |
 | GET | `/api/auth/me` · `/config` · `/api/bootstrap` | токен |
+| POST | `/api/account/delete` | токен |
 | GET | `/api/subjects` · `/api/schedule` | токен + БАРС + группа |
 | GET | `/api/bars/grades` · `/attendance` · `/more` | токен + БАРС |
 | POST | `/api/bars/refresh` | токен + БАРС |
@@ -661,6 +664,7 @@ bash pwa/scripts/dev-tunnel.sh   # vite + cloudflared + бот одним про
 | `test:html` | баланс HTML-тегов в экранах бота |
 | `test:files` | загрузка/скачивание файлов |
 | `test:notifications` | включение/выключение уведомлений |
+| `test:account-delete` | полное удаление аккаунта: SQLite-строки, файлы, бот, статистика |
 | `test:owa` | OWA на мок-сервере: вход, перелогин с новым canary, все подтипы `MailAuthError`, `/api/mail` → 409 |
 | `test:owa:live` | вход в живой OWA (нужны креды и сеть МЭИ) |
 | `test:owa:user` | живой OWA по сохранённым кредам пользователя (`--user <userId>`), без записи в базу |

@@ -16,6 +16,7 @@ import multipart from '@fastify/multipart';
 
 import { AuthError, authHook } from './middleware/auth.ts';
 import { registerAuthRoutes } from './routes/auth.ts';
+import { registerAccountRoutes } from './routes/account.ts';
 import { registerScheduleRoutes } from './routes/schedule.ts';
 import { registerBarsRoutes } from './routes/bars.ts';
 import { registerMailRoutes } from './routes/mail.ts';
@@ -265,6 +266,7 @@ export async function buildServer(): Promise<FastifyInstance> {
   app.get('/health', async () => ({ status: 'ok', uptime: Math.floor(process.uptime()) }));
 
   await registerAuthRoutes(app);
+  registerAccountRoutes(app);
   await registerScheduleRoutes(app);
   await registerBarsRoutes(app);
   await registerMailRoutes(app);

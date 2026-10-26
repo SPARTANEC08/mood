@@ -17,9 +17,11 @@ import 'dotenv/config';
 import * as cheerio from 'cheerio';
 
 import {
+  buildAccountDeletedView,
   buildAccountNotFoundView,
   buildAndroidGuideView,
   buildClientMenu,
+  buildDeleteAccountConfirmView,
   buildIosGuideView,
   buildPwaOpenView,
   buildTargetLinkedElsewhereView,
@@ -175,6 +177,8 @@ const VIEWS: { name: string; view: BotViewResult }[] = [
   { name: 'Клиентское меню (админ)', view: buildClientMenu(testUser(), true) },
   { name: 'Отвязка: подтверждение', view: buildUnlinkConfirmView() },
   { name: 'Отвязка: результат', view: buildUnlinkedView() },
+  { name: 'Удаление аккаунта: подтверждение', view: buildDeleteAccountConfirmView() },
+  { name: 'Удаление аккаунта: результат', view: buildAccountDeletedView() },
   { name: 'Аккаунт не найден', view: buildAccountNotFoundView() },
   { name: 'Telegram занят', view: buildTgLinkedElsewhereView() },
   { name: 'Аккаунт занят', view: buildTargetLinkedElsewhereView() },

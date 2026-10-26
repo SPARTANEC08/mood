@@ -386,6 +386,29 @@ function scanFiles(): Map<string, { files: number; bytes: number; lastUploadAt: 
 }
 
 /**
+ * Убирает пользователя из статистики.
+ *
+ * Удаляется не только строка в users: идентификатор лежит в минутных корзинах
+ * (`users`, `barsNew`), в «последней активности» и в кэше файлов. Без этого
+ * после удаления аккаунта человек ещё сутки появлялся бы в /dev и отчётах.
+ *
+ * Агрегатные счётчики (число запросов, заходов) не пересчитываются: это
+ * обезличенные суммы за минуту, восстановить из них личность нельзя.
+ */
+export function forgetUser(userId: string): void {
+  lastSeen.delete(userId);
+  lastVisit.delete(userId);
+
+  for (const bucket of buckets.values()) {
+    bucket.users = bucket.users.filter((id) => id !== userId);
+    bucket.barsNew = bucket.barsNew.filter((id) => id !== userId);
+  }
+
+  filesCache?.rows.delete(userId);
+  save(true);
+}
+
+/**
  * Полный ответ для страницы /dev/ и для отчёта.
  *
  * `windowEnd` позволяет собрать исторический срез (автоотчёт в 00:00 описывает

@@ -53,6 +53,13 @@ export const api = {
   // ── профиль и расписание ─────────────────────────────────────────────────
   bootstrap: () => request<BootstrapResponse>('/bootstrap'),
 
+  /** Полное удаление аккаунта. Подтверждение проверяет и сервер. */
+  deleteAccount: () =>
+    request<{ ok: true }>('/account/delete', {
+      method: 'POST',
+      body: { confirmation: 'УДАЛИТЬ' },
+    }),
+
   schedule: (params?: { startDate?: string; endDate?: string; force?: boolean }) => {
     const query = new URLSearchParams();
     if (params?.startDate) query.set('startDate', params.startDate);
