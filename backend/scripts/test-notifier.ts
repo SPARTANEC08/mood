@@ -156,7 +156,28 @@ async function run(): Promise<void> {
     gradeEvent[0]?.details.some((line) => line.includes('Математический анализ')) === true,
     JSON.stringify(gradeEvent[0]?.details),
   );
+  check(
+    'в деталях КМ, а не КТ',
+    gradeEvent[0]?.details.some((line) => line.includes('КМ1') && !line.includes('КТ')) === true,
+    JSON.stringify(gradeEvent[0]?.details),
+  );
+  check(
+    'строки «За неделю» больше нет',
+    gradeEvent[0]?.details.some((line) => line.includes('За неделю')) !== true,
+    JSON.stringify(gradeEvent[0]?.details),
+  );
   check('у события есть стабильный ключ', gradeEvent[0]?.key.startsWith('grade:') === true, String(gradeEvent[0]?.key));
+
+  const decreased = diffSnapshots(
+    prev,
+    baseSnapshot({
+      gradesHash: { 'Математический анализ_КТ1': 20, 'Математический анализ_КТ2': null },
+      lastSeenMailUid: 100,
+      ordersCount: 5,
+      scholarshipStatus: 'нет',
+    }),
+  );
+  check('снижение балла не даёт события', decreased.length === 0, JSON.stringify(decreased));
 
   const mailEvent = diffSnapshots(
     prev,
@@ -166,6 +187,7 @@ async function run(): Promise<void> {
       ordersCount: 5,
       scholarshipStatus: 'нет',
     }),
+    { newMailCount: 3 },
   );
   check('новый mail UID -> событие mail', mailEvent.length === 1 && mailEvent[0].kind === 'mail');
   check(
@@ -173,7 +195,11 @@ async function run(): Promise<void> {
     mailEvent[0]?.title.includes('Новое письмо') === true,
     String(mailEvent[0]?.title),
   );
-  check('у письма нет деталей', (mailEvent[0]?.details.length ?? -1) === 0);
+  check(
+    'у письма есть количество без содержимого',
+    mailEvent[0]?.details[0] === 'Новых писем: 3',
+    JSON.stringify(mailEvent[0]?.details),
+  );
   check('письмо — ключ по UID', mailEvent[0]?.key.startsWith('mail:') === true, String(mailEvent[0]?.key));
 
   const orderEvent = diffSnapshots(
@@ -202,11 +228,31 @@ async function run(): Promise<void> {
       scholarshipStatus: 'академическая, 01.09.2026 — 31.12.2026',
     }),
   );
-  check('смена стипендии -> событие scholarship', scholEvent.length === 1 && scholEvent[0].kind === 'scholarship');
+  check('назначение стипендии -> событие scholarship', scholEvent.length === 1 && scholEvent[0].kind === 'scholarship');
   check(
-    'для приложения есть статус стипендии',
-    scholEvent[0]?.details[0]?.includes('Статус') === true,
+    'для приложения есть факт назначения',
+    scholEvent[0]?.details[0]?.includes('Назначена') === true,
     JSON.stringify(scholEvent[0]?.details),
+  );
+
+  const scholarshipChanged = diffSnapshots(
+    baseSnapshot({
+      gradesHash: { ...prev.gradesHash },
+      lastSeenMailUid: 100,
+      ordersCount: 5,
+      scholarshipStatus: 'академическая, 01.09.2026 — 31.12.2026',
+    }),
+    baseSnapshot({
+      gradesHash: { ...prev.gradesHash },
+      lastSeenMailUid: 100,
+      ordersCount: 5,
+      scholarshipStatus: 'повышенная, 01.09.2026 — 31.12.2026',
+    }),
+  );
+  check(
+    'смена типа стипендии без назначения/отмены не уведомляет',
+    scholarshipChanged.length === 0,
+    JSON.stringify(scholarshipChanged),
   );
 
   const multi = diffSnapshots(

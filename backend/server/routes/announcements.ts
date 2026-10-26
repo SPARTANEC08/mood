@@ -11,6 +11,50 @@ import type { FastifyInstance } from 'fastify';
 import { announcementStore } from '../../../db/storage/announcementStore.ts';
 import { userEventStore } from '../../../db/storage/userEventStore.ts';
 import { requireBars } from '../middleware/auth.ts';
+import type {
+  AppNotificationItem,
+  NotificationsFeedResponse,
+} from '../types.ts';
+
+/**
+ * Объединяет две очереди в одну ленту.
+ *
+ * Объявления администратора и события нотификатора живут отдельно: первые —
+ * общие для всех, вторые — персональные. В центре уведомлений человек должен
+ * видеть единый список, поэтому слияние делается здесь, на чтении, а не
+ * дублированием записей в двух хранилищах.
+ */
+function buildFeed(userId: string): NotificationsFeedResponse {
+  const events: AppNotificationItem[] = userEventStore.listForUser(userId).map((event) => ({
+    id: event.id,
+    kind: event.kind,
+    createdAt: event.createdAt,
+    read: event.readAt !== null && event.readAt !== undefined,
+    label: event.label,
+    details: event.details,
+  }));
+
+  const broadcasts: AppNotificationItem[] = announcementStore
+    .listForUser(userId)
+    .map((item) => ({
+      id: item.id,
+      kind: 'broadcast',
+      createdAt: item.createdAt,
+      read: item.read,
+      label: 'Объявление',
+      text: item.text,
+    }));
+
+  const items = [...events, ...broadcasts].sort((a, b) => {
+    const byDate = b.createdAt.localeCompare(a.createdAt);
+    return byDate !== 0 ? byDate : b.id.localeCompare(a.id);
+  });
+
+  return {
+    items,
+    unread: items.reduce((count, item) => count + (item.read ? 0 : 1), 0),
+  };
+}
 
 export function registerAnnouncementRoutes(app: FastifyInstance): void {
   /** Следующее непрочитанное объявление (или null). Старый контракт. */
@@ -26,6 +70,46 @@ export function registerAnnouncementRoutes(app: FastifyInstance): void {
 
     announcementStore.dismiss(student.userId, id);
     return reply.send({ ok: true });
+  });
+
+  /**
+   * Вся лента уведомлений: объявления админа и события, новые сверху.
+   *
+   * Список нужен центру уведомлений. Отдельный маршрут для «следующего»
+   * остаётся ниже: на нём работает текущая модалка и старые установленные
+   * версии приложения.
+   */
+  app.get('/api/notifications', async (request, reply) => {
+    const student = requireBars(request);
+    return reply.send(buildFeed(student.userId));
+  });
+
+  /**
+   * Только счётчики для бейджа на колокольчике.
+   *
+   * Лёгкий ответ, который приложение опрашивает раз в минуту: тянуть весь
+   * список ради одной цифры незачем.
+   */
+  app.get('/api/notifications/unread-count', async (request, reply) => {
+    const student = requireBars(request);
+    const events = userEventStore.unreadCount(student.userId);
+    const broadcasts = announcementStore.unreadCount(student.userId);
+
+    return reply.send({
+      unread: events + broadcasts,
+      events,
+      broadcasts,
+    });
+  });
+
+  /** «Прочитать все»: события помечаются прочитанными, объявления закрываются. */
+  app.post('/api/notifications/read-all', async (request, reply) => {
+    const student = requireBars(request);
+
+    userEventStore.markAllRead(student.userId);
+    announcementStore.dismissAll(student.userId);
+
+    return reply.send({ ok: true, unread: 0 });
   });
 
   /**

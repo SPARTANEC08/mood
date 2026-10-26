@@ -71,16 +71,12 @@ section('Снимок после доставки (защита от потер�
   check('нет прежнего снимка → берём новый (базовая линия)', noPrev.lastSeenMailUid === 200);
 }
 
-section('Дифф: лимит писем и «+N за неделю»');
+section('Дифф: количество писем и подпись КМ');
 {
-  const mailIds = Array.from({ length: 9 }, (_, index) => ({
-    uid: 101 + index,
-    date: new Date(),
-  }));
-
   const mailEvents = diffSnapshots(
     snapshot({ lastSeenMailUid: 100 }),
     snapshot({ lastSeenMailUid: 109 }),
+    { newMailCount: 9 },
   );
   const mailEvent = mailEvents.find((event) => event.kind === 'mail');
   check('событие почты есть', Boolean(mailEvent));
@@ -90,6 +86,11 @@ section('Дифф: лимит писем и «+N за неделю»');
     String(mailEvent?.title),
   );
   check('emoji письма — 📧', mailEvent?.title.includes('📧') === true, String(mailEvent?.title));
+  check(
+    'количество писем без содержимого',
+    mailEvent?.details[0] === 'Новых писем: 9',
+    JSON.stringify(mailEvent?.details),
+  );
 
   const gradeEvents = diffSnapshots(
     snapshot({ gradesHash: { 'Матан_КТ1': 10, 'Физика_КТ1': 20 } }),
@@ -98,6 +99,11 @@ section('Дифф: лимит писем и «+N за неделю»');
   const gradeEvent = gradeEvents.find((event) => event.kind === 'grade');
   check('событие оценок есть', Boolean(gradeEvent));
   check('emoji баллов — 🎓', gradeEvent?.title.includes('🎓') === true, String(gradeEvent?.title));
+  check(
+    'в деталях КМ, а не КТ',
+    gradeEvent?.details.some((line) => line.includes('КМ1') && !line.includes('КТ')) === true,
+    JSON.stringify(gradeEvent?.details),
+  );
 }
 
 section('Базовая линия и подпись');

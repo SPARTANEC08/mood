@@ -55,6 +55,43 @@ const MAX_CONSECUTIVE_FAILURES = 5;
 /** Таймаут одного пользователя, чтобы зависший запрос не держал весь цикл. */
 const PER_USER_TIMEOUT_MS = 60 * 1000;
 
+/** Сколько дней хранить in-app историю для тех, кто давно не заходил. */
+const IN_APP_HISTORY_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
+
+/**
+ * Когда человек последний раз пользовался приложением.
+ *
+ * Отдельного поля «последняя активность» в записи нет, и заводить его ради
+ * фильтра не нужно: отметки уже есть у PWA-токенов (`lastUsedAt` обновляется
+ * раз в час при запросах) и у входа в БАРС.
+ *
+ * `updatedAt` здесь намеренно не используется: нотификатор сам патчит запись
+ * при обновлении сессии OWA, и «активность» оказывалась бы свежей у человека,
+ * который месяцами не открывал приложение.
+ */
+function lastAppActivityMs(user: StoredUser): number {
+  const times: number[] = [];
+
+  for (const token of user.pwaTokens ?? []) {
+    for (const value of [token.lastUsedAt, token.createdAt]) {
+      const ts = value ? Date.parse(value) : Number.NaN;
+      if (Number.isFinite(ts)) times.push(ts);
+    }
+  }
+
+  for (const value of [user.barsAuthedAt, user.createdAt]) {
+    const ts = value ? Date.parse(value) : Number.NaN;
+    if (Number.isFinite(ts)) times.push(ts);
+  }
+
+  return times.length > 0 ? Math.max(...times) : 0;
+}
+
+/** Стоит ли писать событие в историю приложения этому пользователю. */
+function shouldStoreInApp(user: StoredUser, now: Date): boolean {
+  return now.getTime() - lastAppActivityMs(user) <= IN_APP_HISTORY_WINDOW_MS;
+}
+
 /**
  * Функция отправки сообщения конкретному пользователю.
  * Регистрируется telegramService, чтобы сервис не зависел от grammY.
@@ -142,13 +179,27 @@ export async function checkUser(
     lastCheckedAt: now.toISOString(),
   };
 
+  // Количество новых писем считается по уже полученным UID. Темы, отправители
+  // и тела не читаются: в уведомление уходит только число.
+  const newMailCount =
+    state.mailIds !== null
+      ? state.mailIds.filter((message) => message.uid > (prev?.lastSeenMailUid ?? 0)).length
+      : 0;
+
   // Уведомления строим только по фактически полученным данным: дифф со снимком,
   // где часть полей восстановлена из prev, событий не даёт.
-  const events = diffSnapshots(prev, next, { orders: state.orders ?? undefined });
+  const events = diffSnapshots(prev, next, {
+    orders: state.orders ?? undefined,
+    newMailCount,
+  });
 
   // In-app уведомления: детали храним для PWA, Telegram получает только тип.
   // Ключ события стабилен, поэтому повтор круга после сбоя не создаёт дубль.
-  if (events.length > 0 && (user.pwaTokens?.length ?? 0) > 0) {
+  //
+  // История нужна не только владельцам живого PWA-токена: человек мог выйти
+  // с устройства и вернуться позже. Пишем тем, кто заходил за последние 30 дней,
+  // чтобы не копить 50 событий для брошенных записей.
+  if (events.length > 0 && shouldStoreInApp(user, now)) {
     const createdAt = now.toISOString();
     for (const event of events) {
       userEventStore.add({

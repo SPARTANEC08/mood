@@ -84,6 +84,47 @@ export const announcementStore = {
     return doc.items.find((item) => !dismissed.has(item.id)) ?? null;
   },
 
+  /**
+   * Все объявления с признаком прочтения для конкретного пользователя.
+   *
+   * Новые сверху. «Прочитано» здесь означает «закрыто этим пользователем»:
+   * отдельного поля в хранилище нет, отметки живут в `dismissed`.
+   */
+  listForUser(userId: string): Array<AppAnnouncement & { read: boolean }> {
+    const doc = read();
+    const dismissed = new Set(doc.dismissed[userId] ?? []);
+
+    return [...doc.items]
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .map((item) => ({ ...item, read: dismissed.has(item.id) }));
+  },
+
+  /** Сколько объявлений пользователь ещё не закрывал. */
+  unreadCount(userId: string): number {
+    const doc = read();
+    const dismissed = new Set(doc.dismissed[userId] ?? []);
+    return doc.items.reduce((count, item) => count + (dismissed.has(item.id) ? 0 : 1), 0);
+  },
+
+  /** Закрывает все текущие объявления пользователя. */
+  dismissAll(userId: string): number {
+    const doc = read();
+    const dismissed = new Set(doc.dismissed[userId] ?? []);
+    let added = 0;
+
+    for (const item of doc.items) {
+      if (dismissed.has(item.id)) continue;
+      dismissed.add(item.id);
+      added += 1;
+    }
+
+    if (added === 0) return 0;
+
+    doc.dismissed[userId] = [...dismissed];
+    commit(doc);
+    return added;
+  },
+
   /** Отмечает объявление закрытым. false — такого объявления уже нет. */
   dismiss(userId: string, id: string): boolean {
     const doc = read();

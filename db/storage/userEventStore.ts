@@ -104,6 +104,42 @@ export const userEventStore = {
     return row ? fromRow(row) : null;
   },
 
+  /**
+   * Вся история событий пользователя для центра уведомлений.
+   *
+   * Новые сверху. Порядок при одинаковом `created_at` добивается по id, чтобы
+   * список не «прыгал» между запросами: нотификатор пишет пачку событий одним
+   * временем.
+   */
+  listForUser(userId: string): UserEvent[] {
+    const rows = getDb()
+      .prepare(
+        'SELECT id, user_id, kind, label, details, created_at, read_at ' +
+          'FROM user_events WHERE user_id = ? ORDER BY created_at DESC, id DESC',
+      )
+      .all(userId) as EventRow[];
+
+    return rows.map(fromRow);
+  },
+
+  /** Сколько событий ещё не прочитано. */
+  unreadCount(userId: string): number {
+    const row = getDb()
+      .prepare('SELECT COUNT(*) AS count FROM user_events WHERE user_id = ? AND read_at IS NULL')
+      .get(userId) as { count: number } | undefined;
+
+    return Number(row?.count ?? 0);
+  },
+
+  /** Отмечает все события пользователя прочитанными. Возвращает число изменённых. */
+  markAllRead(userId: string): number {
+    const result = getDb()
+      .prepare('UPDATE user_events SET read_at = ? WHERE user_id = ? AND read_at IS NULL')
+      .run(new Date().toISOString(), userId);
+
+    return result.changes;
+  },
+
   /** Отмечает событие прочитанным. false — события нет или оно уже прочитано. */
   markRead(userId: string, id: string): boolean {
     const result = getDb()

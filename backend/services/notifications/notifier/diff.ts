@@ -77,39 +77,42 @@ export interface NotificationEvent {
 export function diffSnapshots(
   prev: UserSnapshot | undefined,
   next: UserSnapshot,
-  context: { orders?: OrderItem[] } = {},
+  context: { orders?: OrderItem[]; newMailCount?: number } = {},
 ): NotificationEvent[] {
   if (isBaselineSnapshot(prev) || !prev) return [];
 
   const events: NotificationEvent[] = [];
 
-  // 1. Новые баллы по контрольным точкам
-  const changedGrades = Object.entries(next.gradesHash).filter(
-    ([key, value]) =>
-      value !== null &&
-      (prev.gradesHash[key] === undefined || prev.gradesHash[key] === null || prev.gradesHash[key] !== value),
-  );
+  // 1. Новые баллы по контрольным точкам.
+  //
+  // Снижение и сброс в «нет оценки» уведомлений не порождают: студент не должен
+  // получать тревожное сообщение из-за исправления преподавателя. Новым
+  // считается закрытая КМ и любой рост уже выставленного балла.
+  const changedGrades = Object.entries(next.gradesHash).filter(([key, value]) => {
+    if (typeof value !== 'number') return false;
+    const before = prev.gradesHash[key];
+    return before === undefined || before === null || value > before;
+  });
 
   if (changedGrades.length > 0) {
-    const gained = changedGrades.reduce((sum, [key, value]) => {
-      if (typeof value !== 'number') return sum;
-      const before = prev.gradesHash[key];
-      const delta = typeof before === 'number' ? value - before : value;
-      return sum + Math.max(0, delta);
-    }, 0);
-
     const details: string[] = [];
     for (const [key, value] of changedGrades) {
       if (typeof value !== 'number') continue;
+
+      // Внутренний ключ снимка остаётся с «КТ» — менять его нельзя: старые
+      // снимки в базе перестали бы совпадать, и после деплоя все баллы пришли
+      // бы разом как новые. Меняется только подпись для человека.
       const idx = key.lastIndexOf('_КТ');
       const discipline = idx > 0 ? key.slice(0, idx) : key;
-      const point = idx > 0 ? key.slice(idx + 1) : '';
+      const pointRaw = idx > 0 ? key.slice(idx + 1) : '';
+      const point = pointRaw.startsWith('КТ') ? `КМ${pointRaw.slice(2)}` : pointRaw;
       const before = prev.gradesHash[key];
       const delta = typeof before === 'number' ? value - before : null;
       const deltaStr = delta !== null && delta !== 0 ? ` (${delta > 0 ? '+' : ''}${fmtNum(delta)})` : '';
-      details.push(`${discipline} ${point}: ${fmtNum(value)}${deltaStr}`.trim());
+      const heading = [discipline, point].filter(Boolean).join(' · ');
+
+      details.push(`${heading}: ${fmtNum(value)}${deltaStr}`.trim());
     }
-    if (gained > 0) details.unshift(`За неделю: +${fmtNum(gained)}`);
 
     const key = createHash('sha1').update(details.join('|')).digest('hex').slice(0, 16);
     events.push({
@@ -121,13 +124,19 @@ export function diffSnapshots(
     });
   }
 
-  // 2. Новое письмо — без деталей: почту в приложении не читаем.
+  // 2. Новое письмо. Содержимое почты не читаем: только количество новых
+  // писем, которое уже известно по UID из нотификатора.
   if (next.lastSeenMailUid > prev.lastSeenMailUid) {
+    const newMailCount =
+      typeof context.newMailCount === 'number' && context.newMailCount > 0
+        ? context.newMailCount
+        : 0;
+
     events.push({
       kind: 'mail',
       title: `📧 ${b('Новое письмо')}`,
       label: 'Новое письмо',
-      details: [],
+      details: newMailCount > 0 ? [`Новых писем: ${newMailCount}`] : [],
       key: `mail:${next.lastSeenMailUid}`,
     });
   }
@@ -154,14 +163,25 @@ export function diffSnapshots(
     });
   }
 
-  // 4. Изменение стипендии
-  if (next.scholarshipStatus !== prev.scholarshipStatus) {
+  // 4. Стипендия: только факт назначения или отмены.
+  //
+  // Смена типа или периода — не повод для уведомления: в БАРС такие поля
+  // обновляются и без изменения самой выплаты. Сравниваем именно состояние
+  // «назначена / не назначена».
+  const wasAppointed = (prev.scholarshipStatus ?? 'нет') !== 'нет';
+  const isAppointed = (next.scholarshipStatus ?? 'нет') !== 'нет';
+
+  if (wasAppointed !== isAppointed) {
     events.push({
       kind: 'scholarship',
+      // Формулировка Telegram не меняется: бот по-прежнему получает только
+      // тип события. Конкретика «назначена/отменена» — для приложения.
       title: `💰 ${b('Изменилась стипендия')}`,
-      label: 'Изменилась стипендия',
-      details: [`Статус: ${next.scholarshipStatus}`],
-      key: `scholarship:${next.scholarshipStatus}`,
+      label: isAppointed ? 'Назначена стипендия' : 'Стипендия отменена',
+      details: isAppointed
+        ? [`Назначена: ${next.scholarshipStatus}`]
+        : ['Выплата стипендии отменена'],
+      key: `scholarship:${isAppointed ? 'on' : 'off'}:${next.scholarshipStatus}`,
     });
   }
 

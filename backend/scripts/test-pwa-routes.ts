@@ -432,6 +432,81 @@ console.log('\n— Уведомления в приложении —');
     JSON.stringify(next2.json()),
   );
 
+  // ── лента уведомлений: объявления и события вместе ──────────────────────
+  const { userEventStore } = await import('../../db/storage/userEventStore.ts');
+  userEventStore.add({
+    userId: barred.userId,
+    key: 'feed:mail',
+    kind: 'mail',
+    label: 'Новое письмо',
+    details: ['Новых писем: 2'],
+    createdAt: new Date().toISOString(),
+  });
+
+  const feed = await app.inject({
+    method: 'GET',
+    url: '/api/notifications',
+    headers: auth(barredToken),
+  });
+  const feedBody = feed.json<{
+    items?: Array<{
+      id?: string;
+      kind?: string;
+      read?: boolean;
+      details?: string[];
+      text?: string;
+    }>;
+    unread?: number;
+  }>();
+  const feedItems = feedBody.items ?? [];
+
+  check('GET /api/notifications → 200', feed.statusCode === 200, String(feed.statusCode));
+  check('в ленте объявления и событие', feedItems.length === 3, String(feedItems.length));
+  check('закрытое объявление помечено прочитанным', feedItems.find((item) => item.id === first.id)?.read === true);
+  check('новое объявление не прочитано', feedItems.find((item) => item.id === second.id)?.read === false);
+  check(
+    'событие с количеством писем',
+    feedItems.find((item) => item.kind === 'mail')?.details?.[0] === 'Новых писем: 2',
+    JSON.stringify(feedItems.find((item) => item.kind === 'mail')),
+  );
+  check('счётчик непрочитанных в ленте', feedBody.unread === 2, String(feedBody.unread));
+
+  const unreadCount = await app.inject({
+    method: 'GET',
+    url: '/api/notifications/unread-count',
+    headers: auth(barredToken),
+  });
+  const unreadBody = unreadCount.json<{ unread?: number; events?: number; broadcasts?: number }>();
+  check('GET /api/notifications/unread-count → 200', unreadCount.statusCode === 200, String(unreadCount.statusCode));
+  check('счётчик: 2 непрочитанных', unreadBody.unread === 2, JSON.stringify(unreadBody));
+  check('счётчик: 1 событие', unreadBody.events === 1, JSON.stringify(unreadBody));
+  check('счётчик: 1 объявление', unreadBody.broadcasts === 1, JSON.stringify(unreadBody));
+
+  const readAll = await app.inject({
+    method: 'POST',
+    url: '/api/notifications/read-all',
+    headers: auth(barredToken),
+  });
+  check('POST /api/notifications/read-all → 200', readAll.statusCode === 200, String(readAll.statusCode));
+
+  const afterReadAll = await app.inject({
+    method: 'GET',
+    url: '/api/notifications',
+    headers: auth(barredToken),
+  });
+  const afterBody = afterReadAll.json<{
+    items?: Array<{ read?: boolean }>;
+    unread?: number;
+  }>();
+  check('после «прочитать все» счётчик 0', afterBody.unread === 0, String(afterBody.unread));
+  check(
+    'после «прочитать все» все элементы прочитаны',
+    (afterBody.items ?? []).every((item) => item.read === true),
+    JSON.stringify(afterBody.items),
+  );
+
+  userEventStore.clearForUser(barred.userId);
+
   const anonymous = await app.inject({ method: 'GET', url: '/api/announcements/next' });
   check('next без токена → 401', anonymous.statusCode === 401, String(anonymous.statusCode));
 

@@ -380,3 +380,36 @@ export interface LoginBody {
   login: string;
   password: string;
 }
+
+/** Тип уведомления в центре приложения. */
+export type AppNotificationKind = 'broadcast' | 'grade' | 'mail' | 'order' | 'scholarship';
+
+/**
+ * Элемент ленты уведомлений.
+ *
+ * `text` есть только у объявлений администратора, `label`/`details` — у
+ * событий. Поле `read` приходит только из списка; эндпоинт «следующее»
+ * возвращает непрочитанное и без него.
+ */
+export interface AppNotificationItem {
+  id: string;
+  kind: AppNotificationKind;
+  createdAt: string;
+  read: boolean;
+  label?: string;
+  text?: string;
+  details?: string[];
+}
+
+/** Ответ GET /api/notifications. */
+export interface NotificationsFeedResponse {
+  items: AppNotificationItem[];
+  unread: number;
+}
+
+/** Ответ GET /api/notifications/unread-count. */
+export interface NotificationsUnreadResponse {
+  unread: number;
+  events: number;
+  broadcasts: number;
+}
