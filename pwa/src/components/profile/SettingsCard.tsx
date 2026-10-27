@@ -9,6 +9,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { BellOff, BellRing, Monitor } from 'lucide-react';
 
 import { Card } from '@/components/ui';
+import { PushHelpSheet } from '@/components/profile/PushHelpSheet';
 import { api } from '@/lib/api';
 import { haptic } from '@/lib/env';
 import { enablePush, pushPermission, pushSupport, syncPush } from '@/lib/push';
@@ -27,6 +28,7 @@ export function SettingsCard({ profile }: { profile: BootstrapProfile }) {
   const [pushEnabled, setPushEnabled] = useState<boolean>(profile.pushEnabled !== false);
   const [pushDevices, setPushDevices] = useState<number>(profile.pushDevices ?? 0);
   const [pushBusy, setPushBusy] = useState(false);
+  const [helpKind, setHelpKind] = useState<'denied' | 'ios' | null>(null);
   const pushSupportState = pushSupport();
   const [permission, setPermission] = useState<NotificationPermission | 'unsupported'>(() =>
     pushPermission(),
@@ -120,6 +122,18 @@ export function SettingsCard({ profile }: { profile: BootstrapProfile }) {
   const pushAvailable =
     pushSupportState === 'ready' && permission !== 'denied' && permission !== 'unsupported';
 
+  /*
+   * Проблема, которую человек может исправить сам: запрет в браузере или
+   * неустановленная PWA на iOS. Только в этих случаях показываем кнопку
+   * «Инструкция» вместо переключателя.
+   */
+  const pushProblem: 'denied' | 'ios' | null =
+    permission === 'denied'
+      ? 'denied'
+      : pushSupportState === 'ios-not-installed'
+        ? 'ios'
+        : null;
+
   const themeLabel = THEME_OPTIONS.find((option) => option.mode === mode)?.label ?? 'Системная';
 
   return (
@@ -171,6 +185,18 @@ export function SettingsCard({ profile }: { profile: BootstrapProfile }) {
               {pushBusy ? 'Включаем…' : 'Включить'}
             </button>
           )
+        ) : pushProblem ? (
+          <button
+            type="button"
+            onClick={() => {
+              haptic('light');
+              setHelpKind(pushProblem);
+            }}
+            className="pressable shrink-0 rounded-full px-3 py-1.5 text-[12px] font-semibold active:pressable-active"
+            style={{ background: 'rgba(255,149,0,0.14)', color: 'var(--warning)' }}
+          >
+            Инструкция
+          </button>
         ) : null}
       </div>
 
@@ -222,6 +248,8 @@ export function SettingsCard({ profile }: { profile: BootstrapProfile }) {
           );
         })}
       </div>
+
+      {helpKind ? <PushHelpSheet kind={helpKind} onClose={() => setHelpKind(null)} /> : null}
     </Card>
   );
 }
