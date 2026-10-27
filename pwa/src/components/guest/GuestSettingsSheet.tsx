@@ -7,13 +7,20 @@
  */
 
 import { useState } from 'react';
-import { LogIn } from 'lucide-react';
+import { LogIn, Monitor, Moon, Sun, type LucideIcon } from 'lucide-react';
 
 import { GuestGroupField } from './GuestGroupField';
 import { BottomSheet } from '@/components/ui';
 import { ApiError, api } from '@/lib/api';
 import { haptic } from '@/lib/env';
+import { useTheme, type ThemeMode } from '@/lib/theme';
 import type { BootstrapProfile, GuestGroup } from '@/types/api';
+
+const THEME_OPTIONS: Array<{ mode: ThemeMode; label: string; icon: LucideIcon }> = [
+  { mode: 'system', label: 'Системная', icon: Monitor },
+  { mode: 'light', label: 'Светлая', icon: Sun },
+  { mode: 'dark', label: 'Тёмная', icon: Moon },
+];
 
 export function GuestSettingsSheet({
   open,
@@ -36,6 +43,7 @@ export function GuestSettingsSheet({
   );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [themeMode, setThemeMode] = useTheme();
 
   async function save(): Promise<void> {
     if (busy || !group || !name.trim()) return;
@@ -85,6 +93,41 @@ export function GuestSettingsSheet({
         </div>
 
         <GuestGroupField value={group} onChange={setGroup} disabled={busy} />
+
+        <div className="space-y-1.5">
+          <span className="px-1 text-[12px] font-medium text-[var(--text-secondary)]">Тема</span>
+          <div
+            role="radiogroup"
+            aria-label="Тема оформления"
+            className="flex gap-1 rounded-[12px] p-1"
+            style={{ background: 'var(--surface-grouped)' }}
+          >
+            {THEME_OPTIONS.map(({ mode, label, icon: Icon }) => {
+              const active = themeMode === mode;
+              return (
+                <button
+                  key={mode}
+                  type="button"
+                  role="radio"
+                  aria-checked={active}
+                  disabled={busy}
+                  onClick={() => {
+                    haptic('light');
+                    setThemeMode(mode);
+                  }}
+                  className="pressable flex flex-1 items-center justify-center gap-1.5 rounded-[9px] py-2 text-[12px] font-medium active:pressable-active disabled:opacity-40"
+                  style={{
+                    background: active ? 'var(--accent)' : 'transparent',
+                    color: active ? 'var(--accent-text)' : 'var(--text-secondary)',
+                  }}
+                >
+                  <Icon size={14} aria-hidden />
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
 
         {error ? (
           <p className="text-[13px] leading-snug text-[var(--danger)]">{error}</p>

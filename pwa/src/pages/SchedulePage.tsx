@@ -756,8 +756,6 @@ export function SchedulePage({
               */}
               <RefreshIndicator active={refreshing && !pull.suppressBackground} />
 
-              {settingsButton}
-
               <button
                 type="button"
                 aria-label="К сегодня"
@@ -788,6 +786,8 @@ export function SchedulePage({
               >
                 <Calendar size={19} aria-hidden />
               </button>
+
+              {settingsButton}
             </div>
           }
         />
