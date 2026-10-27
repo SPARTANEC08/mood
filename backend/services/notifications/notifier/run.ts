@@ -25,6 +25,7 @@ import {
   buildScholarshipStatus,
   diffSnapshots,
   isTransientNetworkError,
+  orderKey,
   renderNotification,
   type NotificationEvent,
 } from './diff.ts';
@@ -161,6 +162,11 @@ export async function checkUser(
   // Источники, которые на этом круге не опрашивались, сохраняют прошлые значения.
   // Если этого не сделать, пропущенный круг обнулит приказы и стипендию,
   // а на следующем круге пришёл бы ложный дифф с «новыми приказами».
+  const currentOrderKeys = state.orders !== null ? state.orders.map(orderKey) : null;
+  const seenOrders = currentOrderKeys
+    ? Array.from(new Set([...(prev?.ordersSeen ?? []), ...currentOrderKeys])).slice(-500)
+    : (prev?.ordersSeen ?? []);
+
   const next: UserSnapshot = {
     gradesHash:
       state.grades !== null ? buildGradesHash(state.grades) : (prev?.gradesHash ?? {}),
@@ -172,6 +178,7 @@ export async function checkUser(
           )
         : (prev?.lastSeenMailUid ?? 0),
     ordersCount: state.orders !== null ? state.orders.length : (prev?.ordersCount ?? 0),
+    ordersSeen: seenOrders,
     scholarshipStatus:
       state.scholarship !== null
         ? buildScholarshipStatus(state.scholarship)

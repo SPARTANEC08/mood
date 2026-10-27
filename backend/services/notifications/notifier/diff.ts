@@ -71,6 +71,22 @@ export interface NotificationEvent {
 }
 
 /**
+ * Стабильный ключ приказа.
+ *
+ * Номер+дата — лучший вариант: они не меняются от перерисовки таблицы.
+ * Если номера нет (бывает в части выгрузок), остаётся дата+содержание.
+ * Статус намеренно не входит: его изменение — не новый приказ.
+ */
+export function orderKey(order: OrderItem): string {
+  const number = (order.number ?? '').trim();
+  const date = (order.date ?? '').trim();
+  const title = (order.title ?? '').trim();
+
+  if (number) return `n:${number}|${date}`;
+  return `t:${date}|${title}`;
+}
+
+/**
  * Сравнивает снимки и формирует список событий.
  * Пустой prev означает базовую линию: уведомления не шлём, только сохраняем.
  */
@@ -141,26 +157,45 @@ export function diffSnapshots(
     });
   }
 
-  // 3. Новый приказ
-  if (next.ordersCount > prev.ordersCount) {
-    const added = Math.max(0, next.ordersCount - prev.ordersCount);
-    const latest = (context.orders ?? [])
-      .slice(0, 3)
-      .map((order) =>
-        [order.number ? `№${order.number}` : '', order.date ?? '', order.title]
-          .filter(Boolean)
-          .join(' ')
-          .trim(),
-      )
-      .filter(Boolean);
+  /*
+   * 3. Новый приказ — только по реально новым ключам.
+   *
+   * `ordersSeen` отсутствует у снимков, созданных до этого фикса. Для них
+   * первый круг — миграционная базовая линия: не уведомляем, просто запоминаем
+   * текущие приказы. Иначе после деплоя все старые приказы пришли бы разом.
+   *
+   * Если info не опрашивался, context.orders нет — событие не строим, снимок
+   * сохраняет прежнее множество.
+   */
+  const seenOrders = prev.ordersSeen;
+  if (Array.isArray(seenOrders) && context.orders) {
+    const seen = new Set(seenOrders);
+    const newOrders = context.orders.filter((order) => !seen.has(orderKey(order)));
 
-    events.push({
-      kind: 'order',
-      title: `📄 ${b('Новый приказ')}`,
-      label: 'Новый приказ',
-      details: [`Новых приказов: ${added}`, ...latest],
-      key: `order:${next.ordersCount}`,
-    });
+    if (newOrders.length > 0) {
+      const details = [
+        `Новых приказов: ${newOrders.length}`,
+        ...newOrders.slice(0, 3).map((order) =>
+          [order.number ? `№${order.number}` : '', order.date ?? '', order.title]
+            .filter(Boolean)
+            .join(' ')
+            .trim(),
+        ),
+      ].filter(Boolean);
+
+      const key = createHash('sha1')
+        .update(newOrders.map(orderKey).sort().join('|'))
+        .digest('hex')
+        .slice(0, 16);
+
+      events.push({
+        kind: 'order',
+        title: `📄 ${b('Новый приказ')}`,
+        label: 'Новый приказ',
+        details,
+        key: `order:${key}`,
+      });
+    }
   }
 
   // 4. Стипендия: только факт назначения или отмены.

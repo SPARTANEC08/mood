@@ -70,6 +70,7 @@ function baseSnapshot(over: Partial<UserSnapshot> = {}): UserSnapshot {
     gradesHash: {},
     lastSeenMailUid: 0,
     ordersCount: 0,
+    ordersSeen: [],
     scholarshipStatus: 'нет',
     lastCheckedAt: new Date().toISOString(),
     ...over,
@@ -131,6 +132,7 @@ async function run(): Promise<void> {
     gradesHash: { 'Математический анализ_КТ1': 25, 'Математический анализ_КТ2': null },
     lastSeenMailUid: 100,
     ordersCount: 5,
+    ordersSeen: ['n:1|01.09.2026'],
     scholarshipStatus: 'нет',
   });
 
@@ -208,8 +210,10 @@ async function run(): Promise<void> {
       gradesHash: { ...prev.gradesHash },
       lastSeenMailUid: 100,
       ordersCount: 7,
+      ordersSeen: ['n:1|01.09.2026', 'n:2|02.09.2026'],
       scholarshipStatus: 'нет',
     }),
+    { orders: [{ number: '2', date: '02.09.2026', title: 'О назначении стипендии' }] },
   );
   check('рост числа приказов -> событие order', orderEvent.length === 1 && orderEvent[0].kind === 'order');
   check('тип события — новый приказ', orderEvent[0]?.title.includes('Новый приказ') === true, String(orderEvent[0]?.title));
@@ -218,6 +222,26 @@ async function run(): Promise<void> {
     orderEvent[0]?.details[0]?.includes('Новых приказов') === true,
     JSON.stringify(orderEvent[0]?.details),
   );
+
+  // Счётчик вырос, но это те же приказы: уведомления быть не должно.
+  const sameOrders = diffSnapshots(
+    prev,
+    baseSnapshot({
+      ...prev,
+      ordersCount: 7,
+      ordersSeen: ['n:1|01.09.2026'],
+    }),
+    { orders: [{ number: '1', date: '01.09.2026', title: 'Старый приказ' }] },
+  ).filter((event) => event.kind === 'order');
+  check('рост счётчика без нового приказа не уведомляет', sameOrders.length === 0, JSON.stringify(sameOrders));
+
+  // Старый снимок без ordersSeen: первый круг — миграционная база, не спам.
+  const migrated = diffSnapshots(
+    baseSnapshot({ ordersCount: 5, ordersSeen: undefined }),
+    baseSnapshot({ ordersCount: 6, ordersSeen: ['n:1|01.09.2026'] }),
+    { orders: [{ number: '1', date: '01.09.2026', title: 'Старый приказ' }] },
+  ).filter((event) => event.kind === 'order');
+  check('старый снимок не даёт ложный приказ', migrated.length === 0, JSON.stringify(migrated));
 
   const scholEvent = diffSnapshots(
     prev,
@@ -261,8 +285,10 @@ async function run(): Promise<void> {
       gradesHash: { 'Математический анализ_КТ1': 30 },
       lastSeenMailUid: 150,
       ordersCount: 6,
+      ordersSeen: ['n:1|01.09.2026', 'n:2|02.09.2026'],
       scholarshipStatus: 'академическая',
     }),
+    { orders: [{ number: '2', date: '02.09.2026', title: 'О назначении стипендии' }] },
   );
   check('несколько изменений -> несколько событий', multi.length === 4, `получено ${multi.length}`);
 
@@ -368,6 +394,7 @@ async function run(): Promise<void> {
     gradesHash: { A_КТ1: 4 },
     lastSeenMailUid: 777,
     ordersCount: 9,
+    ordersSeen: ['n:1|01.09.2026'],
     scholarshipStatus: 'нет',
   });
   // Круг, на котором БАРС не опрашивался: state со всеми null
@@ -375,6 +402,7 @@ async function run(): Promise<void> {
     gradesHash: keptPrev.gradesHash,
     lastSeenMailUid: keptPrev.lastSeenMailUid,
     ordersCount: keptPrev.ordersCount,
+    ordersSeen: keptPrev.ordersSeen,
     scholarshipStatus: keptPrev.scholarshipStatus,
     lastCheckedAt: new Date().toISOString(),
   };
