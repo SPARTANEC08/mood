@@ -35,12 +35,10 @@ export function buildStatsUrl(): string | null {
 /** Главное админ-меню. */
 export function buildAdminMenu(): BotViewResult {
   /**
-   * Прямая ссылка на страницу статистики с токеном во фрагменте: одно нажатие —
-   * и владелец на живой странице, без ввода токена руками.
+   * Ссылка на статистику внутри PWA.
    *
-   * URL-кнопка (не callback): Telegram сам открывает браузер, поэтому ссылка
-   * должна лежать прямо в меню. Токен во фрагменте (`#`), а не в query: так его
-   * читает сама страница /dev/, и он не попадает ни на сервер, ни в access-логи.
+   * URL-кнопка (не callback): Telegram сам открывает браузер. Параметр
+   * `admin=stats` открывает админский раздел после входа в «Кабинет».
    */
   const statsUrl = buildStatsUrl();
   const registrationOpen = registrationStore.isOpen();
@@ -52,7 +50,7 @@ export function buildAdminMenu(): BotViewResult {
       i(`Регистрация новых аккаунтов: ${registrationOpen ? 'открыта' : 'закрыта'}.`),
     ]),
     keyboard: [
-      ...(statsUrl ? [[{ text: '🌐 Статистика (/dev)', url: statsUrl }]] : []),
+      ...(statsUrl ? [[{ text: '🌐 Статистика', url: statsUrl }]] : []),
       [btn('📊 Отчёт сейчас', 'admin_report_now'), btn('📜 Отчёты', 'admin_reports:0')],
       [btn('🔄 Обновить почту', 'admin_mail'), btn('📣 Рассылка', 'admin_broadcast')],
       [
