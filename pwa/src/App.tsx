@@ -1,9 +1,11 @@
 import { useEffect, useState, type FormEvent } from 'react';
 
 import { ScheduleApp } from '@/app/ScheduleApp';
+import { GuestOnboarding } from '@/components/guest/GuestOnboarding';
 import { InstallPrompt, shouldShowInstallPrompt } from '@/components/InstallPrompt';
 import { IosInstallGuide, useShouldShowIosInstallGuide } from '@/components/IosInstallGuide';
 import { DiagnosticsScreen } from '@/DiagnosticsScreen';
+import { api } from '@/lib/api';
 import { haptic, isIOS } from '@/lib/env';
 import {
   AuthError,
@@ -12,8 +14,12 @@ import {
   isPwaTokenExpired,
   isTwoFactorRequired,
   loginWithPassword,
+  clearGuestMode,
   clearPwaToken,
   getPwaToken,
+  isGuestMode,
+  setGuestMode,
+  setPwaToken,
   SIGNED_OUT_EVENT,
   type PwaTokenResponse,
 } from './auth';
@@ -37,7 +43,7 @@ import {
  * запуск на новом устройстве.
  */
 
-type Phase = 'ready' | 'welcome';
+type Phase = 'ready' | 'welcome' | 'guest';
 
 /**
  * Сколько ждём код подтверждения, прежде чем вернуть человека к логину.
@@ -57,6 +63,8 @@ export default function App() {
   const [phase, setPhase] = useState<Phase>(() =>
     hasUsablePwaToken() ? 'ready' : 'welcome',
   );
+  /** null — конфиг ещё грузится; false — рубильник регистрации закрыт. */
+  const [registrationOpen, setRegistrationOpen] = useState<boolean | null>(null);
 
   /**
    * Экран замеров включается адресом с ?debug=1.
@@ -123,15 +131,29 @@ export default function App() {
     // отправлять заведомо мёртвый заголовок и получать 401 вместо нормального
     // объяснения на экране входа.
     if (getPwaToken() && isPwaTokenExpired()) clearPwaToken();
+    if (!hasUsablePwaToken() && isGuestMode()) clearGuestMode();
 
     setPhase(hasUsablePwaToken() ? 'ready' : 'welcome');
+  }, []);
+
+  useEffect(() => {
+    // Публичный конфиг нужен, чтобы не показывать гостевую кнопку при
+    // закрытом рубильнике. Ошибка сети не должна прятать вход: пусть сервер
+    // ответит окончательно при создании сессии.
+    void api
+      .authConfig()
+      .then((config) => setRegistrationOpen(config.registrationOpen ?? true))
+      .catch(() => setRegistrationOpen(true));
   }, []);
 
   useEffect(() => {
     // Выход с устройства стирает токен из модуля auth, но не меняет состояние
     // здесь. Без подписки на событие приложение осталось бы на месте с
     // данными, которые сервер больше не отдаёт.
-    const onSignedOut = () => setPhase('welcome');
+    const onSignedOut = () => {
+      clearGuestMode();
+      setPhase('welcome');
+    };
     window.addEventListener(SIGNED_OUT_EVENT, onSignedOut);
 
     return () => window.removeEventListener(SIGNED_OUT_EVENT, onSignedOut);
@@ -148,7 +170,15 @@ export default function App() {
 
   /** Вход состоялся — открываем приложение. */
   function onAuthenticated(_issued: PwaTokenResponse): void {
+    clearGuestMode();
     haptic('medium');
+    setPhase('ready');
+  }
+
+  /** Гостевая сессия создана: токен уже выдан сервером. */
+  function onGuestAuthenticated(issued: PwaTokenResponse): void {
+    setPwaToken(issued.token, issued.expiresAt);
+    setGuestMode();
     setPhase('ready');
   }
 
@@ -169,6 +199,16 @@ export default function App() {
   // IosInstallGuide (там нужен шаг «Открыть в Safari» и показ при каждой загрузке).
   if (installOpen && !isIOS()) return <InstallPrompt onSkip={() => setInstallOpen(false)} />;
 
+  if (phase === 'guest') {
+    return (
+      <GuestOnboarding
+        onDone={onGuestAuthenticated}
+        onBack={() => setPhase('welcome')}
+        registrationOpen={registrationOpen}
+      />
+    );
+  }
+
   if (phase === 'welcome') {
     return (
       <>
@@ -176,6 +216,8 @@ export default function App() {
           onAuthenticated={onAuthenticated}
           onCancel={onReLogin}
           onTwoFactorChange={setTwoFactorActive}
+          onGuest={() => setPhase('guest')}
+          guestAllowed={registrationOpen !== false}
         />
         {iosGuide && !twoFactorActive ? <IosInstallGuide /> : null}
       </>
@@ -184,7 +226,7 @@ export default function App() {
 
   return (
     <>
-      <ScheduleApp onReLogin={onReLogin} />
+      <ScheduleApp onReLogin={onReLogin} guestHint={isGuestMode()} />
       {iosGuide ? <IosInstallGuide /> : null}
     </>
   );
@@ -219,11 +261,17 @@ function LoginScreen({
   onAuthenticated,
   onCancel,
   onTwoFactorChange,
+  onGuest,
+  guestAllowed = true,
 }: {
   onAuthenticated: (issued: PwaTokenResponse) => void;
   onCancel: () => void;
   /** Сигнал вверх, что сейчас ввод кода 2FA (чтобы iOS-гайд не перекрывал экран). */
   onTwoFactorChange?: (active: boolean) => void;
+  /** Переход в режим «только расписание». */
+  onGuest?: () => void;
+  /** Рубильник регистрации: при false гостевой вход тоже закрыт. */
+  guestAllowed?: boolean;
 }) {
   const [step, setStep] = useState<'credentials' | 'code'>('credentials');
   const [login, setLogin] = useState('');
@@ -440,6 +488,17 @@ function LoginScreen({
           </button>
         </form>
       )}
+
+      {step === 'credentials' && onGuest && guestAllowed ? (
+        <button
+          type="button"
+          disabled={busy}
+          onClick={onGuest}
+          className="pressable pressable-active w-full rounded-[14px] border border-[var(--separator-soft)] px-4 py-3 text-[15px] font-semibold text-[var(--accent)] disabled:opacity-40"
+        >
+          Продолжить только с расписанием
+        </button>
+      ) : null}
 
       {/*
         Отмена нужна только когда вход инициирован изнутри приложения: сессия

@@ -14,6 +14,7 @@ import { peekMailStatus } from '../../../services/mail/mailStatusCache.ts';
 import { PWA_TOKEN_TTL_MS } from '../../../utils/pwaAuth.ts';
 import { toMoscow } from '../../../utils/time.ts';
 import { isBarsAuthorized } from '../../../../db/storage/userStore.ts';
+import { registrationStore } from '../../../../db/storage/registrationStore.ts';
 import { requireUser } from '../../middleware/auth.ts';
 import type { BootstrapResponse } from '../../types.ts';
 import { buildProfile } from './helpers.ts';
@@ -69,7 +70,11 @@ export function registerBootstrapRoutes(app: FastifyInstance): void {
   });
 
   /** Срок жизни токена: клиенту нужно знать, зачем обновлять сессию. */
-  app.get('/api/auth/config', async () => ({ tokenTtlMs: PWA_TOKEN_TTL_MS }));
+  app.get('/api/auth/config', async () => ({
+    tokenTtlMs: PWA_TOKEN_TTL_MS,
+    // Гостевой вход подчиняется тому же рубильнику, что и обычная регистрация.
+    registrationOpen: registrationStore.isOpen(),
+  }));
 
   app.get('/api/bootstrap', async (request, reply) => {
     const student = requireUser(request);

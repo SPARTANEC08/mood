@@ -112,6 +112,7 @@ const DataContext = createContext<AppData | null>(null);
 
 export function DataProvider({
   bootstrap,
+  guest = false,
   children,
 }: {
   /**
@@ -120,6 +121,8 @@ export function DataProvider({
    * с данными (по нему на следующем запуске читается userId).
    */
   bootstrap: { profile: BootstrapProfile };
+  /** Гостевой режим: грузим только расписание и не трогаем личные разделы. */
+  guest?: boolean;
   children: ReactNode;
 }) {
   /**
@@ -206,26 +209,37 @@ export function DataProvider({
 
   const loadTier1 = useCallback(
     (opts: { silent: boolean; forceSchedule?: boolean }) =>
-      loadTier1Impl(opts, t1Refs, t1Setters, persistCore),
-    [],
+      loadTier1Impl({ ...opts, guest }, t1Refs, t1Setters, persistCore),
+    [guest],
   );
 
   const reloadLists = useCallback(
-    () => reloadListsImpl(coreRef, { setHomework, setImportant }),
-    [],
+    () => (guest ? Promise.resolve(null) : reloadListsImpl(coreRef, { setHomework, setImportant })),
+    [guest],
   );
 
   const loadTier2 = useCallback(
     (tab: 'grades' | 'profile', opts: { background?: boolean } = {}) =>
-      loadTier2Impl(tab, opts, t2Refs, t2Setters),
-    [],
+      guest ? Promise.resolve() : loadTier2Impl(tab, opts, t2Refs, t2Setters),
+    [guest],
   );
 
-  const loadTab = useCallback((tab: TabId) => loadTabImpl(tab, t2GateRefs, t2Setters), []);
+  const loadTab = useCallback(
+    (tab: TabId) => {
+      if (!guest) loadTabImpl(tab, t2GateRefs, t2Setters);
+    },
+    [guest],
+  );
 
-  const refreshBars = useCallback(() => refreshBarsImpl(t2Refs, t2Setters), []);
+  const refreshBars = useCallback(
+    () => (guest ? Promise.resolve(null) : refreshBarsImpl(t2Refs, t2Setters)),
+    [guest],
+  );
 
-  const refreshMail = useCallback(() => refreshMailOnly(t2Setters), []);
+  const refreshMail = useCallback(
+    () => (guest ? Promise.resolve(null) : refreshMailOnly(t2Setters)),
+    [guest],
+  );
 
   const refresh = useCallback(
     () =>

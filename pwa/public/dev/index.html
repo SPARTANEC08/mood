@@ -86,7 +86,7 @@
   <h2 id="filesTitle">Файлы</h2>
   <table><thead><tr><th>Пользователь</th><th class="num">Файлов</th><th class="num">Размер</th><th class="num">Последняя загрузка</th></tr></thead><tbody id="filesBody"></tbody></table>
 
-  <h2 id="sessionsTitle">Сессии БАРС</h2>
+  <h2 id="sessionsTitle">Пользователи</h2>
   <table><thead><tr><th>Пользователь</th><th class="num">Последний заход</th><th>БАРС</th><th>ТГ</th><th>Уведы</th></tr></thead><tbody id="sessionsBody"></tbody></table>
 
   <div class="err" id="err"></div>
@@ -180,11 +180,12 @@
         }).join('')
       : '<tr><td colspan="4" class="off">Файлов нет</td></tr>';
 
-    $('sessionsTitle').textContent = 'Сессии БАРС · ' + data.sessions.length;
+    $('sessionsTitle').textContent = 'Пользователи · ' + data.sessions.length;
     $('sessionsBody').innerHTML = data.sessions.map(function (r) {
       var bars = r.bars === 'active' ? '<span class="ok">активна</span>'
         : r.bars === 'expired' ? '<span class="warn">истекла</span>' : '<span class="off">нет</span>';
-      return '<tr><td>' + platformEmoji(r.platform) + ' ' + esc(r.name) + '<div class="hint">' + esc(r.group || '—') + '</div></td>' +
+      var guest = r.isGuest ? ' <span class="warn">гость</span>' : '';
+      return '<tr><td>' + platformEmoji(r.platform) + ' ' + esc(r.name) + guest + '<div class="hint">' + esc(r.group || '—') + '</div></td>' +
         '<td class="num">' + stamp(r.lastSeenAt) + '</td>' +
         '<td>' + bars + '</td>' +
         '<td>' + (r.telegram ? '<span class="ok">да</span>' : '<span class="off">нет</span>') + '</td>' +

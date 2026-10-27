@@ -11,7 +11,9 @@ import type {
   AttendanceResponse,
   BarsMoreResponse,
   BarsSnapshotResponse,
+  BootstrapProfile,
   BootstrapResponse,
+  AuthConfigResponse,
   CreateHomeworkBody,
   CreateImportantBody,
   GradesResponse,
@@ -25,6 +27,7 @@ import type {
   NextAnnouncementResponse,
   NextNotificationResponse,
   NotificationsFeedResponse,
+  GuestGroupsResponse,
 } from '@/types/api';
 import {
   deleteFile,
@@ -51,6 +54,30 @@ export const api = {
 
   // ── профиль и расписание ─────────────────────────────────────────────────
   bootstrap: () => request<BootstrapResponse>('/bootstrap'),
+
+  /** Публичная конфигурация входа: TTL токена и рубильник регистрации. */
+  authConfig: () => request<AuthConfigResponse>('/auth/config'),
+
+  // ── гостевой режим ───────────────────────────────────────────────────────
+  /** Подсказки групп из МЭИ; до создания гостя токена ещё нет. */
+  guestGroups: (query: string) =>
+    request<GuestGroupsResponse>(`/guest/groups?query=${encodeURIComponent(query)}`),
+
+  /** Создать гостевую сессию и получить обычный PWA-токен. */
+  guestSession: (body: { groupId: number; groupName: string; faculty?: string; displayName: string }) =>
+    request<{ token: string; expiresAt: number; userId: string; profile: BootstrapProfile }>(
+      '/guest/session',
+      { method: 'POST', body },
+    ),
+
+  /** Сменить имя/группу гостя. */
+  guestUpdateProfile: (body: {
+    displayName?: string;
+    groupId?: number;
+    groupName?: string;
+    faculty?: string;
+  }) =>
+    request<{ profile: BootstrapProfile }>('/guest/profile', { method: 'PATCH', body }),
 
   /** Полное удаление аккаунта. Подтверждение проверяет и сервер. */
   deleteAccount: () =>

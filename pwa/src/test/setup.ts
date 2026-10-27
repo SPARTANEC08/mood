@@ -500,7 +500,7 @@ window.fetch = (async (input: RequestInfo | URL, init?: RequestInit): Promise<Re
 
   if (path === '/api/bootstrap') return json(bootstrap);
   if (path === '/api/auth/me') return json(bootstrap.profile);
-  if (path === '/api/auth/config') return json({ tokenTtlMs: 90 * DAY });
+  if (path === '/api/auth/config') return json({ tokenTtlMs: 90 * DAY, registrationOpen: true });
 
   if (path === '/api/schedule') return json(schedule);
   if (path.startsWith('/api/homework/') && path.endsWith('/done')) {

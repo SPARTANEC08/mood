@@ -69,5 +69,6 @@ export function buildProfile(user: StoredUser): BootstrapResponse['profile'] {
     faculty: user.faculty,
     recordBookNumber: user.studentProfile?.recordBookNumber,
     groupId: user.groupId,
+    isGuest: user.isGuest === true,
   };
 }

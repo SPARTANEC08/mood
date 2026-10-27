@@ -26,6 +26,7 @@ export function SubjectScreen({
   homework,
   grade,
   isGradeLoading,
+  guest = false,
   onBack,
 }: {
   discipline: string;
@@ -33,6 +34,8 @@ export function SubjectScreen({
   homework: ApiHomework[];
   grade: ApiSubjectGrade | null;
   isGradeLoading: boolean;
+  /** Гостю не показываем оценки, ДЗ и уведомления. */
+  guest?: boolean;
   onBack: () => void;
 }) {
   /**
@@ -95,22 +98,22 @@ export function SubjectScreen({
                 {upcoming.length > 0
                   ? `ближайшая ${formatTargetDate(upcoming[0].rawDate)} · ещё ${upcoming.length - 1} ${plural(upcoming.length - 1, 'пара', 'пары', 'пар')}`
                   : 'пар в расписании нет'}
-                {subjectHomework.length > 0
+                {!guest && subjectHomework.length > 0
                   ? ` · ${subjectHomework.length} ${plural(subjectHomework.length, 'задание', 'задания', 'заданий')}`
                   : ''}
               </p>
             </div>
 
-            <NotificationBell />
+            {guest ? null : <NotificationBell />}
           </div>
         </header>
       }
     >
       <div className="space-y-5">
         {/* Итог по предмету */}
-        {isGradeLoading ? (
+        {!guest && isGradeLoading ? (
           <SkeletonLesson />
-        ) : grade ? (
+        ) : !guest && grade ? (
           <Card className="px-4 py-4">
             <div className="flex items-center justify-between gap-3">
               <div>
@@ -205,7 +208,8 @@ export function SubjectScreen({
             Порядок не косметика: человек открывает предмет, чтобы понять одно из
             двух — что с оценкой или что задали. Задания стоят вторым блоком
             именно потому, что это второй частый вопрос; расписание предмета
-            нужно реже, и оно уходит ниже. */}
+            нужно реже, и оно уходит ниже. Гостю этот блок не нужен. */}
+        {guest ? null : (
         <section>
           <h2 className="mb-2 mt-6 px-1 text-[13px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
             Домашние задания
@@ -252,6 +256,7 @@ export function SubjectScreen({
             </div>
           )}
         </section>
+        )}
 
         {/* Расписание предмета */}
         <section>

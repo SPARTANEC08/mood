@@ -12,7 +12,7 @@ import { clearScheduleCache, getGroupSchedule } from '../../scheduleCache.ts';
 import { safeErrorMessage } from '../../../tg/format.ts';
 import { homeworkStore, type LessonKindType } from '../../../db/storage/homeworkStore.ts';
 import type { ParsedLessonVariant, ParsedSchedule } from '../../parser/types.ts';
-import { requireBars } from '../middleware/auth.ts';
+import { requireBars, requireScheduleAccess } from '../middleware/auth.ts';
 import type {
   ApiLessonHomework,
   ApiLessonKind,
@@ -84,7 +84,7 @@ app.get('/api/subjects', async (request, reply) => {
 });
 
   app.get('/api/schedule', async (request, reply) => {
-    const student = requireBars(request);
+    const student = requireScheduleAccess(request);
     const group = requireStudentGroup(student);
 
     const query = (request.query ?? {}) as { startDate?: string; endDate?: string; force?: string };
@@ -104,7 +104,7 @@ app.get('/api/subjects', async (request, reply) => {
     }
 
     const days = filterByRange(
-      schedule.days.map((day) => mapDay(day, group.groupName)),
+      schedule.days.map((day) => mapDay(day, group.groupName, !student.isGuest)),
       query.startDate,
       query.endDate,
     );
@@ -122,13 +122,14 @@ app.get('/api/subjects', async (request, reply) => {
 function mapDay(
   day: ParsedSchedule['days'][number],
   groupName: string,
+  includeHomework: boolean,
 ): ApiScheduleDay {
   return {
     rawDate: day.rawDate,
     dayOfWeek: day.dayOfWeek,
     dayShort: day.dayShort,
     dayName: day.dayName,
-    slots: day.slots.map((slot) => mapSlot(slot, groupName, day.rawDate)),
+    slots: day.slots.map((slot) => mapSlot(slot, groupName, day.rawDate, includeHomework)),
   };
 }
 
@@ -136,19 +137,23 @@ function mapSlot(
   slot: ParsedSchedule['days'][number]['slots'][number],
   groupName: string,
   rawDate: string,
+  includeHomework: boolean,
 ): ApiLessonSlot {
   // ДЗ ищем по дате и номеру пары; groupName гарантирует, что подтянутся
-  // только записи своей группы (тот же фильтр использует бот).
+  // только записи своей группы (тот же фильтр использует бот). Гостю ДЗ не
+  // показываем: у него нет доступа к личным разделам.
   const disciplines = slot.variants.map((v) => v.discipline);
-  const homework: ApiLessonHomework[] = homeworkStore
-    .getForSlot(groupName, rawDate, slot.lessonNumber, disciplines)
-    .map((hw) => ({
-      id: hw.id,
-      text: hw.text,
-      authorName: hw.authorName,
-      createdAt: hw.createdAt,
-      fileCount: hw.files?.length ?? 0,
-    }));
+  const homework: ApiLessonHomework[] = includeHomework
+    ? homeworkStore
+        .getForSlot(groupName, rawDate, slot.lessonNumber, disciplines)
+        .map((hw) => ({
+          id: hw.id,
+          text: hw.text,
+          authorName: hw.authorName,
+          createdAt: hw.createdAt,
+          fileCount: hw.files?.length ?? 0,
+        }))
+    : [];
 
   return {
     lessonNumber: slot.lessonNumber,

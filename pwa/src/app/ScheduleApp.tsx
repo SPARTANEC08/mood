@@ -21,7 +21,8 @@ import { TabBar, type TabId } from '@/components/TabBar';
 import { TelegramPrompt } from '@/components/TelegramPrompt';
 import { AnnouncementGate } from '@/components/AnnouncementGate';
 import { NotificationsProvider } from '@/components/notifications/NotificationsProvider';
-import { ErrorState } from '@/components/ui';
+import { GuestScheduleApp } from './GuestScheduleApp';
+import { ErrorState, SkeletonList } from '@/components/ui';
 import { clearPwaToken, SIGNED_OUT_EVENT } from '@/auth';
 import { ApiError, api } from '@/lib/api';
 import { DataProvider } from '@/lib/dataContext';
@@ -50,7 +51,14 @@ const EMPTY_BOOTSTRAP: BootstrapResponse = {
   mailUnread: null,
 };
 
-export function ScheduleApp({ onReLogin }: { onReLogin: () => void }) {
+export function ScheduleApp({
+  onReLogin,
+  guestHint = false,
+}: {
+  onReLogin: () => void;
+  /** До bootstrap: последний вход был гостевым, не показываем вкладки. */
+  guestHint?: boolean;
+}) {
   const [bootstrap, setBootstrap] = useState<BootstrapResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<TabId>('schedule');
@@ -116,6 +124,14 @@ export function ScheduleApp({ onReLogin }: { onReLogin: () => void }) {
   // экран ошибки выше, либо на экран входа (401). В оставшемся случае на экране
   // скелет расписания — но никогда не пустой белый фон.
   if (!bootstrap) {
+    if (guestHint) {
+      return (
+        <div className="p-4">
+          <SkeletonList count={4} />
+        </div>
+      );
+    }
+
     return (
       <NotificationsProvider>
         <DataProvider bootstrap={EMPTY_BOOTSTRAP}>
@@ -125,6 +141,10 @@ export function ScheduleApp({ onReLogin }: { onReLogin: () => void }) {
         </DataProvider>
       </NotificationsProvider>
     );
+  }
+
+  if (bootstrap.profile.isGuest) {
+    return <GuestScheduleApp bootstrap={bootstrap} />;
   }
 
   if (!bootstrap.barsAuthorized) {

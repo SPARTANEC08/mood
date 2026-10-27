@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Calendar, CalendarCheck, Info, TriangleAlert, X } from 'lucide-react';
+import { Calendar, CalendarCheck, Info, Settings, TriangleAlert, X } from 'lucide-react';
 
 import { Header } from '@/components/TabBar';
 import { Page } from '@/components/Page';
@@ -77,7 +77,15 @@ interface ScheduleState {
   error: string | null;
 }
 
-export function SchedulePage() {
+export function SchedulePage({
+  guest = false,
+  onOpenSettings,
+}: {
+  /** Гостевой режим: без ДЗ, оценок и личных разделов. */
+  guest?: boolean;
+  /** Кнопка настроек гостя в шапке. */
+  onOpenSettings?: () => void;
+} = {}) {
   // Расписание берётся из общего кэша: оно грузится один раз при входе,
   // и переключение вкладок сеть больше не трогает.
   const { userId, schedule, homework, loading: cacheLoading, refreshing, error: cacheError, refresh } = useAppData();
@@ -550,6 +558,13 @@ export function SchedulePage() {
       haptic('light');
       setOpenSubject(discipline);
       setSubjectGrade(null);
+
+      // Гостю оценки недоступны: экран предмета показывает только пары.
+      if (guest) {
+        setIsGradeLoading(false);
+        return;
+      }
+
       setIsGradeLoading(true);
 
       try {
@@ -562,7 +577,7 @@ export function SchedulePage() {
         setIsGradeLoading(false);
       }
     },
-    [],
+    [guest],
   );
 
   /**
@@ -670,6 +685,7 @@ export function SchedulePage() {
         homework={homework}
         grade={subjectGrade}
         isGradeLoading={isGradeLoading}
+        guest={guest}
         onBack={() => {
           haptic('light');
           setOpenSubject(null);
@@ -724,6 +740,21 @@ export function SchedulePage() {
                 пока идёт жест, спиннер рисует сам pull-to-refresh.
               */}
               <RefreshIndicator active={refreshing && !pull.suppressBackground} />
+
+              {onOpenSettings ? (
+                <button
+                  type="button"
+                  aria-label="Настройки гостя"
+                  onClick={() => {
+                    haptic('light');
+                    onOpenSettings();
+                  }}
+                  className="pressable rounded-full p-2 active:pressable-active"
+                  style={{ color: 'var(--accent)' }}
+                >
+                  <Settings size={18} aria-hidden />
+                </button>
+              ) : null}
 
               <button
                 type="button"

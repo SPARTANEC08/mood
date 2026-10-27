@@ -566,6 +566,139 @@ console.log('\n— Уведомления в приложении —');
   announcementStore.reset();
 }
 
+console.log('\n— Гостевой режим —');
+{
+  const { registrationStore } = await import('../../db/storage/registrationStore.ts');
+  const { scheduleCacheStore } = await import('../../db/storage/scheduleCacheStore.ts');
+  const { clearScheduleCache } = await import('../scheduleCache.ts');
+  const { getStats } = await import('../server/devStats.ts');
+
+  // Гостевой вход закрыт тем же рубильником, что и обычная регистрация.
+  registrationStore.setOpen(true);
+
+  // Кладём готовое расписание в постоянный кэш: гость должен получить его
+  // без похода в МЭИ, а тест — работать без сети.
+  clearScheduleCache();
+  scheduleCacheStore.put(21985, {
+    groupName: 'ИЭ-11-26',
+    groupId: 21985,
+    facultyName: 'Институт электроэнергетики',
+    parentScheduleName: 'ИЭ-11-26',
+    totalLessons: 0,
+    dateRange: { start: '2026.10.20', finish: '2026.10.27' },
+    days: [],
+  }, Date.now());
+
+  // Поиск группы ходит в МЭИ: подменяем только этот внешний запрос.
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+    if (url.includes('/search?')) {
+      return new Response(
+        JSON.stringify([
+          { id: 21985, label: 'ИЭ-11-26', description: 'Институт электроэнергетики', type: 'group' },
+        ]),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      );
+    }
+    return originalFetch(input, init);
+  }) as typeof fetch;
+
+  try {
+    const groups = await app.inject({
+      method: 'GET',
+      url: '/api/guest/groups?query=ИЭ-11-26',
+    });
+    const groupsBody = groups.json<{ items?: Array<{ id?: number; label?: string }> }>();
+    check('GET /api/guest/groups → 200', groups.statusCode === 200, String(groups.statusCode));
+    check(
+      'поиск группы возвращает подсказку',
+      groupsBody.items?.[0]?.id === 21985 && groupsBody.items?.[0]?.label === 'ИЭ-11-26',
+      JSON.stringify(groupsBody),
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  const session = await app.inject({
+    method: 'POST',
+    url: '/api/guest/session',
+    payload: {
+      groupId: 21985,
+      groupName: 'ИЭ-11-26',
+      faculty: 'Институт электроэнергетики',
+      displayName: 'Тестовый Гость',
+    },
+  });
+  const sessionBody = session.json<{
+    token?: string;
+    userId?: string;
+    profile?: { isGuest?: boolean; fullName?: string; groupName?: string };
+  }>();
+  check('POST /api/guest/session → 200', session.statusCode === 200, `${session.statusCode} ${session.body}`);
+  check('гостевой профиль помечен isGuest', sessionBody.profile?.isGuest === true, JSON.stringify(sessionBody.profile));
+  check('гость получает имя и группу', sessionBody.profile?.fullName === 'Тестовый Гость' && sessionBody.profile?.groupName === 'ИЭ-11-26');
+
+  const guestToken = sessionBody.token ?? '';
+  const guestId = sessionBody.userId ?? '';
+
+  const bootstrap = await app.inject({
+    method: 'GET',
+    url: '/api/bootstrap',
+    headers: auth(guestToken),
+  });
+  const bootstrapBody = bootstrap.json<{ barsAuthorized?: boolean; profile?: { isGuest?: boolean } }>();
+  check('гостевой bootstrap → 200', bootstrap.statusCode === 200, String(bootstrap.statusCode));
+  check('гость не считается авторизованным в БАРС', bootstrapBody.barsAuthorized === false);
+  check('bootstrap сохраняет isGuest', bootstrapBody.profile?.isGuest === true);
+
+  const schedule = await app.inject({
+    method: 'GET',
+    url: '/api/schedule',
+    headers: auth(guestToken),
+  });
+  check('гость получает расписание → 200', schedule.statusCode === 200, `${schedule.statusCode} ${schedule.body}`);
+  check('расписание взято из постоянного кэша', schedule.json<{ days?: unknown[] }>().days?.length === 0);
+
+  const forbidden = await Promise.all([
+    app.inject({ method: 'GET', url: '/api/homework', headers: auth(guestToken) }),
+    app.inject({ method: 'GET', url: '/api/bars/grades', headers: auth(guestToken) }),
+    app.inject({ method: 'GET', url: '/api/notifications', headers: auth(guestToken) }),
+  ]);
+  check(
+    'гостю закрыты ДЗ, оценки и уведомления',
+    forbidden.every((response) => response.statusCode === 401 || response.statusCode === 403),
+    forbidden.map((response) => response.statusCode).join(','),
+  );
+
+  const updated = await app.inject({
+    method: 'PATCH',
+    url: '/api/guest/profile',
+    headers: auth(guestToken),
+    payload: { displayName: 'Гость Второй', groupId: 21985, groupName: 'ИЭ-11-26' },
+  });
+  check('PATCH /api/guest/profile → 200', updated.statusCode === 200, `${updated.statusCode} ${updated.body}`);
+  check('имя гостя обновилось', updated.json<{ profile?: { fullName?: string } }>().profile?.fullName === 'Гость Второй');
+
+  const stats = getStats();
+  const guestRow = stats.sessions.find((row) => row.id === guestId);
+  check('гость есть в статистике', guestRow !== undefined, JSON.stringify(stats.sessions.map((row) => row.id)));
+  check('в статистике гость помечен', guestRow?.isGuest === true, JSON.stringify(guestRow));
+  check('гость попал в онлайн/активность', (guestRow?.lastSeenAt ?? 0) > 0, JSON.stringify(guestRow));
+
+  registrationStore.setOpen(false);
+  const closed = await app.inject({
+    method: 'POST',
+    url: '/api/guest/session',
+    payload: { groupId: 21985, groupName: 'ИЭ-11-26', displayName: 'Закрытый Гость' },
+  });
+  check('при закрытой регистрации гость не создаётся', closed.statusCode === 403, String(closed.statusCode));
+  check('код registration_closed', closed.json<{ error?: string }>().error === 'registration_closed');
+  registrationStore.setOpen(true);
+
+  clearScheduleCache();
+}
+
 console.log('\n— Отзыв токена —');
 {
   const logout = await app.inject({ method: 'POST', url: '/api/auth/logout', headers: auth(token) });

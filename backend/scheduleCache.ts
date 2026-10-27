@@ -1,37 +1,35 @@
 /**
  * Кэш расписания по группам.
  *
- * Раньше это был голый `Map` прямо в botEngine с ленивой проверкой TTL. Три
- * проблемы, которые видны на замерах (backend/scripts/):
+ * Расписание меняется редко, а парсинг ts.mpei.ru — самый дорогой внешний
+ * запрос приложения. Поэтому:
  *
- * 1. Гонка. На холодном кэше 10 студентов одной группы давали 10 запросов
- *    к ts.mpei.ru вместо одного: проверка TTL и запись происходят после
- *    await, и все десятерые успевали пройти проверку. Для МЭИ это ещё и
- *    лишняя нагрузка на их API.
- * 2. Просроченные записи никогда не вытеснялись. TTL проверялся только при
- *    чтении, поэтому группа, которую никто не открывал, занимала память
- *    до следующего clear().
- * 3. Рост без предела. Каждая новая группа добавлялась в Map навсегда.
+ * - свежесть календарная: данные, загруженные после последнего воскресенья
+ *   00:00 МСК, считаются актуальными до следующего воскресенья;
+ * - разобранное расписание хранится не только в памяти, но и в SQLite:
+ *   рестарт сервера и повторные заходы не вызывают новый парсинг;
+ * - параллельные запросы одной группы дедуплицируются одним промисом;
+ * - память ограничена LRU-потолком, а устаревшая копия остаётся запасным
+ *   вариантом, если МЭИ недоступен в момент недельного обновления.
  *
- * Здесь: дедупликация запроса, активное вытеснение просроченных и потолок
- * по числу групп (LRU).
+ * Ручной force-refresh обходит недельное правило и очищает постоянную копию.
  */
 
+import { scheduleCacheStore } from '../db/storage/scheduleCacheStore.ts';
 import { fetchScheduleFromMpei } from './parser/mpeiApi.ts';
 import { parseSchedule } from './parser/scheduleParser.ts';
 import type { ParsedSchedule } from './parser/types.ts';
 
 /**
- * Горячий слой: «сегодня и завтра». Меняется по дням, спрашивается чаще всего.
- * Кэш на 3 минуты — как был.
+ * Расписание обновляется раз в неделю, в воскресенье 00:00 МСК.
+ *
+ * Это не «TTL 7 дней от загрузки», а календарная граница: все группы,
+ * загруженные на прошедшей неделе, считаются свежими до ближайшего
+ * воскресенья. В 00:00 кэш становится старым, и первый запрос группы
+ * перезагружает её. Ручной force-refresh по-прежнему обходит это правило.
  */
-const HOT_TTL_MS = 3 * 60 * 1000;
-
-/**
- * Холодный слой: весь диапазон −14…+90 дней. Меняется редко (расписание
- * меняют в начале семестра), но разбирается дороже всего.
- */
-const COLD_TTL_MS = 45 * 60 * 1000;
+const MSK_OFFSET_MS = 3 * 60 * 60 * 1000;
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
  * Потолок кэша по числу групп. При 0.24 МБ на группу 50 групп — это 12 МБ,
@@ -42,12 +40,23 @@ const MAX_GROUPS = 50;
 
 interface CacheEntry {
   schedule: ParsedSchedule;
-  /** Горячий слой: заполнен когда страницу открывали недавно. */
-  hotAt: number;
-  /** Время фактической загрузки — по нему считается холодный TTL. */
-  coldAt: number;
+  /** Когда данные реально пришли с ts.mpei.ru. */
+  fetchedAt: number;
   /** Приблизительный размер в байтах, для учёта лимита. */
   bytes: number;
+}
+
+/** Начало последнего воскресенья 00:00 МСК, ms. */
+function lastSundayMidnightMsk(nowMs: number): number {
+  const msk = new Date(nowMs + MSK_OFFSET_MS);
+  const todayMsk = Date.UTC(msk.getUTCFullYear(), msk.getUTCMonth(), msk.getUTCDate()) - MSK_OFFSET_MS;
+  // getUTCDay(): 0 — воскресенье, 1 — понедельник, ...
+  return todayMsk - msk.getUTCDay() * DAY_MS;
+}
+
+/** Свежесть: загружено после последнего воскресного рубежа. */
+function isFresh(fetchedAt: number, nowMs: number): boolean {
+  return fetchedAt >= lastSundayMidnightMsk(nowMs);
 }
 
 /** Последняя успешная загрузка (свежесть) и промис загрузки (дедупликация). */
@@ -105,19 +114,11 @@ function estimateBytes(schedule: ParsedSchedule): number {
 }
 
 /**
- * Вытесняет просроченные записи, затем самые старые, пока не влезем в потолок.
- * Вызывается после каждой вставки, поэтому кэш не может расти без предела.
+ * Держит память под потолком по LRU. Устаревшие записи не выбрасываем: они
+ * остаются запасным вариантом, если МЭИ недоступен в момент недельного
+ * обновления. Постоянная копия всё равно лежит в SQLite.
  */
 function evict(): void {
-  const now = Date.now();
-
-  for (const [groupId, entry] of byHot) {
-    if (now - entry.coldAt >= COLD_TTL_MS) {
-      byHot.delete(groupId);
-      loadState.delete(groupId);
-    }
-  }
-
   while (byHot.size > MAX_GROUPS) {
     // Map обходит ключи в порядке вставки: самый первый — наименее свежий.
     const oldest = byHot.keys().next();
@@ -165,9 +166,13 @@ async function load(groupId: number, label: string, description?: string): Promi
       const rawLessons = await fetchScheduleFromMpei(groupId, getScheduleDateRange());
       const parsed = parseSchedule(rawLessons, { id: groupId, label, description });
       const bytes = estimateBytes(parsed);
+      const fetchedAt = Date.now();
 
-      loadState.set(groupId, { fetchedAt: Date.now(), bytes, inflight: null });
-      byHot.set(groupId, { schedule: parsed, hotAt: Date.now(), coldAt: Date.now(), bytes });
+      // Сначала диск: если процесс упадёт между шагами, свежая копия всё
+      // равно переживёт рестарт.
+      scheduleCacheStore.put(groupId, parsed, fetchedAt);
+      loadState.set(groupId, { fetchedAt, bytes, inflight: null });
+      byHot.set(groupId, { schedule: parsed, fetchedAt, bytes });
       evict();
 
       return parsed;
@@ -210,24 +215,45 @@ export async function getGroupSchedule(
   const nowMs = now.getTime();
   const cached = byHot.get(groupId);
 
-  // Горячий слой: недавно открывали страницу этой группы.
-  if (cached && nowMs - cached.hotAt < HOT_TTL_MS) {
+  // Свежая память: до ближайшего воскресенья 00:00 МСК.
+  if (cached && isFresh(cached.fetchedAt, nowMs)) {
     touch(groupId, cached);
     return cached.schedule;
   }
 
-  const state = loadState.get(groupId);
-
-  // Холодный слой: данные с сервера свежие, но страницу давно не открывали.
-  // Разбор пропускаем — самый дорогой шаг на круге.
-  if (cached && state && nowMs - state.fetchedAt < COLD_TTL_MS) {
-    // byHot.set и обновляет hotAt, и переставляет ключ в конец (LRU touch):
-    // отдельный touch() перед ним был бы лишней перезаписью той же записи.
-    byHot.set(groupId, { ...cached, hotAt: nowMs });
-    return cached.schedule;
+  // Память пуста или устарела — смотрим постоянную копию. Это главный путь
+  // после рестарта сервера и для гостей, которые заходят в группу впервые.
+  const persisted = scheduleCacheStore.get(groupId);
+  if (persisted && isFresh(persisted.fetchedAt, nowMs)) {
+    const bytes = estimateBytes(persisted.schedule);
+    loadState.set(groupId, { fetchedAt: persisted.fetchedAt, bytes, inflight: null });
+    byHot.set(groupId, { schedule: persisted.schedule, fetchedAt: persisted.fetchedAt, bytes });
+    evict();
+    return persisted.schedule;
   }
 
-  return load(groupId, label, description);
+  try {
+    return await load(groupId, label, description);
+  } catch (err: unknown) {
+    /*
+     * Недельное обновление не должно оставлять человека без расписания:
+     * если МЭИ недоступен, показываем последнюю удачную копию. Следующий
+     * запрос снова попробует обновить её.
+     */
+    const fallback = cached ?? persisted;
+    if (fallback) {
+      console.warn(
+        `[ScheduleCache] обновление группы ${groupId} не удалось, отдаю кэш от ${new Date(fallback.fetchedAt).toISOString()}:`,
+        err instanceof Error ? err.message : err,
+      );
+      const bytes = estimateBytes(fallback.schedule);
+      loadState.set(groupId, { fetchedAt: fallback.fetchedAt, bytes, inflight: null });
+      byHot.set(groupId, { schedule: fallback.schedule, fetchedAt: fallback.fetchedAt, bytes });
+      evict();
+      return fallback.schedule;
+    }
+    throw err;
+  }
 }
 
 /**
@@ -238,9 +264,11 @@ export function clearScheduleCache(groupId?: number): void {
   if (groupId !== undefined) {
     byHot.delete(groupId);
     loadState.delete(groupId);
+    scheduleCacheStore.delete(groupId);
   } else {
     byHot.clear();
     loadState.clear();
+    scheduleCacheStore.delete();
   }
 }
 

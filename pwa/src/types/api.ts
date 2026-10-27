@@ -48,6 +48,26 @@ export interface BootstrapProfile {
   faculty?: string;
   recordBookNumber?: string;
   groupId?: number;
+  /** Гостевой профиль: только расписание, без БАРС и личных разделов. */
+  isGuest?: boolean;
+}
+
+/** Группа из поиска МЭИ для гостевого входа. */
+export interface GuestGroup {
+  id: number;
+  label: string;
+  description?: string;
+}
+
+export interface GuestGroupsResponse {
+  items: GuestGroup[];
+}
+
+/** Ответ GET /api/auth/config. */
+export interface AuthConfigResponse {
+  tokenTtlMs: number;
+  /** Открыта ли регистрация новых аккаунтов (и гостевой вход). */
+  registrationOpen?: boolean;
 }
 
 /** Ответ GET /api/bootstrap. */

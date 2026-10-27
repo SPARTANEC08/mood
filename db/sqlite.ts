@@ -83,6 +83,17 @@ export function getDb(): Database.Database {
       done_at     TEXT NOT NULL,
       PRIMARY KEY (user_id, homework_id)
     );
+
+    /*
+     * Разобранное расписание группы. Живёт между рестартами и обновляется
+     * раз в неделю, а не при каждом заходе: парсинг МЭИ — самый дорогой
+     * внешний запрос приложения.
+     */
+    CREATE TABLE IF NOT EXISTS schedule_cache (
+      group_id   TEXT PRIMARY KEY,
+      fetched_at INTEGER NOT NULL,
+      data       TEXT NOT NULL
+    );
   `);
 
   try {

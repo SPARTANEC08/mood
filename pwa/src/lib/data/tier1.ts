@@ -298,7 +298,7 @@ function scheduleIdleWrite(job: () => void): void {
  * продолжает видеть старые (свежие для него) данные до ответа.
  */
 export async function loadTier1(
-  opts: { silent: boolean; forceSchedule?: boolean },
+  opts: { silent: boolean; forceSchedule?: boolean; guest?: boolean },
   refs: Tier1Refs,
   setters: Tier1Setters,
   persist: () => void,
@@ -306,6 +306,40 @@ export async function loadTier1(
   if (opts.silent) setters.setRefreshing(true);
   else setters.setLoading(true);
   setters.setError(null);
+
+  /*
+   * Гость видит только расписание. ДЗ, «Важное», оценки и почта для него
+   * закрыты на сервере, поэтому даже не пытаемся их запрашивать: иначе каждый
+   * вход гостя давал бы три лишних 401 и мигал бы ошибками.
+   */
+  if (opts.guest) {
+    const [scheduleRes] = await Promise.allSettled([
+      api.schedule(opts.forceSchedule ? { force: true } : undefined),
+    ]);
+
+    if (scheduleRes.status === 'fulfilled') {
+      refs.coreRef.current.schedule = scheduleRes.value;
+      setters.setSchedule(scheduleRes.value);
+    } else if (refs.coreRef.current.schedule === null) {
+      setters.setError(
+        scheduleRes.reason instanceof ApiError
+          ? scheduleRes.reason.message
+          : 'Не удалось загрузить расписание.',
+      );
+    }
+
+    refs.coreRef.current.homework = [];
+    refs.coreRef.current.important = [];
+    setters.setHomework([]);
+    setters.setImportant([]);
+
+    persist();
+    refs.tier1At.current = Date.now();
+    refs.dayAt.current = todayMoscow();
+    setters.setLoading(false);
+    setters.setRefreshing(false);
+    return;
+  }
 
   // Запросы идут параллельно и независимо: у каждого свой блок в интерфейсе.
   const [scheduleRes, homeworkRes, importantRes] = await Promise.allSettled([

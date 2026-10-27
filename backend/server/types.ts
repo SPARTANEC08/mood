@@ -35,6 +35,8 @@ export interface BootstrapProfile {
   faculty?: string;
   recordBookNumber?: string;
   groupId?: number;
+  /** Гостевой профиль: только расписание, без БАРС и личных разделов. */
+  isGuest?: boolean;
 }
 
 /** Ответ GET /api/bootstrap. */

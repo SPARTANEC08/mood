@@ -172,6 +172,38 @@ export function requireBars(request: FastifyRequest): StoredUser {
 }
 
 /**
+ * Доступ к расписанию: обычный студент с БАРС или гость с выбранной группой.
+ *
+ * Гость не имеет barsAuth, поэтому requireBars для него не подходит. Но и
+ * пускать его дальше расписания нельзя: все остальные разделы продолжают
+ * требовать полноценный вход.
+ */
+export function requireScheduleAccess(request: FastifyRequest): StoredUser {
+  const user = requireUser(request);
+
+  if (user.isGuest) {
+    if (typeof user.groupId !== 'number' || !user.groupName) {
+      throw new AuthError(
+        'У гостя не выбрана группа. Выберите группу в настройках.',
+        403,
+        'group_required',
+      );
+    }
+    return user;
+  }
+
+  if (!user.barsAuth || !user.studentProfile?.fullName) {
+    throw new AuthError(
+      'Требуется вход в личный кабинет БАРС МЭИ. Войдите логином и паролем.',
+      401,
+      'bars_login_required',
+    );
+  }
+
+  return user;
+}
+
+/**
  * Возвращает текущего пользователя, требуя только действующей сессии.
  */
 export function requireUser(request: FastifyRequest): StoredUser {

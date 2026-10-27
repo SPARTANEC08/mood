@@ -28,6 +28,7 @@ import { clearPreviewUrlCache } from './lib/api/files.ts';
 
 const TOKEN_KEY = 'mood_pwa_token';
 const EXPIRES_KEY = 'mood_pwa_token_expires';
+const GUEST_KEY = 'mood_guest_mode';
 
 /** Что сервер отдаёт при успешном входе. */
 export interface PwaTokenResponse {
@@ -121,6 +122,7 @@ export function clearPwaToken(): void {
   try {
     window.localStorage.removeItem(TOKEN_KEY);
     window.localStorage.removeItem(EXPIRES_KEY);
+    window.localStorage.removeItem(GUEST_KEY);
   } catch {
     // см. выше
   }
@@ -131,6 +133,31 @@ export function clearPwaToken(): void {
   clearPreviewUrlCache();
 
   announceSignedOut();
+}
+
+/** Последний вход был гостевым: нужен только для выбора оболочки до bootstrap. */
+export function isGuestMode(): boolean {
+  try {
+    return window.localStorage.getItem(GUEST_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+export function setGuestMode(): void {
+  try {
+    window.localStorage.setItem(GUEST_KEY, '1');
+  } catch {
+    // Приватный режим: гость всё равно откроется по профилю из bootstrap.
+  }
+}
+
+export function clearGuestMode(): void {
+  try {
+    window.localStorage.removeItem(GUEST_KEY);
+  } catch {
+    // см. выше
+  }
 }
 
 /** Истёк ли токен по известной метке времени. */

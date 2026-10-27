@@ -277,6 +277,8 @@ export interface StatsSessionRow {
   notifications: boolean;
   /** Платформа последнего клиента (unknown — нет данных). */
   platform: UserPlatform;
+  /** Гостевой профиль: только расписание, без БАРС и Telegram. */
+  isGuest: boolean;
 }
 
 /** Разбивка пользователей по платформам. */
@@ -522,6 +524,7 @@ export function getStats(options: { windowEnd?: number } = {}): StatsResponse {
         telegram: typeof user.telegramId === 'number',
         notifications: typeof user.telegramId === 'number' && user.notificationsEnabled !== false,
         platform,
+        isGuest: user.isGuest === true,
       };
     })
     .sort((a, b) => b.lastSeenAt - a.lastSeenAt);

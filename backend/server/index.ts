@@ -16,6 +16,7 @@ import multipart from '@fastify/multipart';
 
 import { AuthError, authHook } from './middleware/auth.ts';
 import { registerAuthRoutes } from './routes/auth.ts';
+import { registerGuestRoutes } from './routes/guest.ts';
 import { registerAccountRoutes } from './routes/account.ts';
 import { registerScheduleRoutes } from './routes/schedule.ts';
 import { registerBarsRoutes } from './routes/bars.ts';
@@ -173,6 +174,10 @@ function isPublicApiPath(request: { url: string; method: string }): boolean {
   // авторизация — сам одноразовый токен в пути (см. routes/files.ts).
   if (request.method === 'GET' && route.startsWith('/api/files/share/')) return true;
 
+  // Гостю токен ещё не выдан: поиск группы и создание сессии открыты.
+  if (request.method === 'GET' && route === '/api/guest/groups') return true;
+  if (request.method === 'POST' && route === '/api/guest/session') return true;
+
   if (request.method !== 'POST') return false;
 
   return route === '/api/auth/login'
@@ -266,6 +271,7 @@ export async function buildServer(): Promise<FastifyInstance> {
   app.get('/health', async () => ({ status: 'ok', uptime: Math.floor(process.uptime()) }));
 
   await registerAuthRoutes(app);
+  await registerGuestRoutes(app);
   registerAccountRoutes(app);
   await registerScheduleRoutes(app);
   await registerBarsRoutes(app);
