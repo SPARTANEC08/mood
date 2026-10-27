@@ -9,7 +9,6 @@ import {
   MessageCircle,
   ScrollText,
   Send,
-  TriangleAlert,
 } from 'lucide-react';
 
 import { Header } from '@/components/TabBar';
@@ -75,7 +74,7 @@ export function ProfilePage({ profile }: { profile: BootstrapResponse }) {
   const unseen = typeof mail?.unseen === 'number' ? mail.unseen : 0;
   const morePending = !more && !moreError;
 
-  const { profile: p, barsAuthorized } = profile;
+  const { profile: p } = profile;
 
   const initials = p.fullName
     .split(' ')
@@ -172,30 +171,23 @@ export function ProfilePage({ profile }: { profile: BootstrapResponse }) {
             </div>
 
             <div className="relative mt-3 flex flex-wrap gap-1.5">
-              {barsAuthorized ? (
+              {typeof p.telegramId === 'number' ? (
                 <span
                   className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold"
                   style={{ background: 'rgba(52,199,89,0.12)', color: 'var(--success)' }}
                 >
                   <span className="h-1.5 w-1.5 rounded-full" style={{ background: 'var(--success)' }} />
-                  БАРС активен
+                  Telegram подключён
                 </span>
               ) : (
                 <span
                   className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold"
-                  style={{ background: 'rgba(255,149,0,0.12)', color: 'var(--warning)' }}
+                  style={{ background: 'var(--surface-grouped)', color: 'var(--text-tertiary)' }}
                 >
-                  <TriangleAlert size={12} aria-hidden />
-                  БАРС не подключён
+                  <span className="h-1.5 w-1.5 rounded-full" style={{ background: 'var(--text-tertiary)' }} />
+                  Telegram не подключён
                 </span>
               )}
-
-              <span
-                className="inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold"
-                style={{ background: 'var(--surface-grouped)', color: 'var(--text-secondary)' }}
-              >
-                {typeof p.telegramId === 'number' ? 'Telegram подключён' : 'Telegram не подключён'}
-              </span>
             </div>
           </Card>
 
