@@ -24,8 +24,8 @@ import type {
  * видеть единый список, поэтому слияние делается здесь, на чтении, а не
  * дублированием записей в двух хранилищах.
  */
-function buildFeed(userId: string): NotificationsFeedResponse {
-  const events: AppNotificationItem[] = userEventStore.listForUser(userId).map((event) => ({
+function buildFeed(userId: string, since?: string): NotificationsFeedResponse {
+  const events: AppNotificationItem[] = userEventStore.listForUser(userId, since).map((event) => ({
     id: event.id,
     kind: event.kind,
     createdAt: event.createdAt,
@@ -35,7 +35,7 @@ function buildFeed(userId: string): NotificationsFeedResponse {
   }));
 
   const broadcasts: AppNotificationItem[] = announcementStore
-    .listForUser(userId)
+    .listForUser(userId, since)
     .map((item) => ({
       id: item.id,
       kind: 'broadcast',
@@ -60,7 +60,8 @@ export function registerAnnouncementRoutes(app: FastifyInstance): void {
   /** Следующее непрочитанное объявление (или null). Старый контракт. */
   app.get('/api/announcements/next', async (request, reply) => {
     const student = requireBars(request);
-    return reply.send({ item: announcementStore.nextFor(student.userId) });
+    // Раньше регистрации объявлений не существовало — не показываем их.
+    return reply.send({ item: announcementStore.nextFor(student.userId, student.createdAt) });
   });
 
   /** «Закрыть»: объявление больше не показывается этому пользователю. */
@@ -81,7 +82,7 @@ export function registerAnnouncementRoutes(app: FastifyInstance): void {
    */
   app.get('/api/notifications', async (request, reply) => {
     const student = requireBars(request);
-    return reply.send(buildFeed(student.userId));
+    return reply.send(buildFeed(student.userId, student.createdAt));
   });
 
   /**
@@ -92,8 +93,8 @@ export function registerAnnouncementRoutes(app: FastifyInstance): void {
    */
   app.get('/api/notifications/unread-count', async (request, reply) => {
     const student = requireBars(request);
-    const events = userEventStore.unreadCount(student.userId);
-    const broadcasts = announcementStore.unreadCount(student.userId);
+    const events = userEventStore.unreadCount(student.userId, student.createdAt);
+    const broadcasts = announcementStore.unreadCount(student.userId, student.createdAt);
 
     return reply.send({
       unread: events + broadcasts,
@@ -106,8 +107,8 @@ export function registerAnnouncementRoutes(app: FastifyInstance): void {
   app.post('/api/notifications/read-all', async (request, reply) => {
     const student = requireBars(request);
 
-    userEventStore.markAllRead(student.userId);
-    announcementStore.dismissAll(student.userId);
+    userEventStore.markAllRead(student.userId, student.createdAt);
+    announcementStore.dismissAll(student.userId, student.createdAt);
 
     return reply.send({ ok: true, unread: 0 });
   });
@@ -119,7 +120,7 @@ export function registerAnnouncementRoutes(app: FastifyInstance): void {
   app.get('/api/notifications/next', async (request, reply) => {
     const student = requireBars(request);
 
-    const broadcast = announcementStore.nextFor(student.userId);
+    const broadcast = announcementStore.nextFor(student.userId, student.createdAt);
     if (broadcast) {
       return reply.send({
         item: {
@@ -131,7 +132,7 @@ export function registerAnnouncementRoutes(app: FastifyInstance): void {
       });
     }
 
-    const event = userEventStore.nextFor(student.userId);
+    const event = userEventStore.nextFor(student.userId, student.createdAt);
     return reply.send({
       item: event
         ? {

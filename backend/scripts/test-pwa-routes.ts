@@ -386,8 +386,13 @@ console.log('\n— Изоляция групп: чужой id в PATCH/DELETE �
 console.log('\n— Уведомления в приложении —');
 {
   const { announcementStore } = await import('../../db/storage/announcementStore.ts');
-  const first = announcementStore.create('Первое объявление', 100000001);
-  const second = announcementStore.create('Второе объявление', 100000001);
+
+  // Объявление, созданное ДО регистрации пользователя: оно не должно попасть
+  // ни в очередь, ни в ленту, ни в счётчик нового аккаунта.
+  const beforeRegistration = announcementStore.create('До регистрации', 100000001);
+  // Гарантируем разные timestamp: сравнение идёт по ISO-строкам, и объявление
+  // должно быть строго раньше регистрации.
+  await new Promise((resolve) => setTimeout(resolve, 5));
 
   // Отдельный пользователь с входом в БАРС: объявления только для таких.
   const barred = userStore.create({ barsLoginHash: computeBarsLoginHash('announce-test') });
@@ -400,6 +405,10 @@ console.log('\n— Уведомления в приложении —');
   });
   const { token: barredToken } = issuePwaToken(barred.userId);
   userStore.addToken(barred.userId, hashToken(barredToken), new Date(Date.now() + 86_400_000));
+
+  // А эти объявления — уже после регистрации, их пользователь должен увидеть.
+  const first = announcementStore.create('Первое объявление', 100000001);
+  const second = announcementStore.create('Второе объявление', 100000001);
 
   // Без входа в БАРС объявления не отдаём: это правило сервера.
   const noBars = await app.inject({ method: 'GET', url: '/api/announcements/next', headers: auth(token) });
@@ -415,6 +424,11 @@ console.log('\n— Уведомления в приложении —');
   check(
     'первое объявление в очереди',
     next1.json<{ item?: { id?: string } }>().item?.id === first.id,
+    JSON.stringify(next1.json()),
+  );
+  check(
+    'объявление до регистрации не выдаётся',
+    next1.json<{ item?: { id?: string } }>().item?.id !== beforeRegistration.id,
     JSON.stringify(next1.json()),
   );
 
@@ -434,6 +448,18 @@ console.log('\n— Уведомления в приложении —');
 
   // ── лента уведомлений: объявления и события вместе ──────────────────────
   const { userEventStore } = await import('../../db/storage/userEventStore.ts');
+
+  // Событие «из прошлой жизни»: для нового аккаунта его быть не должно.
+  const preRegistrationEventId = `${barred.userId}:feed:pre-registration`;
+  userEventStore.add({
+    userId: barred.userId,
+    key: 'feed:pre-registration',
+    kind: 'grade',
+    label: 'Старые оценки',
+    details: ['Математический анализ · КМ1: 5'],
+    createdAt: '2000-01-01T00:00:00.000Z',
+  });
+
   userEventStore.add({
     userId: barred.userId,
     key: 'feed:mail',
@@ -473,6 +499,16 @@ console.log('\n— Уведомления в приложении —');
 
   check('GET /api/notifications → 200', feed.statusCode === 200, String(feed.statusCode));
   check('в ленте объявления и события', feedItems.length === 4, String(feedItems.length));
+  check(
+    'в ленте нет объявления до регистрации',
+    !feedItems.some((item) => item.id === beforeRegistration.id),
+    JSON.stringify(feedItems.map((item) => item.id)),
+  );
+  check(
+    'в ленте нет события до регистрации',
+    !feedItems.some((item) => item.id === preRegistrationEventId),
+    JSON.stringify(feedItems.map((item) => item.id)),
+  );
   check('закрытое объявление помечено прочитанным', feedItems.find((item) => item.id === first.id)?.read === true);
   check('новое объявление не прочитано', feedItems.find((item) => item.id === second.id)?.read === false);
   check(

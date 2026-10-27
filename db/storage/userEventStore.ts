@@ -110,15 +110,21 @@ export const userEventStore = {
     ).run(event.userId, event.userId, MAX_EVENTS_PER_USER);
   },
 
-  /** Первое непрочитанное событие пользователя. */
-  nextFor(userId: string): UserEvent | null {
+  /**
+   * Первое непрочитанное событие пользователя.
+   *
+   * `since` — дата регистрации: события, созданные раньше, не отдаём. Для
+   * новых аккаунтов это страховка от старых записей после миграции/восстановления.
+   */
+  nextFor(userId: string, since?: string): UserEvent | null {
     const row = getDb()
       .prepare(
         'SELECT id, user_id, kind, label, details, created_at, read_at ' +
           'FROM user_events WHERE user_id = ? AND read_at IS NULL ' +
+          'AND (? IS NULL OR created_at >= ?) ' +
           'ORDER BY created_at ASC LIMIT 1',
       )
-      .get(userId) as EventRow | undefined;
+      .get(userId, since ?? null, since ?? null) as EventRow | undefined;
 
     return row ? fromRow(row) : null;
   },
@@ -130,31 +136,38 @@ export const userEventStore = {
    * список не «прыгал» между запросами: нотификатор пишет пачку событий одним
    * временем.
    */
-  listForUser(userId: string): UserEvent[] {
+  listForUser(userId: string, since?: string): UserEvent[] {
     const rows = getDb()
       .prepare(
         'SELECT id, user_id, kind, label, details, created_at, read_at ' +
-          'FROM user_events WHERE user_id = ? ORDER BY created_at DESC, id DESC',
+          'FROM user_events WHERE user_id = ? AND (? IS NULL OR created_at >= ?) ' +
+          'ORDER BY created_at DESC, id DESC',
       )
-      .all(userId) as EventRow[];
+      .all(userId, since ?? null, since ?? null) as EventRow[];
 
     return rows.map(fromRow);
   },
 
-  /** Сколько событий ещё не прочитано. */
-  unreadCount(userId: string): number {
+  /** Сколько событий ещё не прочитано (созданных после регистрации). */
+  unreadCount(userId: string, since?: string): number {
     const row = getDb()
-      .prepare('SELECT COUNT(*) AS count FROM user_events WHERE user_id = ? AND read_at IS NULL')
-      .get(userId) as { count: number } | undefined;
+      .prepare(
+        'SELECT COUNT(*) AS count FROM user_events ' +
+          'WHERE user_id = ? AND read_at IS NULL AND (? IS NULL OR created_at >= ?)',
+      )
+      .get(userId, since ?? null, since ?? null) as { count: number } | undefined;
 
     return Number(row?.count ?? 0);
   },
 
-  /** Отмечает все события пользователя прочитанными. Возвращает число изменённых. */
-  markAllRead(userId: string): number {
+  /** Отмечает прочитанными события пользователя после регистрации. */
+  markAllRead(userId: string, since?: string): number {
     const result = getDb()
-      .prepare('UPDATE user_events SET read_at = ? WHERE user_id = ? AND read_at IS NULL')
-      .run(new Date().toISOString(), userId);
+      .prepare(
+        'UPDATE user_events SET read_at = ? ' +
+          'WHERE user_id = ? AND read_at IS NULL AND (? IS NULL OR created_at >= ?)',
+      )
+      .run(new Date().toISOString(), userId, since ?? null, since ?? null);
 
     return result.changes;
   },

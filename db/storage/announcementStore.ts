@@ -51,6 +51,18 @@ function commit(doc: AnnouncementsDocument): void {
   document.save();
 }
 
+/**
+ * Объявления, которые существовали к моменту регистрации пользователя.
+ *
+ * Новому человеку не должно прилетать всё, что админы рассылали до него:
+ * очередь общая на всех, а «доставка» начинается с даты создания аккаунта.
+ * Если даты нет (очень старая запись), фильтр не применяем — лучше показать
+ * лишнее, чем потерять объявление.
+ */
+function visibleSince(items: AppAnnouncement[], since?: string): AppAnnouncement[] {
+  return since ? items.filter((item) => item.createdAt >= since) : items;
+}
+
 export const announcementStore = {
   /** Ставит объявление в очередь. */
   create(text: string, createdBy?: number): AppAnnouncement {
@@ -77,11 +89,15 @@ export const announcementStore = {
     return item;
   },
 
-  /** Первое непрочитанное объявление пользователя или null. */
-  nextFor(userId: string): AppAnnouncement | null {
+  /**
+   * Первое непрочитанное объявление пользователя или null.
+   *
+   * `since` — дата регистрации: объявления, созданные раньше, не считаются.
+   */
+  nextFor(userId: string, since?: string): AppAnnouncement | null {
     const doc = read();
     const dismissed = new Set(doc.dismissed[userId] ?? []);
-    return doc.items.find((item) => !dismissed.has(item.id)) ?? null;
+    return visibleSince(doc.items, since).find((item) => !dismissed.has(item.id)) ?? null;
   },
 
   /**
@@ -90,29 +106,32 @@ export const announcementStore = {
    * Новые сверху. «Прочитано» здесь означает «закрыто этим пользователем»:
    * отдельного поля в хранилище нет, отметки живут в `dismissed`.
    */
-  listForUser(userId: string): Array<AppAnnouncement & { read: boolean }> {
+  listForUser(userId: string, since?: string): Array<AppAnnouncement & { read: boolean }> {
     const doc = read();
     const dismissed = new Set(doc.dismissed[userId] ?? []);
 
-    return [...doc.items]
+    return [...visibleSince(doc.items, since)]
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
       .map((item) => ({ ...item, read: dismissed.has(item.id) }));
   },
 
-  /** Сколько объявлений пользователь ещё не закрывал. */
-  unreadCount(userId: string): number {
+  /** Сколько объявлений пользователь ещё не закрывал (после регистрации). */
+  unreadCount(userId: string, since?: string): number {
     const doc = read();
     const dismissed = new Set(doc.dismissed[userId] ?? []);
-    return doc.items.reduce((count, item) => count + (dismissed.has(item.id) ? 0 : 1), 0);
+    return visibleSince(doc.items, since).reduce(
+      (count, item) => count + (dismissed.has(item.id) ? 0 : 1),
+      0,
+    );
   },
 
-  /** Закрывает все текущие объявления пользователя. */
-  dismissAll(userId: string): number {
+  /** Закрывает все текущие объявления пользователя, созданные после регистрации. */
+  dismissAll(userId: string, since?: string): number {
     const doc = read();
     const dismissed = new Set(doc.dismissed[userId] ?? []);
     let added = 0;
 
-    for (const item of doc.items) {
+    for (const item of visibleSince(doc.items, since)) {
       if (dismissed.has(item.id)) continue;
       dismissed.add(item.id);
       added += 1;
