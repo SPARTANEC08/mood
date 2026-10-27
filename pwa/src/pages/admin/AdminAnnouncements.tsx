@@ -11,7 +11,7 @@ import { Megaphone, Trash2 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { Card } from '@/components/ui';
 import type { AdminAnnouncement } from '@/types/api';
-import { AdminHeader, ConfirmDialog, SectionRow, errorText, formatStamp } from './shared';
+import { AdminHeader, ConfirmDialog, errorText, formatStamp } from './shared';
 
 export function AdminAnnouncements({ onBack }: { onBack: () => void }) {
   const [items, setItems] = useState<AdminAnnouncement[]>([]);
@@ -133,12 +133,6 @@ export function AdminAnnouncements({ onBack }: { onBack: () => void }) {
               ))}
             </Card>
           )}
-
-          <SectionRow
-            icon={Megaphone}
-            title="Как это выглядит"
-            subtitle="Модалка при входе + запись в центре уведомлений"
-          />
         </div>
       </div>
 

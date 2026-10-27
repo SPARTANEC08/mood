@@ -15,7 +15,6 @@ import {
   AdminHeader,
   ConfirmDialog,
   ProgressBar,
-  SectionRow,
   errorText,
   formatRelative,
   useAdminJob,
@@ -275,12 +274,6 @@ export function AdminBroadcast({ onBack }: { onBack: () => void }) {
             <Send size={16} aria-hidden />
             Отправить
           </button>
-
-          <SectionRow
-            icon={Send}
-            title="Каналы"
-            subtitle="Лента + push + Telegram, у кого что включено"
-          />
         </div>
       </div>
 
