@@ -185,7 +185,12 @@ function currentHeight(): number {
   // Android standalone: visualViewport и есть видимая область. max(inner,
   // client) здесь опасен — после reload системная навигация может на время
   // отчитаться иначе, и #root становится выше экрана: TabBar уезжает за низ.
-  if (!isIos()) return visual > 0 ? visual : Math.max(inner, client);
+  // Если visual ещё не готов, берём меньшую из запасных величин.
+  if (!isIos()) {
+    if (visual > 0) return visual;
+    if (inner > 0 && client > 0) return Math.min(inner, client);
+    return Math.max(inner, client);
+  }
 
   // iOS standalone: окно сообщает высоту без нижней safe-area, поэтому берём
   // максимум и при ненулевом inset — физическую высоту экрана.
