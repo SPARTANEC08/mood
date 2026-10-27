@@ -28,6 +28,8 @@ let updateOverlayShown = false;
  */
 const DISMISSED_UPDATE_KEY = 'mood_sw_update_dismissed';
 const DISMISSED_UPDATE_TTL_MS = 10 * 60 * 1000;
+const LAST_RELOAD_KEY = 'mood_sw_reload_at';
+const RELOAD_COOLDOWN_MS = 15 * 1000;
 
 function updateVersion(registration: ServiceWorkerRegistration): string {
   return (
@@ -40,7 +42,7 @@ function updateVersion(registration: ServiceWorkerRegistration): string {
 
 function updateWasDismissed(registration: ServiceWorkerRegistration): boolean {
   try {
-    const raw = window.sessionStorage.getItem(DISMISSED_UPDATE_KEY);
+    const raw = window.localStorage.getItem(DISMISSED_UPDATE_KEY);
     if (!raw) return false;
     const data = JSON.parse(raw) as { version?: unknown; at?: unknown };
     if (typeof data.version !== 'string' || typeof data.at !== 'number') return false;
@@ -52,12 +54,29 @@ function updateWasDismissed(registration: ServiceWorkerRegistration): boolean {
 
 function rememberDismissedUpdate(registration: ServiceWorkerRegistration): void {
   try {
-    window.sessionStorage.setItem(
+    window.localStorage.setItem(
       DISMISSED_UPDATE_KEY,
       JSON.stringify({ version: updateVersion(registration), at: Date.now() }),
     );
   } catch {
     // Приватный режим: остаётся только защита в памяти текущей страницы.
+  }
+}
+
+function recentlyReloaded(): boolean {
+  try {
+    const at = Number(window.localStorage.getItem(LAST_RELOAD_KEY));
+    return Number.isFinite(at) && at > 0 && Date.now() - at < RELOAD_COOLDOWN_MS;
+  } catch {
+    return false;
+  }
+}
+
+function rememberReload(): void {
+  try {
+    window.localStorage.setItem(LAST_RELOAD_KEY, String(Date.now()));
+  } catch {
+    // Приватный режим: защита только в памяти текущей страницы.
   }
 }
 
@@ -153,6 +172,7 @@ async function register(): Promise<void> {
 function showUpdateOverlay(registration: ServiceWorkerRegistration): void {
   if (updateOverlayShown) return;
   if (document.getElementById('mood-update-overlay')) return;
+  if (recentlyReloaded()) return;
   if (updateWasDismissed(registration)) return;
 
   updateOverlayShown = true;
@@ -214,6 +234,7 @@ function showUpdateOverlay(registration: ServiceWorkerRegistration): void {
   const reload = (): void => {
     if (reloading) return;
     reloading = true;
+    rememberReload();
     overlay.remove();
     window.location.reload();
   };

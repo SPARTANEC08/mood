@@ -270,7 +270,6 @@ export function ProfilePage({ profile }: { profile: BootstrapResponse }) {
                 icon={GraduationCap}
                 title="Стипендии"
                 subtitle={scholarshipSubtitle}
-                defaultOpen
                 tone="success"
                 badge={
                   scholarships.length > 0 ? (
