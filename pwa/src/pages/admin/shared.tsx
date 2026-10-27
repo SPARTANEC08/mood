@@ -181,6 +181,7 @@ export function ConfirmDialog({
   confirmLabel = 'Подтвердить',
   danger,
   busy,
+  disabled,
   onConfirm,
   onCancel,
   children,
@@ -191,6 +192,7 @@ export function ConfirmDialog({
   confirmLabel?: string;
   danger?: boolean;
   busy?: boolean;
+  disabled?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
   children?: ReactNode;
@@ -220,7 +222,7 @@ export function ConfirmDialog({
           <button
             type="button"
             onClick={onConfirm}
-            disabled={busy}
+            disabled={busy || disabled}
             className="pressable flex-1 rounded-[12px] py-2.5 text-[15px] font-semibold text-white active:pressable-active disabled:opacity-50"
             style={{ background: danger ? 'var(--danger)' : 'var(--accent)' }}
           >

@@ -199,6 +199,7 @@ export function AdminUsers({ onBack }: { onBack: () => void }) {
           confirmLabel="Удалить"
           danger
           busy={busy}
+          disabled={word.trim() !== 'УДАЛИТЬ'}
           onCancel={() => setConfirm(null)}
           onConfirm={() => void deleteUser()}
         >

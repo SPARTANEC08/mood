@@ -71,7 +71,7 @@ server {
     # HSTS, nosniff, Referrer-Policy, X-Frame-Options, Permissions-Policy.
     # nginx НЕ наследует add_header в location с собственным add_header, поэтому
     # тот же include нужно повторить в /assets/, /icons/, /sw.js, /index.html,
-    # /install/, /api/, /dev-api/, /robots.txt и assetlinks. Готовый файл и
+    # /install/, /api/, /robots.txt и assetlinks. Готовый файл и
     # инструкция — backend/deploy/nginx-security-headers.conf.
     include snippets/mood-security-headers.conf;
 
