@@ -318,14 +318,14 @@ body {
  */
 @media (display-mode: standalone), (display-mode: fullscreen) {
   #root {
-    height: max(100dvh, var(--app-height, 0px));
-    min-height: max(100dvh, var(--app-height, 0px));
+    height: var(--app-height, 100dvh);
+    min-height: var(--app-height, 100dvh);
   }
 }
 
 html[data-mood-standalone] #root {
-  height: max(100dvh, var(--app-height, 0px));
-  min-height: max(100dvh, var(--app-height, 0px));
+  height: var(--app-height, 100dvh);
+  min-height: var(--app-height, 100dvh);
 }
 
 body {

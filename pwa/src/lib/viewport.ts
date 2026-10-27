@@ -182,9 +182,16 @@ function currentHeight(): number {
 
   if (!isFullscreenDisplay()) return visual > 0 ? visual : inner;
 
+  // Android standalone: visualViewport и есть видимая область. max(inner,
+  // client) здесь опасен — после reload системная навигация может на время
+  // отчитаться иначе, и #root становится выше экрана: TabBar уезжает за низ.
+  if (!isIos()) return visual > 0 ? visual : Math.max(inner, client);
+
+  // iOS standalone: окно сообщает высоту без нижней safe-area, поэтому берём
+  // максимум и при ненулевом inset — физическую высоту экрана.
   let height = Math.max(visual, inner, client);
 
-  if (isIos() && safeAreaInsetBottom() > 0) {
+  if (safeAreaInsetBottom() > 0) {
     height = Math.max(height, window.screen.height);
   }
 
@@ -266,6 +273,14 @@ export function bindViewportHeight(): void {
   vv?.addEventListener('scroll', apply);
   window.addEventListener('resize', apply);
   window.addEventListener('orientationchange', apply);
+
+  // После обновления PWA страница может получить готовую раскладку без
+  // события resize. Пересчитываем на pageshow/load и ещё раз чуть позже, когда
+  // системные панели Android/iOS уже заняли своё место.
+  window.addEventListener('pageshow', apply);
+  window.addEventListener('load', apply);
+  window.setTimeout(apply, 250);
+  window.setTimeout(apply, 1200);
 
   // Приложение могло быть свёрнуто в вкладку и запущено с иконки — режим
   // меняется без перезагрузки, и подписки на resize в этом случае не будет.

@@ -19,6 +19,49 @@ const SW_URL = `/sw.js?v=${__SW_VERSION__}`;
 let updateOverlayShown = false;
 
 /**
+ * Версия воркера, для которой человек уже нажал «Перезагрузить».
+ *
+ * iOS в standalone иногда не активирует новый воркер с первого раза: после
+ * reload тот же waiting остаётся на месте, updatefound срабатывает снова, и
+ * плашка возвращается через пару секунд. Запоминаем версию и не показываем
+ * её повторно; новая версия — новый scriptURL — показывается как обычно.
+ */
+const DISMISSED_UPDATE_KEY = 'mood_sw_update_dismissed';
+const DISMISSED_UPDATE_TTL_MS = 10 * 60 * 1000;
+
+function updateVersion(registration: ServiceWorkerRegistration): string {
+  return (
+    registration.waiting?.scriptURL ??
+    registration.installing?.scriptURL ??
+    registration.active?.scriptURL ??
+    ''
+  );
+}
+
+function updateWasDismissed(registration: ServiceWorkerRegistration): boolean {
+  try {
+    const raw = window.sessionStorage.getItem(DISMISSED_UPDATE_KEY);
+    if (!raw) return false;
+    const data = JSON.parse(raw) as { version?: unknown; at?: unknown };
+    if (typeof data.version !== 'string' || typeof data.at !== 'number') return false;
+    return data.version === updateVersion(registration) && Date.now() - data.at < DISMISSED_UPDATE_TTL_MS;
+  } catch {
+    return false;
+  }
+}
+
+function rememberDismissedUpdate(registration: ServiceWorkerRegistration): void {
+  try {
+    window.sessionStorage.setItem(
+      DISMISSED_UPDATE_KEY,
+      JSON.stringify({ version: updateVersion(registration), at: Date.now() }),
+    );
+  } catch {
+    // Приватный режим: остаётся только защита в памяти текущей страницы.
+  }
+}
+
+/**
  * Регистрирует Service Worker, если браузер его умеет.
  *
  * Два случая, когда регистрация НЕ происходит, и каждый по своей причине:
@@ -110,6 +153,7 @@ async function register(): Promise<void> {
 function showUpdateOverlay(registration: ServiceWorkerRegistration): void {
   if (updateOverlayShown) return;
   if (document.getElementById('mood-update-overlay')) return;
+  if (updateWasDismissed(registration)) return;
 
   updateOverlayShown = true;
 
@@ -186,6 +230,10 @@ function showUpdateOverlay(registration: ServiceWorkerRegistration): void {
       reload();
       return;
     }
+
+    // Если iOS не активирует воркер с первого раза, эта же версия больше не
+    // будет поднимать плашку после reload. Новая версия — новый scriptURL.
+    rememberDismissedUpdate(registration);
 
     // Новый воркер активируется и забирает управление; перезагружаемся ровно
     // один раз — по controllerchange, со страховочным таймером.
