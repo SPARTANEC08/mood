@@ -90,6 +90,21 @@ export function SchedulePage({
   // и переключение вкладок сеть больше не трогает.
   const { userId, schedule, homework, loading: cacheLoading, refreshing, error: cacheError, refresh } = useAppData();
 
+  const settingsButton = onOpenSettings ? (
+    <button
+      type="button"
+      aria-label="Настройки гостя"
+      onClick={() => {
+        haptic('light');
+        onOpenSettings();
+      }}
+      className="pressable rounded-full p-2 active:pressable-active"
+      style={{ color: 'var(--accent)' }}
+    >
+      <Settings size={18} aria-hidden />
+    </button>
+  ) : null;
+
   // Замер первого кадра страницы: по нему видно, что расписание показано из
   // кэша (<100 мс), а не после сети. Снимается один раз, до отрисовки.
   const mountAt = useRef(performance.now());
@@ -696,7 +711,7 @@ export function SchedulePage({
 
   if (state.loading) {
     return (
-      <Page header={<Header title="Расписание" large />}>
+      <Page header={<Header title="Расписание" large right={settingsButton} />}>
         {/* Скелеты вместо пустоты: структура видна сразу, приходят данные. */}
         <div className="space-y-2.5">
           <SkeletonLesson />
@@ -710,7 +725,7 @@ export function SchedulePage({
 
   if (state.error && !state.data) {
     return (
-      <Page header={<Header title="Расписание" large />}>
+      <Page header={<Header title="Расписание" large right={settingsButton} />}>
         <ErrorState message={state.error} onRetry={refresh} />
       </Page>
     );
@@ -741,20 +756,7 @@ export function SchedulePage({
               */}
               <RefreshIndicator active={refreshing && !pull.suppressBackground} />
 
-              {onOpenSettings ? (
-                <button
-                  type="button"
-                  aria-label="Настройки гостя"
-                  onClick={() => {
-                    haptic('light');
-                    onOpenSettings();
-                  }}
-                  className="pressable rounded-full p-2 active:pressable-active"
-                  style={{ color: 'var(--accent)' }}
-                >
-                  <Settings size={18} aria-hidden />
-                </button>
-              ) : null}
+              {settingsButton}
 
               <button
                 type="button"
