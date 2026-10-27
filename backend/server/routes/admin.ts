@@ -1,7 +1,7 @@
 /**
  * Админка PWA: единый набор маршрутов под /api/admin.
  *
- * Доступ проверяется `requireAdmin` (env-логины БАРС, env-Telegram и
+ * Доступ проверяется `requireAdmin` (env-логины БАРС и
  * назначенные из PWA). Обычный пользователь получает 403 и не видит ни
  * одного маршрута.
  *
@@ -66,7 +66,7 @@ function readUrl(body: unknown): string | undefined {
   if (!body || typeof body !== 'object') return undefined;
   const value = text((body as { url?: unknown }).url);
   if (!value) return undefined;
-  // В push и Telegram уходит только http(s); иначе кнопка была бы бесполезной.
+  // В push уходит только http(s); иначе кнопка была бы бесполезной.
   try {
     const url = new URL(value);
     return url.protocol === 'https:' || url.protocol === 'http:' ? value : undefined;
@@ -96,7 +96,6 @@ function userSummary(user: StoredUser, activity: Map<string, number>) {
     platform: user.platform ?? 'unknown',
     lastSeenAt: lastSeenAt(user, activity),
     bars: isBarsAuthorized(user) ? ('active' as const) : ('none' as const),
-    telegram: typeof user.telegramId === 'number',
     push: user.pushSubscriptions?.length ?? 0,
     isGuest: user.isGuest === true,
     isAdmin: isPwaAdmin(user),
@@ -225,8 +224,6 @@ export function registerAdminRoutes(app: FastifyInstance): void {
       barsAuthedAt: user.barsAuthedAt ?? null,
       pwaTokens: user.pwaTokens?.length ?? 0,
       pushEnabled: user.pushEnabled !== false,
-      notificationsEnabled: user.notificationsEnabled !== false,
-      telegramId: typeof user.telegramId === 'number' ? user.telegramId : null,
       sessionValid: isBarsAuthorized(user),
     });
   });
@@ -430,7 +427,6 @@ export function registerAdminRoutes(app: FastifyInstance): void {
         total: users.length,
         guests: users.filter((user) => user.isGuest === true).length,
         barsAuthorized: users.filter(isBarsAuthorized).length,
-        withTelegram: users.filter((user) => typeof user.telegramId === 'number').length,
         withPush: users.filter((user) => (user.pushSubscriptions?.length ?? 0) > 0).length,
       },
       pushDevices: users.reduce((sum, user) => sum + (user.pushSubscriptions?.length ?? 0), 0),
@@ -495,10 +491,6 @@ export function registerAdminRoutes(app: FastifyInstance): void {
     return reply.send({
       env: {
         barsLogins: (process.env.ADMIN_BARS_LOGINS ?? '')
-          .split(',')
-          .map((value) => value.trim())
-          .filter(Boolean),
-        telegramIds: (process.env.ADMIN_TELEGRAM_IDS ?? '')
           .split(',')
           .map((value) => value.trim())
           .filter(Boolean),

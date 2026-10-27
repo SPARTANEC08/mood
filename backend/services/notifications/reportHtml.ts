@@ -4,7 +4,7 @@
  * Ровно те девять пунктов, что нужны владельцу: состояние сейчас, окно 24 часа,
  * диаграмма запросов по часам, ДЗ и «Важное», файлы пользователей и список
  * сессий БАРС. Ничего лишнего: чем короче документ, тем меньше он весит — а
- * отчёт уходит файлом в Telegram.
+ * отчёт сохраняется файлом для истории и открывается в админке.
  *
  * Источник данных — `getStats()` из devStats.ts (тот же ответ отдаётся странице).
  */
@@ -74,7 +74,7 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;white-space:now
 `.trim();
 
 /**
- * Отчёт для Telegram и страницы.
+ * Отчёт для истории статистики.
  *
  * `note` — короткая подпись под шапкой (например, «Отчёт по кнопке»).
  */
@@ -101,8 +101,6 @@ export function renderReportHtml(stats: StatsResponse, note?: string): string {
         <td>${platformEmoji(row.platform)} ${esc(row.name)}<div class="hint">${esc(row.group || '—')}</div></td>
         <td class="num">${stamp(row.lastSeenAt)}</td>
         <td class="${row.bars === 'active' ? 'ok' : row.bars === 'expired' ? 'warn' : 'off'}">${barsLabel(row)}</td>
-        <td class="${row.telegram ? 'ok' : 'off'}">${row.telegram ? 'да' : 'нет'}</td>
-        <td class="${row.notifications ? 'ok' : 'off'}">${row.notifications ? 'вкл' : 'выкл'}</td>
       </tr>`,
     )
     .join('');
@@ -161,8 +159,8 @@ export function renderReportHtml(stats: StatsResponse, note?: string): string {
 
   <h2>Сессии БАРС · ${stats.sessions.length}</h2>
   <table>
-    <tr><th>Пользователь</th><th class="num">Последний заход</th><th>БАРС</th><th>ТГ</th><th>Уведы</th></tr>
-    ${sessionRows || '<tr><td colspan="5" class="off">Пользователей нет</td></tr>'}
+    <tr><th>Пользователь</th><th class="num">Последний заход</th><th>БАРС</th></tr>
+    ${sessionRows || '<tr><td colspan="3" class="off">Пользователей нет</td></tr>'}
   </table>
 
   <p class="foot">Mood · личный срез статистики · снято ${esc(stats.moscowNow.date)} ${esc(stats.moscowNow.time)} МСК</p>

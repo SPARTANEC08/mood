@@ -19,7 +19,6 @@ process.env.NODE_ENV ??= 'test';
 process.env.PWA_AUTH_SECRET = 'c'.repeat(64);
 process.env.ENCRYPTION_SECRET_KEY = 'd'.repeat(64);
 process.env.ADMIN_BARS_LOGINS = 'root-admin';
-process.env.ADMIN_TELEGRAM_IDS = '';
 
 const { buildServer } = await import('../server/index.ts');
 const { issuePwaToken, hashToken } = await import('../utils/pwaAuth.ts');
@@ -87,13 +86,6 @@ check('обычный пользователь → 403', denied.statusCode === 4
 
 const envAdmin = await app.inject({ method: 'GET', url: '/api/admin/users', headers: root.auth });
 check('env-логин БАРС → 200', envAdmin.statusCode === 200, String(envAdmin.statusCode));
-
-// Telegram-админ (совместимость)
-const tgUser = createUser('tg-admin', { telegramId: 777000111 });
-process.env.ADMIN_TELEGRAM_IDS = '777000111';
-const tgAdmin = await app.inject({ method: 'GET', url: '/api/admin/users', headers: tgUser.auth });
-check('Telegram-админ → 200', tgAdmin.statusCode === 200, String(tgAdmin.statusCode));
-process.env.ADMIN_TELEGRAM_IDS = '';
 
 // ── Пользователи ──────────────────────────────────────────────────────────────
 console.log('— Пользователи —');

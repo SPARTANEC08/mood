@@ -1,27 +1,19 @@
 /**
- * Настройки приложения в «Кабинете»: Telegram и тема.
+ * Настройки приложения в «Кабинете»: push-уведомления и тема.
  *
- * Одна карточка вместо двух отдельных секций: по финальному макету это один
- * смысловой блок. Логика Telegram осталась прежней (подключение, выключение,
- * перечитывание после возврата из бота), меняется только представление.
+ * Telegram из настроек убран: уведомления живут только в приложении. Флаг
+ * pushEnabled и число устройств приходят с сервера, разрешение — из браузера.
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { BellOff, BellRing, Monitor, Send } from 'lucide-react';
+import { BellOff, BellRing, Monitor } from 'lucide-react';
 
 import { Card } from '@/components/ui';
 import { api } from '@/lib/api';
-import { haptic, openLink } from '@/lib/env';
-import {
-  enablePush,
-  pushPermission,
-  pushSupport,
-  syncPush,
-} from '@/lib/push';
+import { haptic } from '@/lib/env';
+import { enablePush, pushPermission, pushSupport, syncPush } from '@/lib/push';
 import { useTheme, type ThemeMode } from '@/lib/theme';
 import type { BootstrapProfile } from '@/types/api';
-
-const TELEGRAM_BOT_USERNAME = import.meta.env.VITE_TELEGRAM_BOT_USERNAME || 'mood_mpei_bot';
 
 const THEME_OPTIONS: Array<{ mode: ThemeMode; label: string }> = [
   { mode: 'system', label: 'Системная' },
@@ -30,16 +22,8 @@ const THEME_OPTIONS: Array<{ mode: ThemeMode; label: string }> = [
 ];
 
 export function SettingsCard({ profile }: { profile: BootstrapProfile }) {
-  const [telegramId, setTelegramId] = useState<number | null>(profile.telegramId ?? null);
-  const [enabled, setEnabled] = useState<boolean>(profile.notificationsEnabled !== false);
-  const [busy, setBusy] = useState(false);
   const [mode, setMode] = useTheme();
 
-  /*
-   * Push — отдельный канал со своим состоянием. support и permission берутся
-   * из браузера, а флаг и число устройств — с сервера: одно без другого не
-   * отвечает на вопрос «придут ли уведомления».
-   */
   const [pushEnabled, setPushEnabled] = useState<boolean>(profile.pushEnabled !== false);
   const [pushDevices, setPushDevices] = useState<number>(profile.pushDevices ?? 0);
   const [pushBusy, setPushBusy] = useState(false);
@@ -49,17 +33,13 @@ export function SettingsCard({ profile }: { profile: BootstrapProfile }) {
   );
 
   useEffect(() => {
-    setTelegramId(profile.telegramId ?? null);
-    setEnabled(profile.notificationsEnabled !== false);
     setPushEnabled(profile.pushEnabled !== false);
     setPushDevices(profile.pushDevices ?? 0);
-  }, [profile.telegramId, profile.notificationsEnabled, profile.pushEnabled, profile.pushDevices]);
+  }, [profile.pushEnabled, profile.pushDevices]);
 
   const reload = useCallback(async () => {
     try {
       const state = await api.notificationsState();
-      setTelegramId(state.telegramId);
-      setEnabled(state.notificationsEnabled);
       setPushEnabled(state.pushEnabled);
       setPushDevices(state.pushDevices);
     } catch {
@@ -71,8 +51,7 @@ export function SettingsCard({ profile }: { profile: BootstrapProfile }) {
   /*
    * Разрешение уже выдано — значит подписка должна существовать. После
    * переустановки PWA или чистки данных сайта в браузере появляется новый
-   * endpoint, и без этой синхронизации сервер слал бы в мёртвый адрес.
-   * Разрешение здесь не запрашивается: только восстановление выданного.
+   * endpoint, и без синхронизации сервер слал бы в мёртвый адрес.
    */
   useEffect(() => {
     let cancelled = false;
@@ -97,24 +76,6 @@ export function SettingsCard({ profile }: { profile: BootstrapProfile }) {
     return () => document.removeEventListener('visibilitychange', onVisible);
   }, [reload]);
 
-  async function toggleTelegram(): Promise<void> {
-    if (busy) return;
-
-    setBusy(true);
-    haptic('medium');
-    const next = !enabled;
-
-    try {
-      await api.toggleNotifications(next);
-      setEnabled(next);
-      await reload();
-    } catch {
-      setEnabled(enabled);
-    } finally {
-      setBusy(false);
-    }
-  }
-
   async function togglePush(): Promise<void> {
     if (pushBusy) return;
 
@@ -125,23 +86,22 @@ export function SettingsCard({ profile }: { profile: BootstrapProfile }) {
       if (pushEnabled) {
         // Выключение — только флаг на сервере: подписка остаётся, чтобы
         // включение обратно не требовало нового системного разрешения.
-        await api.toggleNotifications(false, 'push');
+        await api.toggleNotifications(false);
         setPushEnabled(false);
       } else {
-        // Включение начинается с разрешения: без него сервер слать некуда.
         const granted = await enablePush();
         setPermission(pushPermission());
 
         if (!granted) return;
 
-        await api.toggleNotifications(true, 'push');
+        await api.toggleNotifications(true);
         setPushEnabled(true);
       }
 
       const state = await api.pushState();
       setPushDevices(state.devices);
     } catch {
-      // Оставляем прежнее состояние: сервер не подтвердил изменение.
+      // Сервер не подтвердил изменение — оставляем прежнее состояние.
     } finally {
       setPushBusy(false);
     }
@@ -160,66 +120,11 @@ export function SettingsCard({ profile }: { profile: BootstrapProfile }) {
   const pushAvailable =
     pushSupportState === 'ready' && permission !== 'denied' && permission !== 'unsupported';
 
-  const linked = typeof telegramId === 'number';
   const themeLabel = THEME_OPTIONS.find((option) => option.mode === mode)?.label ?? 'Системная';
 
   return (
     <Card className="overflow-hidden p-0">
       <div className="flex items-center gap-3 px-4 py-3.5">
-        <span
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px]"
-          style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}
-          aria-hidden
-        >
-          {linked && !enabled ? <BellOff size={18} /> : <Send size={18} />}
-        </span>
-
-        <div className="min-w-0 flex-1">
-          <p className="text-[15px] font-semibold leading-snug">Уведомления в Telegram</p>
-          <p className="mt-0.5 text-[12px] leading-snug" style={{ color: 'var(--text-secondary)' }}>
-            {!linked
-              ? 'Не подключён'
-              : enabled
-                ? 'Включены · подключён'
-                : 'Выключены'}
-          </p>
-        </div>
-
-        {linked ? (
-          <button
-            type="button"
-            role="switch"
-            aria-checked={enabled}
-            aria-label="Уведомления в Telegram"
-            disabled={busy}
-            onClick={() => void toggleTelegram()}
-            className="pressable relative h-[25px] w-[42px] shrink-0 rounded-full transition-colors active:pressable-active disabled:opacity-50"
-            style={{ background: enabled ? 'var(--accent)' : 'var(--separator)' }}
-          >
-            <span
-              className="absolute left-[2px] top-[2px] h-[21px] w-[21px] rounded-full bg-white shadow-sm transition-transform duration-200"
-              style={{ transform: enabled ? 'translateX(17px)' : 'translateX(0)' }}
-            />
-          </button>
-        ) : (
-          <button
-            type="button"
-            onClick={() => {
-              haptic('medium');
-              openLink(`https://t.me/${TELEGRAM_BOT_USERNAME}?start=${profile.userId}`);
-            }}
-            className="pressable shrink-0 rounded-full px-3 py-1.5 text-[13px] font-medium active:pressable-active"
-            style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}
-          >
-            Подключить
-          </button>
-        )}
-      </div>
-
-      <div
-        className="flex items-center gap-3 border-t px-4 py-3.5"
-        style={{ borderColor: 'var(--separator-soft)' }}
-      >
         <span
           className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px]"
           style={{

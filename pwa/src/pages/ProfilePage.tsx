@@ -19,7 +19,6 @@ import { RefreshIndicator } from '@/components/RefreshIndicator';
 import { usePullToRefresh } from '@/components/PullToRefresh';
 import { DeleteAccountCard } from '@/components/profile/DeleteAccountCard';
 import { HiddenMenuScreen } from '@/components/profile/HiddenMenuScreen';
-import { PushPrompt } from '@/components/profile/PushPrompt';
 import { SettingsCard } from '@/components/profile/SettingsCard';
 import { StudyLine, StudySection } from '@/components/profile/StudySection';
 import { useAppData } from '@/lib/dataContext';
@@ -267,26 +266,6 @@ export function ProfilePage({ profile }: { profile: BootstrapResponse }) {
                 ) : null}
               </div>
             </div>
-
-            <div className="relative mt-3 flex flex-wrap gap-1.5">
-              {typeof p.telegramId === 'number' ? (
-                <span
-                  className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold"
-                  style={{ background: 'rgba(52,199,89,0.12)', color: 'var(--success)' }}
-                >
-                  <span className="h-1.5 w-1.5 rounded-full" style={{ background: 'var(--success)' }} />
-                  Telegram подключён
-                </span>
-              ) : (
-                <span
-                  className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold"
-                  style={{ background: 'var(--surface-grouped)', color: 'var(--text-tertiary)' }}
-                >
-                  <span className="h-1.5 w-1.5 rounded-full" style={{ background: 'var(--text-tertiary)' }} />
-                  Telegram не подключён
-                </span>
-              )}
-            </div>
           </Card>
 
           {/* Почта — первая строка после профиля */}
@@ -482,7 +461,6 @@ export function ProfilePage({ profile }: { profile: BootstrapResponse }) {
           <h2 className="px-1 pt-2 text-[12px] font-semibold uppercase tracking-[0.09em] text-[var(--text-secondary)]">
             Настройки приложения
           </h2>
-          <PushPrompt />
           <SettingsCard profile={p} />
 
           <h2 className="px-1 pt-2 text-[12px] font-semibold uppercase tracking-[0.09em] text-[var(--text-secondary)]">
@@ -587,12 +565,6 @@ export function NeedLoginScreen({ onReLogin }: { onReLogin: () => void }) {
         Сессия личного кабинета НИУ МЭИ истекла. Расписание, оценки и почта появятся снова
         после входа логином и паролем БАРС.
       </p>
-
-      {/*
-        Вход прямо здесь, а не переход в бота: в PWA учётные данные — собственные,
-        и требовать ради этого запускать Telegram было бы возвратом к старой схеме.
-        Заодно это работает у человека вообще без Telegram.
-      */}
       <button
         type="button"
         onClick={() => {
@@ -602,17 +574,6 @@ export function NeedLoginScreen({ onReLogin }: { onReLogin: () => void }) {
         className="pressable mt-6 rounded-[14px] bg-[var(--accent)] px-6 py-3 text-[17px] font-semibold text-white active:pressable-active"
       >
         Войти заново
-      </button>
-
-      <button
-        type="button"
-        onClick={() => {
-          haptic('light');
-          openLink('https://t.me/mood_mpei_bot');
-        }}
-        className="pressable mt-2 rounded-[12px] px-4 py-2 text-[14px] font-semibold text-[var(--text-tertiary)] active:pressable-active"
-      >
-        Можно и в боте
       </button>
     </div>
   );

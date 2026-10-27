@@ -37,8 +37,6 @@ import { homeworkDoneStore } from '../../../db/storage/homeworkDoneStore.ts';
 import { homeworkStore } from '../../../db/storage/homeworkStore.ts';
 import { importantStore } from '../../../db/storage/importantStore.ts';
 import { announcementStore } from '../../../db/storage/announcementStore.ts';
-import { botFlowsStore } from '../../../db/storage/botFlowsStore.ts';
-import { removeAdmin } from '../../../db/storage/adminsStore.ts';
 import { pwaAdminsStore } from '../../../db/storage/pwaAdminsStore.ts';
 import { deleteAllFiles } from '../../../db/storage/fileStore.ts';
 import { forgetUser as forgetStatsUser } from '../../server/devStats.ts';
@@ -62,7 +60,6 @@ function removeFileRefs<T extends { files: Array<{ uploadedBy: string }> }>(
 
 export async function deleteAccount(user: StoredUser): Promise<void> {
   const userId = user.userId;
-  const telegramId = typeof user.telegramId === 'number' ? user.telegramId : null;
 
   // 1. Файлы — первыми. Если диск не дал удалить, аккаунт не трогаем:
   // пользователь повторит попытку, и никаких «полуудалённых» записей не будет.
@@ -87,8 +84,7 @@ export async function deleteAccount(user: StoredUser): Promise<void> {
   removeFileRefs(homeworkStore.all(), (record) => homeworkStore.save(record), userId);
   removeFileRefs(importantStore.all(), (record) => importantStore.save(record), userId);
 
-  // 4. Объявления админа и отметки о закрытии.
-  if (telegramId !== null) announcementStore.removeByCreator(telegramId);
+  // 4. Отметки о закрытии объявлений.
   announcementStore.forgetUser(userId);
 
   // 5. Персональные снимки, события и отметки выполнения.
@@ -97,11 +93,7 @@ export async function deleteAccount(user: StoredUser): Promise<void> {
   userEventStore.clearForUser(userId);
   homeworkDoneStore.clearForUser(userId);
 
-  // 6. Бот: состояние диалога и назначенные права.
-  if (telegramId !== null) {
-    botFlowsStore.delete(telegramId);
-    removeAdmin(telegramId);
-  }
+  // 6. Права администратора PWA.
   pwaAdminsStore.forget(userId);
 
   // 7. Кэши в памяти. Без этого удалённый человек мог бы ещё минут двадцать

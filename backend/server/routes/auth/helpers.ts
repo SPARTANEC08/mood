@@ -61,10 +61,6 @@ export function readCredentials(request: FastifyRequest): { login: string; passw
 export function buildProfile(user: StoredUser): BootstrapResponse['profile'] {
   return {
     userId: user.userId,
-    // null означает «отвязан», а для клиента это то же самое, что «не подключён»:
-    // различать два состояния тому, кто показывает кнопку, незачем.
-    telegramId: user.telegramId ?? undefined,
-    notificationsEnabled: user.notificationsEnabled !== false,
     pushEnabled: user.pushEnabled !== false,
     pushDevices: user.pushSubscriptions?.length ?? 0,
     isAdmin: isPwaAdmin(user),

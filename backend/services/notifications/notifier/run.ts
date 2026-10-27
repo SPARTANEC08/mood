@@ -27,7 +27,6 @@ import {
   diffSnapshots,
   isTransientNetworkError,
   orderKey,
-  renderNotification,
   type NotificationEvent,
 } from './diff.ts';
 
@@ -94,17 +93,6 @@ function shouldStoreInApp(user: StoredUser, now: Date): boolean {
   return now.getTime() - lastAppActivityMs(user) <= IN_APP_HISTORY_WINDOW_MS;
 }
 
-/**
- * Функция отправки сообщения конкретному пользователю.
- * Регистрируется telegramService, чтобы сервис не зависел от grammY.
- */
-export type NotificationSender = (
-  chatId: number,
-  text: string,
-  kind?: NotificationEvent['kind'],
-) => Promise<void>;
-
-let sender: NotificationSender | null = null;
 let timer: NodeJS.Timeout | null = null;
 let isCycleRunning = false;
 /** Когда закончился последний полный круг (для админской диагностики). */
@@ -119,13 +107,6 @@ let lastCycleFinishedAt: number | null = null;
 export type PushSender = (user: StoredUser, event: NotificationEvent) => Promise<boolean>;
 
 let pushSender: PushSender | null = sendPushToUser;
-
-/**
- * Регистрирует канал доставки уведомлений.
- */
-export function setNotificationSender(fn: NotificationSender | null): void {
-  sender = fn;
-}
 
 /** Подменяет push-канал. null — канал выключен (тесты, отладка). */
 export function setPushSender(fn: PushSender | null): void {
@@ -242,49 +223,14 @@ export async function checkUser(
   }
 
   /*
-   * Отправляем только тем, кто подключил уведомления и не выключил их.
-   *
-   * Два условия, и оба обязательны. `typeof === 'number'` вместо проверки на
-   * undefined: telegramId бывает null у отвязанного аккаунта, и такой null
-   * прошёл бы проверку «поле есть», а отправка ушла бы в null вместо отказа.
-   */
-  const canNotify = typeof user.telegramId === 'number' && user.notificationsEnabled !== false;
-  const shouldSend =
-    events.length > 0 && sender !== null && canNotify && typeof user.telegramId === 'number';
-
-  /*
-   * Push — независимый канал. Условия свои: включён флагом pushEnabled, есть
-   * хотя бы одно устройство и пользователь не гость. Telegram может быть не
-   * привязан вовсе — это нормальный случай для PWA-пользователя.
+   * Единственный внешний канал — Web Push. Условия: включён флагом pushEnabled,
+   * есть хотя бы одно устройство и пользователь не гость.
    */
   const canPush =
     user.pushEnabled !== false &&
     user.isGuest !== true &&
     (user.pushSubscriptions?.length ?? 0) > 0;
   const shouldPush = events.length > 0 && pushSender !== null && canPush;
-
-  let delivered = false;
-  if (shouldSend && sender && typeof user.telegramId === 'number') {
-    try {
-      // Адресат в журнале: без него «События: mail» не отвечает на главный
-      // вопрос — кому именно пытались отправить.
-      console.log(
-        `[Notifier] → Telegram ${user.telegramId}: ${events.map((event) => event.kind).join(', ')}`,
-      );
-      // Каждое событие — отдельным сообщением: в Telegram уходит только тип,
-      // без деталей, поэтому смешивать их в одну пачку незачем.
-      for (const event of events) {
-        await sender(user.telegramId, renderNotification(event), event.kind);
-      }
-      delivered = true;
-      console.log(`[Notifier] доставлено (${user.telegramId})`);
-    } catch (err: unknown) {
-      console.error(
-        `[Notifier] Не удалось отправить уведомление (${user.telegramId}):`,
-        safeErrorMessage(err),
-      );
-    }
-  }
 
   let pushed = false;
   if (shouldPush && pushSender) {
@@ -311,25 +257,16 @@ export async function checkUser(
 
   /*
    * Снимок сдвигаем ПОСЛЕ отправки, и только если она удалась (или отправка не
-   * требовалась: нет событий, уведомления выключены, каналы не подключены).
+   * требовалась: нет событий, push выключен, устройств нет).
    *
-   * Раньше снимок обновлялся всегда. Один сбой Telegram (таймаут, 429, 5xx) —
-   * и событие считалось «доставленным»: следующий круг его уже не видел, и
-   * уведомление терялось навсегда. Теперь неудачная попытка оставляет прежний
-   * снимок, и следующий круг повторяет ту же пачку. Возможный дубль при
-   * неоднозначном таймауте лучше молчаливой потери.
-   *
-   * С двумя каналами правило мягче: достаточно, чтобы событие принял ХОТЯ БЫ
-   * один канал. Иначе сбой Telegram заставлял бы повторять пачку, и человек
-   * получал бы дубль в приложении — то есть сбой одного канала портил бы
-   * работающий.
-   *
-   * Если уведомления выключены или каналы не подключены, снимок всё равно
-   * двигается: иначе при включении пришла бы пачка старых событий.
+   * Раньше снимок обновлялся всегда. Один сбой доставки — и событие считалось
+   * «отправленным»: следующий круг его уже не видел, и уведомление терялось
+   * навсегда. Теперь неудачная попытка оставляет прежний снимок, и следующий
+   * круг повторяет ту же пачку.
    */
   snapshotStore.stage(
     user.userId,
-    snapshotAfterDelivery(prev, next, shouldSend, delivered, shouldPush, pushed),
+    snapshotAfterDelivery(prev, next, shouldPush, pushed),
   );
 
   return events;
@@ -355,13 +292,12 @@ export async function runCycle(): Promise<void> {
   let consecutiveFailures = 0;
 
   try {
-    // Только те, кому есть смысл ходить: у PWA-пользователя может не быть
-    // Telegram, но почту и уведомления в приложении он видит — его аккаунт тоже
-    // обновляем. Отправка всё равно отфильтруется по telegramId ниже.
+    // Только те, у кого есть живой PWA-токен: уведомления доставляются в
+    // приложение, и обновлять снимки людям без входа в PWA незачем.
     const users = userStore
       .all()
       .filter(isBarsAuthorized)
-      .filter((u) => u.telegramId !== undefined || (u.pwaTokens?.length ?? 0) > 0);
+      .filter((u) => (u.pwaTokens?.length ?? 0) > 0);
 
     console.log(`[Notifier] Цикл опроса: ${users.length} авторизованных пользователей.`);
 
@@ -414,9 +350,7 @@ export async function runCycle(): Promise<void> {
           // «сессия БАРС действительна» тоже недействителен.
           forgetOwaClient(user.userId);
           forgetBarsSessionValid(user.userId);
-          if (typeof user.telegramId === 'number') {
-            forgetBarsClient(user.telegramId);
-          }
+          forgetBarsClient(user.userId);
         }
       }
 
@@ -474,15 +408,11 @@ export function isNotifierCycleRunning(): boolean {
 export function snapshotAfterDelivery(
   prev: UserSnapshot | undefined,
   next: UserSnapshot,
-  shouldSend: boolean,
-  delivered: boolean,
-  shouldPush = false,
-  pushed = false,
+  shouldPush: boolean,
+  pushed: boolean,
 ): UserSnapshot {
-  if (!shouldSend && !shouldPush) return next;
-
-  const anyChannelDelivered = (shouldSend && delivered) || (shouldPush && pushed);
-  return anyChannelDelivered ? next : (prev ?? next);
+  if (!shouldPush) return next;
+  return pushed ? next : (prev ?? next);
 }
 
 export interface ForcedCycleResult {
@@ -613,10 +543,8 @@ export function stopNotifier(): void {
  * Немедленный прогон одного пользователя — удобно для ручной проверки и тестов.
  * Принудительно опрашивает все источники, игнорируя график частот.
  */
-export async function checkUserNow(telegramId: number): Promise<NotificationEvent[]>;
-export async function checkUserNow(userId: string): Promise<NotificationEvent[]>;
-export async function checkUserNow(key: number | string): Promise<NotificationEvent[]> {
-  const user = typeof key === 'number' ? userStore.get(key) : userStore.getByUserId(key);
+export async function checkUserNow(userId: string): Promise<NotificationEvent[]> {
+  const user = userStore.getByUserId(userId);
   if (!isBarsAuthorized(user)) {
     throw new Error('Пользователь не авторизован в БАРС МЭИ.');
   }

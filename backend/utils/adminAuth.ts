@@ -1,13 +1,11 @@
 /**
  * Права администратора в PWA.
  *
- * Три источника, объединяемые в одну проверку:
- *   1. `ADMIN_BARS_LOGINS` — «корневые» админы по логину БАРС. Хэшируются при
- *      старте: открытый логин в env — персональные данные, а сравнение идёт по
- *      тому же хэшу, что лежит в записи пользователя.
- *   2. `ADMIN_TELEGRAM_IDS` и назначенные через бота — совместимость, пока
- *      Telegram не выключен.
- *   3. `pwaAdminsStore` — назначенные из PWA по userId.
+ * Два источника:
+ *   1. `ADMIN_BARS_LOGINS` — «корневые» админы по логину БАРС. Логины
+ *      хэшируются: открытый логин в env — персональные данные, а сравнение идёт
+ *      по тому же хэшу, что лежит в записи пользователя.
+ *   2. `pwaAdminsStore` — назначенные из PWA по userId.
  *
  * Env-админов нельзя снять из интерфейса: иначе можно остаться без доступа.
  */
@@ -15,8 +13,7 @@
 import type { FastifyRequest } from 'fastify';
 
 import { pwaAdminsStore } from '../../db/storage/pwaAdminsStore.ts';
-import { isAdmin } from '../../db/storage/adminsStore.ts';
-import type { StoredUser } from '../../db/storage/userStore.ts';
+import { userStore, type StoredUser } from '../../db/storage/userStore.ts';
 import { computeBarsLoginHash } from './barsLoginHash.ts';
 import { AuthError } from '../server/middleware/auth.ts';
 
@@ -40,8 +37,12 @@ export function isPwaAdmin(user: StoredUser | undefined): boolean {
   if (!user || user.isGuest === true) return false;
 
   if (isEnvBarsAdmin(user)) return true;
-  if (typeof user.telegramId === 'number' && isAdmin(user.telegramId)) return true;
   return pwaAdminsStore.has(user.userId);
+}
+
+/** Все администраторы (env + назначенные) — получатели служебных пушей. */
+export function listAdminUsers(): StoredUser[] {
+  return userStore.all().filter(isPwaAdmin);
 }
 
 /** 403 вместо 404: обычный пользователь не должен гадать, есть ли маршрут. */

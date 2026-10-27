@@ -59,11 +59,6 @@ export function hapticSelection(): void {
   haptic('light');
 }
 
-/** Приложение открыто в браузере, а не внутри Telegram: всегда false. */
-export function isTelegram(): boolean {
-  return false;
-}
-
 /**
  * Экономия трафика.
  *
@@ -88,25 +83,14 @@ export function isDataSaver(): boolean {
 }
 
 /**
- * Подписи Telegram в браузере не существует.
- *
- * Оставлено, потому что по нему выбирается способ авторизации запроса; в PWA
- * используется собственный токен (см. lib/api.ts).
- */
-export function getInitData(): string {
-  return '';
-}
-
-/**
  * Подготовка документа при открытии приложения.
  *
- * Вместо Telegram.ready()/expand() — настройки самого документа: отключаем
- * двойной тап-зум и подсветку тапа, включаем color-scheme по системной теме.
- * touch-action: manipulation убирает задержку в 300 мс на мобильных браузерах,
- * из-за которой кнопки ощущались бы «ватными» по сравнению с нативным
- * приложением.
+ * Настройки самого документа: отключаем двойной тап-зум и подсветку тапа,
+ * включаем color-scheme по системной теме. touch-action: manipulation убирает
+ * задержку в 300 мс на мобильных браузерах, из-за которой кнопки ощущались бы
+ * «ватными» по сравнению с нативным приложением.
  */
-export function initTelegramApp(): void {
+export function initDocument(): void {
   if (typeof document === 'undefined') return;
 
   const root = document.documentElement;

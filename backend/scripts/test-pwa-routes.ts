@@ -195,11 +195,10 @@ console.log('\n— Открытые маршруты входа —');
   );
 }
 
-console.log('\n— Вход в аккаунт, привязанный к Telegram —');
+console.log('\n— Повторный вход в существующий аккаунт —');
 {
   const linked = userStore.create({
     barsLoginHash: computeBarsLoginHash('linked-student'),
-    telegramId: 777000222,
   });
   const originalLogin = BarsClient.prototype.login;
 
@@ -222,9 +221,8 @@ console.log('\n— Вход в аккаунт, привязанный к Telegra
     });
     const body = response.json<{ userId?: string; token?: string }>();
 
-    check('привязка Telegram не блокирует вход в PWA → 200', response.statusCode === 200, String(response.statusCode));
+    check('повторный вход → 200', response.statusCode === 200, String(response.statusCode));
     check('PWA получает тот же userId', body.userId === linked.userId);
-    check('Telegram-привязка сохраняется', userStore.getByUserId(linked.userId)?.telegramId === 777000222);
   } finally {
     BarsClient.prototype.login = originalLogin;
   }

@@ -3,8 +3,7 @@
  *
  * Каналы на пользователя:
  *   - лента/модалка в приложении (announcementStore);
- *   - Web Push (если есть подписка и push не выключен);
- *   - Telegram (если привязан и уведомления не выключены).
+ *   - Web Push (если есть подписка и push не выключен).
  *
  * «Всем» — все не гостевые аккаунты. Личная рассылка адресуется одному
  * пользователю: объявление в ленте помечается targetUserId и видно только ему.
@@ -19,19 +18,6 @@ import { adminAuditStore } from '../../../db/storage/adminAuditStore.ts';
 import { sendBroadcastPush } from '../notifications/webPush.ts';
 import { adminName } from '../../utils/adminAuth.ts';
 import { bumpJob, createJob, finishJob, runningJob, type AdminJob } from './jobs.ts';
-
-/** Отправка в Telegram; регистрируется telegramService, пока бот жив. */
-export type AdminTelegramSender = (
-  telegramId: number,
-  text: string,
-  url?: string,
-) => Promise<void>;
-
-let telegramSender: AdminTelegramSender | null = null;
-
-export function setAdminTelegramSender(fn: AdminTelegramSender | null): void {
-  telegramSender = fn;
-}
 
 export interface BroadcastInput {
   text: string;
@@ -90,24 +76,6 @@ async function runBroadcast(
         bumpJob(job.id, { progress: { skippedPush: 1 } });
       }
 
-      if (
-        telegramSender &&
-        typeof user.telegramId === 'number' &&
-        user.notificationsEnabled !== false
-      ) {
-        try {
-          await telegramSender(user.telegramId, text, input.url);
-          bumpJob(job.id, { progress: { telegram: 1 } });
-        } catch {
-          bumpJob(job.id, { progress: { failed: 1 } });
-        }
-
-        // Небольшая пауза: Telegram не любит burst даже на маленькой выборке.
-        await sleep(80);
-      } else {
-        bumpJob(job.id, { progress: { skippedTelegram: 1 } });
-      }
-
       done += 1;
       bumpJob(job.id, { done });
     }
@@ -124,8 +92,4 @@ async function runBroadcast(
   } catch (err: unknown) {
     finishJob(job.id, err instanceof Error ? err.message : String(err));
   }
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }

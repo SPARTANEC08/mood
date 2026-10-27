@@ -29,20 +29,6 @@ export interface BootstrapProfile {
   /** Идентификатор пользователя в Mood — общий для бота и PWA. */
   userId: string;
   /** Есть ли у пользователя Telegram. У PWA-пользователей — нет. */
-  /**
-   * Telegram-аккаунт, подключённый к уведомлениям.
-   *
-   * Отсутствует, если человек не нажимал «Подключить уведомления» в Telegram.
-   */
-  telegramId?: number;
-  /**
-   * Присылать ли уведомления в Telegram.
-   *
-   * Сервер отдаёт true по умолчанию: отсутствие поля означает «никто не
-   * выключал», и на клиенте по умолчанию было бы неправильно показывать
-   * выключенное состояние человеку, который ничего не выключал.
-   */
-  notificationsEnabled?: boolean;
   /** Присылать ли Web Push в приложение (независимо от Telegram). */
   pushEnabled?: boolean;
   /** Сколько устройств подписано на push. */
@@ -496,7 +482,6 @@ export interface AdminUserSummary {
   platform: string;
   lastSeenAt: number;
   bars: 'active' | 'none';
-  telegram: boolean;
   push: number;
   isGuest: boolean;
   isAdmin: boolean;
@@ -509,8 +494,6 @@ export interface AdminUserDetails extends AdminUserSummary {
   barsAuthedAt: string | null;
   pwaTokens: number;
   pushEnabled: boolean;
-  notificationsEnabled: boolean;
-  telegramId: number | null;
   sessionValid: boolean;
 }
 
@@ -564,6 +547,6 @@ export interface AdminDiagnostics {
 }
 
 export interface AdminAdminsResponse {
-  env: { barsLogins: string[]; telegramIds: string[]; barsHashes: number };
+  env: { barsLogins: string[]; barsHashes: number };
   assigned: Array<{ userId: string; name: string; group: string; addedAt: string }>;
 }

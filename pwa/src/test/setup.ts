@@ -375,8 +375,6 @@ const mail: MailResponse = {
 const bootstrap: BootstrapResponse = {
   profile: {
     userId: 'test-user',
-    telegramId: 100000001,
-    notificationsEnabled: true,
     fullName: 'Иванов Иван Иванович',
     groupName: 'ИЭ-11-26',
     faculty: 'ИЭТЭ',
@@ -527,10 +525,10 @@ window.fetch = (async (input: RequestInfo | URL, init?: RequestInit): Promise<Re
   if (path === '/api/mail') return json(mail);
 
   if (path === '/api/notifications/state') {
-    return json({ telegramId: 100000001, notificationsEnabled: true });
+    return json({ pushEnabled: true, pushDevices: 1 });
   }
   if (path === '/api/notifications/toggle') {
-    return json({ ok: true, enabled: true, telegramId: 100000001 });
+    return json({ ok: true, enabled: true, pushEnabled: true, pushDevices: 1 });
   }
 
   if (path === '/api/announcements/next') return json({ item: loadAnnouncement() });

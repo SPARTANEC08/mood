@@ -20,7 +20,6 @@ process.chdir(WORK_DIR);
 process.env.NODE_ENV ??= 'test';
 process.env.PWA_AUTH_SECRET = 'a'.repeat(64);
 process.env.ENCRYPTION_SECRET_KEY = 'b'.repeat(64);
-process.env.ADMIN_TELEGRAM_IDS = '';
 
 const { buildServer } = await import('../server/index.ts');
 const { issuePwaToken, hashToken } = await import('../utils/pwaAuth.ts');
@@ -31,8 +30,6 @@ const { homeworkDoneStore } = await import('../../db/storage/homeworkDoneStore.t
 const { homeworkStore } = await import('../../db/storage/homeworkStore.ts');
 const { importantStore } = await import('../../db/storage/importantStore.ts');
 const { announcementStore } = await import('../../db/storage/announcementStore.ts');
-const { botFlowsStore } = await import('../../db/storage/botFlowsStore.ts');
-const { addAdmin } = await import('../../db/storage/adminsStore.ts');
 const { saveFile } = await import('../../db/storage/fileStore.ts');
 const { recordActivity } = await import('../server/devStats.ts');
 const { getDb } = await import('../../db/sqlite.ts');
@@ -58,10 +55,8 @@ function auth(token: string): Record<string, string> {
   return { 'x-pwa-token': token };
 }
 
-const telegramId = 777000333;
 const user = userStore.create({
   barsLoginHash: computeBarsLoginHash('delete-account-test'),
-  telegramId,
 });
 const userId = user.userId;
 
@@ -130,15 +125,8 @@ const important = {
 };
 importantStore.save(important);
 
-const broadcast = announcementStore.create('Объявление удаляемого админа', telegramId);
-announcementStore.dismiss(userId, broadcast.id);
-addAdmin(telegramId, 999000111);
-botFlowsStore.set({
-  telegramId,
-  kind: 'broadcast_text',
-  startedAt: Date.now(),
-  data: 'черновик',
-});
+const announcement = announcementStore.create('Объявление удаляемого пользователя', userId);
+announcementStore.dismiss(userId, announcement.id);
 
 const uploaded = await saveFile(
   userId,
@@ -177,7 +165,6 @@ const deleted = await app.inject({
 check('верное подтверждение → 200', deleted.statusCode === 200, String(deleted.statusCode));
 
 check('запись users удалена', userStore.getByUserId(userId) === undefined);
-check('индекс по Telegram очищен', userStore.findUserByTelegramId(telegramId) === undefined);
 check(
   'строка users в SQLite удалена',
   count('SELECT COUNT(*) AS count FROM users WHERE user_id = ?', userId) === 0,
@@ -219,20 +206,6 @@ check(
     userId,
   ) === 0,
 );
-check(
-  'админ больше не назначен',
-  count(
-    "SELECT COUNT(*) AS count FROM records WHERE store = 'admins.json' AND key = ?",
-    String(telegramId),
-  ) === 0,
-);
-check(
-  'FSM бота удалён',
-  count(
-    "SELECT COUNT(*) AS count FROM records WHERE store = 'bot_flows.json' AND key = ?",
-    String(telegramId),
-  ) === 0,
-);
 
 const announcementsRow = db
   .prepare("SELECT value FROM documents WHERE name = 'announcements.json'")
@@ -243,10 +216,6 @@ const announcements = announcementsRow
       dismissed: Record<string, string[]>;
     })
   : { items: [], dismissed: {} };
-check(
-  'объявление автора удалено',
-  !announcements.items.some((item) => item.id === broadcast.id),
-);
 check('отметки о закрытии удалены', announcements.dismissed[userId] === undefined);
 
 const statsRow = db
@@ -266,36 +235,6 @@ check(
 
 check('каталог файлов удалён', !fs.existsSync(fileDir), fileDir);
 check('файл больше не числится', uploaded.uploadedBy === userId);
-
-console.log('\n— Удаление из Telegram-бота —');
-{
-  const { processTelegramCallback } = await import('../../tg/botEngine.ts');
-
-  const botTelegramId = 777000444;
-  const botUser = userStore.create({
-    barsLoginHash: computeBarsLoginHash('delete-bot-test'),
-    telegramId: botTelegramId,
-  });
-  userStore.patch(botUser.userId, { studentProfile: { fullName: 'Бот Удаляемый' } });
-
-  const confirm = await processTelegramCallback(
-    { id: botTelegramId, firstName: 'Бот' },
-    'delete_account',
-  );
-  check('бот показывает подтверждение', confirm.view.text.includes('Удалить аккаунт?'));
-  check('аккаунт ещё существует', userStore.getByUserId(botUser.userId) !== undefined);
-
-  const done = await processTelegramCallback(
-    { id: botTelegramId, firstName: 'Бот' },
-    'delete_account_yes',
-  );
-  check('бот подтверждает удаление', done.view.text.includes('Аккаунт удалён'));
-  check('аккаунт удалён из бота', userStore.getByUserId(botUser.userId) === undefined);
-  check(
-    'Telegram-индекс очищен после бота',
-    userStore.findUserByTelegramId(botTelegramId) === undefined,
-  );
-}
 
 await app.close();
 fs.rmSync(WORK_DIR, { recursive: true, force: true });

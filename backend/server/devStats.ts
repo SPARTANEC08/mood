@@ -304,11 +304,9 @@ export interface StatsSessionRow {
   /** Последний заход, ms (0 — не заходил). */
   lastSeenAt: number;
   bars: 'active' | 'expired' | 'none';
-  telegram: boolean;
-  notifications: boolean;
   /** Платформа последнего клиента (unknown — нет данных). */
   platform: UserPlatform;
-  /** Гостевой профиль: только расписание, без БАРС и Telegram. */
+  /** Гостевой профиль: только расписание, без БАРС. */
   isGuest: boolean;
 }
 
@@ -552,8 +550,6 @@ export function getStats(options: { windowEnd?: number } = {}): StatsResponse {
         group: user.groupName ?? user.studentProfile?.groupName ?? '',
         lastSeenAt: lastSeenAt(user, lastFromBuckets),
         bars: barsState(user),
-        telegram: typeof user.telegramId === 'number',
-        notifications: typeof user.telegramId === 'number' && user.notificationsEnabled !== false,
         platform,
         isGuest: user.isGuest === true,
       };

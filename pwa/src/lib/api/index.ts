@@ -196,18 +196,14 @@ export const api = {
    * поэтому кнопку можно нажимать дважды подряд без побочных эффектов.
    * Канал по умолчанию — Telegram (старый контракт).
    */
-  toggleNotifications: (enabled: boolean, channel: 'telegram' | 'push' = 'telegram') =>
-    request<{
-      ok: true;
-      channel: 'telegram' | 'push';
-      enabled: boolean;
-      telegramId: number | null;
-      pushEnabled: boolean;
-      pushDevices: number;
-    }>('/notifications/toggle', {
-      method: 'POST',
-      body: { enabled, channel },
-    }),
+  toggleNotifications: (enabled: boolean) =>
+    request<{ ok: true; enabled: boolean; pushEnabled: boolean; pushDevices: number }>(
+      '/notifications/toggle',
+      {
+        method: 'POST',
+        body: { enabled },
+      },
+    ),
 
   /**
    * Текущее состояние подписок.
@@ -216,12 +212,7 @@ export const api = {
    * состояние при возврате на вкладку, а bootstrap ходит в БАРС и IMAP.
    */
   notificationsState: () =>
-    request<{
-      telegramId: number | null;
-      notificationsEnabled: boolean;
-      pushEnabled: boolean;
-      pushDevices: number;
-    }>('/notifications/state'),
+    request<{ pushEnabled: boolean; pushDevices: number }>('/notifications/state'),
 
   // ── Web Push ─────────────────────────────────────────────────────────────
   /** Публичный VAPID-ключ. Пустая строка — канал на сервере не настроен. */

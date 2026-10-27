@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 
 import App from './App';
 import { rememberInstallPrompt } from './components/InstallPrompt';
-import { initTelegramApp } from '@/lib/env';
+import { initDocument } from '@/lib/env';
 import { initTheme } from '@/lib/theme';
 import { bindViewportHeight } from '@/lib/viewport';
 import { registerServiceWorker } from './sw-register';
@@ -17,11 +17,11 @@ import './styles.css';
  * документа и темы теперь делает lib/env.ts: Telegram SDK больше нет.
  */
 
-// Шим вместо Telegram.ready()/expand(): готовит документ и тему по системной.
-initTelegramApp();
+// Подготовка документа: жесты, масштаб и системная тема.
+initDocument();
 
 // Тема из выбора пользователя (тёмная по умолчанию). Идёт после
-// initTelegramApp(), чтобы перекрыть color-scheme, выставленный там по системе.
+// initDocument(), чтобы перекрыть color-scheme, выставленный там по системе.
 // Ранний theme-init.js уже выставил data-theme до первого кадра — здесь только
 // согласование с рантаймом.
 initTheme();

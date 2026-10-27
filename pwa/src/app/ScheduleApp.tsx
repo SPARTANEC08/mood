@@ -18,15 +18,15 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import { TabBar, type TabId } from '@/components/TabBar';
-import { TelegramPrompt } from '@/components/TelegramPrompt';
 import { AnnouncementGate } from '@/components/AnnouncementGate';
 import { NotificationsProvider } from '@/components/notifications/NotificationsProvider';
+import { PushSetupGate } from '@/components/profile/PushSetupGate';
 import { GuestScheduleApp } from './GuestScheduleApp';
 import { ErrorState, SkeletonList } from '@/components/ui';
 import { clearPwaToken, SIGNED_OUT_EVENT } from '@/auth';
 import { ApiError, api } from '@/lib/api';
 import { DataProvider } from '@/lib/dataContext';
-import { initTelegramApp, syncColorScheme } from '@/lib/env';
+import { syncColorScheme } from '@/lib/env';
 import { perfLog } from '@/lib/perf';
 import { NeedLoginScreen } from '@/pages/ProfilePage';
 import { SchedulePage } from '@/pages/SchedulePage';
@@ -118,7 +118,6 @@ export function ScheduleApp({
 
 
   useEffect(() => {
-    initTelegramApp();
     syncColorScheme();
   }, []);
 
@@ -212,14 +211,7 @@ export function ScheduleApp({
           onCloseAddSheet={() => setAddSheetOpen(false)}
         />
 
-        {/*
-          Приглашение подключить Telegram. Показывается при каждом заходе, пока бот
-          не привязан: внутри компонента и монтирование, и возврат из фона.
-        */}
-        <TelegramPrompt
-          userId={bootstrap.profile.userId}
-          telegramId={bootstrap.profile.telegramId}
-        />
+        <PushSetupGate profile={bootstrap.profile} />
 
         {/* Объявления админа: только для авторизованных в БАРС. */}
         <AnnouncementGate />

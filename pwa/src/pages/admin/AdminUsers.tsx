@@ -135,8 +135,8 @@ export function AdminUsers({ onBack }: { onBack: () => void }) {
               />
               <SectionRow
                 icon={Search}
-                title="Каналы"
-                subtitle={`Telegram: ${selected.telegram ? 'да' : 'нет'} · push: ${selected.push} (${selected.pushEnabled ? 'вкл' : 'выкл'})`}
+                title="Уведомления"
+                subtitle={`push: ${selected.push} (${selected.pushEnabled ? 'вкл' : 'выкл'})`}
               />
               <SectionRow
                 icon={Search}

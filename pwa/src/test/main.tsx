@@ -13,12 +13,12 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 
 import { ScheduleApp } from '@/app/ScheduleApp';
-import { initTelegramApp } from '@/lib/env';
+import { initDocument } from '@/lib/env';
 import { initTheme } from '@/lib/theme';
 import { bindViewportHeight } from '@/lib/viewport';
 import '../styles.css';
 
-initTelegramApp();
+initDocument();
 initTheme();
 bindViewportHeight();
 

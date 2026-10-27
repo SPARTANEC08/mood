@@ -16,11 +16,7 @@
 import 'dotenv/config';
 
 import { isBarsAuthorized, userStore } from '../../db/storage/userStore.ts';
-import {
-  checkUserNow,
-  flushSnapshots,
-  setNotificationSender,
-} from '../services/notifications/barsNotifier.ts';
+import { checkUserNow, flushSnapshots } from '../services/notifications/barsNotifier.ts';
 
 function usage(): never {
   console.error('Использование: npm run notifier:once -- --user <userId>');
@@ -48,13 +44,7 @@ async function main(): Promise<void> {
   }
 
   console.log(`[Notifier:once] пользователь ${userId} (${user.studentProfile?.fullName ?? 'без имени'})`);
-  console.log(`[Notifier:once] Telegram: ${typeof user.telegramId === 'number' ? user.telegramId : 'не подключён'}`);
-
-  // Перехватываем доставку, чтобы было видно, что именно ушло бы в Telegram.
-  setNotificationSender(async (chatId, text) => {
-    console.log(`\n[Notifier:once] → Telegram ${chatId}:`);
-    console.log(text);
-  });
+  console.log(`[Notifier:once] push-устройств: ${user.pushSubscriptions?.length ?? 0}`);
 
   try {
     const events = await checkUserNow(userId);
@@ -73,7 +63,6 @@ async function main(): Promise<void> {
   } finally {
     // Как настоящий круг: снимок и график сбрасываются на диск.
     flushSnapshots();
-    setNotificationSender(null);
   }
 }
 

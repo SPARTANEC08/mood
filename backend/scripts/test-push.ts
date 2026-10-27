@@ -164,16 +164,6 @@ const off = await app.inject({
   payload: { channel: 'push', enabled: false },
 });
 check('push выключен', off.json<{ pushEnabled: boolean }>().pushEnabled === false);
-check('Telegram не тронут', userStore.getByUserId(userId)?.notificationsEnabled === undefined);
-
-const telegramOff = await app.inject({
-  method: 'POST',
-  url: '/api/notifications/toggle',
-  headers: auth,
-  payload: { enabled: false },
-});
-check('старый контракт управляет Telegram', telegramOff.json<{ enabled: boolean }>().enabled === false);
-check('push остался выключенным', userStore.getByUserId(userId)?.pushEnabled === false);
 
 // ── Payload ───────────────────────────────────────────────────────────────────
 console.log('— Payload —');
@@ -201,12 +191,10 @@ console.log('— Снимок —');
 const prev = { gradesHash: {}, lastSeenMailUid: 1, ordersCount: 0, scholarshipStatus: 'нет', lastCheckedAt: '2026-01-01T00:00:00.000Z' };
 const next = { ...prev, lastCheckedAt: '2026-01-02T00:00:00.000Z' };
 
-check('каналы не нужны → снимок новый', snapshotAfterDelivery(prev, next, false, false) === next);
-check('Telegram упал, push дошёл → снимок новый', snapshotAfterDelivery(prev, next, true, false, true, true) === next);
-check('push упал, Telegram дошёл → снимок новый', snapshotAfterDelivery(prev, next, true, true, true, false) === next);
-check('оба упали → снимок прежний', snapshotAfterDelivery(prev, next, true, false, true, false) === prev);
-check('только push и он упал → снимок прежний', snapshotAfterDelivery(prev, next, false, false, true, false) === prev);
-check('только push и он дошёл → снимок новый', snapshotAfterDelivery(prev, next, false, false, true, true) === next);
+check('push не нужен → снимок новый', snapshotAfterDelivery(prev, next, false, false) === next);
+check('push упал → снимок прежний', snapshotAfterDelivery(prev, next, true, false) === prev);
+check('push дошёл → снимок новый', snapshotAfterDelivery(prev, next, true, true) === next);
+check('нет предыдущего снимка → новый', snapshotAfterDelivery(undefined, next, true, false) === next);
 check('базовый снимок не двигается', isBaselineSnapshot(undefined));
 
 console.log(`\n${failures === 0 ? '✅' : '❌'} Проверок: ${checks}, провалов: ${failures}\n`);

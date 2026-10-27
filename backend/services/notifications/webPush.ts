@@ -137,11 +137,12 @@ export async function sendBroadcastPush(
   user: StoredUser,
   text: string,
   url?: string,
+  kind: 'broadcast' | 'report' = 'broadcast',
 ): Promise<boolean> {
   const payload = JSON.stringify({
     title: 'Mood',
     body: text,
-    kind: 'broadcast',
+    kind,
     url: url && url.startsWith('/') ? url : '/?tab=profile',
   });
 

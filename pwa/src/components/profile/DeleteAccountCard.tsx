@@ -86,7 +86,7 @@ export function DeleteAccountCard() {
 
           <ul className="space-y-1 text-[13px] leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
             <li>• профиль и сохранённый вход в БАРС;</li>
-            <li>• привязка Telegram и настройки уведомлений;</li>
+            <li>• настройки уведомлений;</li>
             <li>• файлы, задания и объявления, созданные вами;</li>
             <li>• отметки «Сделано» и история уведомлений;</li>
             <li>• участие в статистике приложения.</li>

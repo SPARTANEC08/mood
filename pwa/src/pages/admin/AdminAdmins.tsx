@@ -101,9 +101,6 @@ export function AdminAdmins({ onBack }: { onBack: () => void }) {
             <p className="mt-1 text-[12px] leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
               Логины БАРС: {data?.env.barsLogins.length ? data.env.barsLogins.join(', ') : '—'}
             </p>
-            <p className="mt-0.5 text-[12px]" style={{ color: 'var(--text-secondary)' }}>
-              Telegram ID: {data?.env.telegramIds.length ? data.env.telegramIds.join(', ') : '—'}
-            </p>
             <p className="mt-1 text-[11px]" style={{ color: 'var(--text-tertiary)' }}>
               Снять из приложения нельзя — меняется только в .env.
             </p>
