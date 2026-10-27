@@ -18,6 +18,7 @@ import { RefreshIndicator } from '@/components/RefreshIndicator';
 import { usePullToRefresh } from '@/components/PullToRefresh';
 import { DeleteAccountCard } from '@/components/profile/DeleteAccountCard';
 import { HiddenMenuScreen } from '@/components/profile/HiddenMenuScreen';
+import { PushPrompt } from '@/components/profile/PushPrompt';
 import { SettingsCard } from '@/components/profile/SettingsCard';
 import { StudyLine, StudySection } from '@/components/profile/StudySection';
 import { useAppData } from '@/lib/dataContext';
@@ -419,6 +420,7 @@ export function ProfilePage({ profile }: { profile: BootstrapResponse }) {
           <h2 className="px-1 pt-2 text-[12px] font-semibold uppercase tracking-[0.09em] text-[var(--text-secondary)]">
             Настройки приложения
           </h2>
+          <PushPrompt />
           <SettingsCard profile={p} />
 
           <h2 className="px-1 pt-2 text-[12px] font-semibold uppercase tracking-[0.09em] text-[var(--text-secondary)]">

@@ -19,6 +19,7 @@ import { forgetBarsClient, forgetBarsSessionValid } from '../../bars/barsService
 import { clearMailStatus, putMailStatus } from '../../mail/mailStatusCache.ts';
 import { forgetOwaClient } from '../../mail/owaClientRegistry.ts';
 import { forget, markActive, markChecked, notifierPollOverrideMs } from '../pollSchedule.ts';
+import { sendPushToUser } from '../webPush.ts';
 import { collectState } from './collect.ts';
 import {
   buildGradesHash,
@@ -108,10 +109,25 @@ let timer: NodeJS.Timeout | null = null;
 let isCycleRunning = false;
 
 /**
+ * Функция доставки одного события в Web Push.
+ *
+ * Отдельный тип, а не прямой вызов: тесты подменяют канал, чтобы проверить
+ * поведение снимка без сети и без настоящих подписок.
+ */
+export type PushSender = (user: StoredUser, event: NotificationEvent) => Promise<boolean>;
+
+let pushSender: PushSender | null = sendPushToUser;
+
+/**
  * Регистрирует канал доставки уведомлений.
  */
 export function setNotificationSender(fn: NotificationSender | null): void {
   sender = fn;
+}
+
+/** Подменяет push-канал. null — канал выключен (тесты, отладка). */
+export function setPushSender(fn: PushSender | null): void {
+  pushSender = fn;
 }
 
 export function sleep(ms: number): Promise<void> {
@@ -234,6 +250,17 @@ export async function checkUser(
   const shouldSend =
     events.length > 0 && sender !== null && canNotify && typeof user.telegramId === 'number';
 
+  /*
+   * Push — независимый канал. Условия свои: включён флагом pushEnabled, есть
+   * хотя бы одно устройство и пользователь не гость. Telegram может быть не
+   * привязан вовсе — это нормальный случай для PWA-пользователя.
+   */
+  const canPush =
+    user.pushEnabled !== false &&
+    user.isGuest !== true &&
+    (user.pushSubscriptions?.length ?? 0) > 0;
+  const shouldPush = events.length > 0 && pushSender !== null && canPush;
+
   let delivered = false;
   if (shouldSend && sender && typeof user.telegramId === 'number') {
     try {
@@ -257,9 +284,32 @@ export async function checkUser(
     }
   }
 
+  let pushed = false;
+  if (shouldPush && pushSender) {
+    try {
+      console.log(
+        `[Push] → ${user.userId}: ${events.map((event) => event.kind).join(', ')}`,
+      );
+
+      let accepted = 0;
+      for (const event of events) {
+        if (await pushSender(user, event)) accepted += 1;
+      }
+
+      pushed = accepted > 0;
+      console.log(
+        pushed
+          ? `[Push] доставлено (${user.userId})`
+          : `[Push] не доставлено (${user.userId})`,
+      );
+    } catch (err: unknown) {
+      console.error(`[Push] Ошибка отправки (${user.userId}):`, safeErrorMessage(err));
+    }
+  }
+
   /*
    * Снимок сдвигаем ПОСЛЕ отправки, и только если она удалась (или отправка не
-   * требовалась: нет событий, уведомления выключены, Telegram не подключён).
+   * требовалась: нет событий, уведомления выключены, каналы не подключены).
    *
    * Раньше снимок обновлялся всегда. Один сбой Telegram (таймаут, 429, 5xx) —
    * и событие считалось «доставленным»: следующий круг его уже не видел, и
@@ -267,10 +317,18 @@ export async function checkUser(
    * снимок, и следующий круг повторяет ту же пачку. Возможный дубль при
    * неоднозначном таймауте лучше молчаливой потери.
    *
-   * Если уведомления выключены или Telegram не подключён, снимок всё равно
+   * С двумя каналами правило мягче: достаточно, чтобы событие принял ХОТЯ БЫ
+   * один канал. Иначе сбой Telegram заставлял бы повторять пачку, и человек
+   * получал бы дубль в приложении — то есть сбой одного канала портил бы
+   * работающий.
+   *
+   * Если уведомления выключены или каналы не подключены, снимок всё равно
    * двигается: иначе при включении пришла бы пачка старых событий.
    */
-  snapshotStore.stage(user.userId, snapshotAfterDelivery(prev, next, shouldSend, delivered));
+  snapshotStore.stage(
+    user.userId,
+    snapshotAfterDelivery(prev, next, shouldSend, delivered, shouldPush, pushed),
+  );
 
   return events;
 }
@@ -391,16 +449,24 @@ export function isNotifierCycleRunning(): boolean {
  * Вынесено отдельной функцией ради теста: именно здесь раньше терялись
  * уведомления. Если отправка была нужна, но не удалась — оставляем прежний
  * снимок, чтобы следующий круг повторил события. Во всех остальных случаях
- * (нечего отправлять, уведомления выключены, Telegram не привязан, отправлено)
+ * (нечего отправлять, уведомления выключены, каналы не подключены, отправлено)
  * снимок сдвигается.
+ *
+ * С двумя каналами «удалась» означает «принял хотя бы один». Повторять пачку
+ * из-за сбоя второго канала значило бы дублировать её в первом.
  */
 export function snapshotAfterDelivery(
   prev: UserSnapshot | undefined,
   next: UserSnapshot,
   shouldSend: boolean,
   delivered: boolean,
+  shouldPush = false,
+  pushed = false,
 ): UserSnapshot {
-  return shouldSend && !delivered ? (prev ?? next) : next;
+  if (!shouldSend && !shouldPush) return next;
+
+  const anyChannelDelivered = (shouldSend && delivered) || (shouldPush && pushed);
+  return anyChannelDelivered ? next : (prev ?? next);
 }
 
 export interface ForcedCycleResult {

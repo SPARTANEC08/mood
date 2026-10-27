@@ -88,6 +88,26 @@ export interface PwaTokenRecord {
 }
 
 /**
+ * Подписка браузера на Web Push.
+ *
+ * endpoint — адрес push-сервиса (FCM, Mozilla, Apple), он же уникальный ключ
+ * устройства. keys — публичная часть шифрования payload; приватный ключ
+ * остаётся в браузере и на сервер не попадает.
+ */
+export interface PushSubscriptionRecord {
+  endpoint: string;
+  keys: {
+    p256dh: string;
+    auth: string;
+  };
+  createdAt: string;
+  /** Когда подписка последний раз успешно принимала пуш. */
+  lastUsedAt?: string;
+  /** User-Agent устройства — только для диагностики, без личности. */
+  userAgent?: string;
+}
+
+/**
  * Запись пользователя.
  *
  * Ключ — userId, а не telegramId, потому что человек может пользоваться
@@ -149,8 +169,17 @@ export interface StoredUser {
   barsAuthedAt?: string;
   /** Активные PWA-токены (только хэши) */
   pwaTokens?: PwaTokenRecord[];
-  /** Подписки на push — место зарезервировано, чтобы не ломать формат */
-  pushSubscriptions?: unknown[];
+  /** Подписки на Web Push: по одной на устройство. */
+  pushSubscriptions?: PushSubscriptionRecord[];
+  /**
+   * Присылать ли Web Push в приложение.
+   *
+   * Независим от notificationsEnabled (это Telegram): человек сам выбирает
+   * канал — Telegram, приложение, оба или ни одного. Отсутствие поля означает
+   * «включено»: подписка всё равно появляется только после явного разрешения
+   * в браузере, и молчаливого канала из ниоткуда не возникает.
+   */
+  pushEnabled?: boolean;
   /**
    * Платформа последнего клиента (iOS / Android / Web / unknown).
    *

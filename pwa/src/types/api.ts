@@ -43,6 +43,10 @@ export interface BootstrapProfile {
    * выключенное состояние человеку, который ничего не выключал.
    */
   notificationsEnabled?: boolean;
+  /** Присылать ли Web Push в приложение (независимо от Telegram). */
+  pushEnabled?: boolean;
+  /** Сколько устройств подписано на push. */
+  pushDevices?: number;
   fullName: string;
   groupName: string;
   faculty?: string;

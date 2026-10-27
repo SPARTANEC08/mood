@@ -64,6 +64,8 @@ export function buildProfile(user: StoredUser): BootstrapResponse['profile'] {
     // различать два состояния тому, кто показывает кнопку, незачем.
     telegramId: user.telegramId ?? undefined,
     notificationsEnabled: user.notificationsEnabled !== false,
+    pushEnabled: user.pushEnabled !== false,
+    pushDevices: user.pushSubscriptions?.length ?? 0,
     fullName: user.studentProfile?.fullName?.trim() || user.firstName || 'Студент',
     groupName: user.groupName ?? user.studentProfile?.groupName ?? '',
     faculty: user.faculty,

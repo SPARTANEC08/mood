@@ -51,6 +51,22 @@ const EMPTY_BOOTSTRAP: BootstrapResponse = {
   mailUnread: null,
 };
 
+const URL_TABS: TabId[] = ['schedule', 'grades', 'tasks', 'profile'];
+
+/** Вкладка из `?tab=` (ссылка из push), иначе расписание. */
+function initialTabFromUrl(): TabId {
+  if (typeof window === 'undefined') return 'schedule';
+
+  try {
+    const raw = new URLSearchParams(window.location.search).get('tab');
+    if (raw && URL_TABS.includes(raw as TabId)) return raw as TabId;
+  } catch {
+    // Битый URL — не повод не открыть приложение.
+  }
+
+  return 'schedule';
+}
+
 export function ScheduleApp({
   onReLogin,
   guestHint = false,
@@ -61,7 +77,22 @@ export function ScheduleApp({
 }) {
   const [bootstrap, setBootstrap] = useState<BootstrapResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [tab, setTab] = useState<TabId>('schedule');
+  /**
+   * Начальная вкладка может прийти ссылкой из push-уведомления.
+   *
+   * Формат — `/?tab=grades`. Значение проверяется по списку вкладок: чужая
+   * строка не должна открывать несуществующий экран. Параметр убирается из
+   * адреса сразу после чтения, чтобы перезагрузка не возвращала человека на
+   * ту же вкладку против его воли.
+   */
+  const [tab, setTab] = useState<TabId>(() => initialTabFromUrl());
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!new URLSearchParams(window.location.search).has('tab')) return;
+
+    window.history.replaceState(null, '', window.location.pathname + window.location.hash);
+  }, []);
 
   /**
    * Диалог добавления живёт в оболочке, но его состояние поднято сюда, чтобы

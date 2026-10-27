@@ -25,6 +25,7 @@ import { registerHomeworkRoutes } from './routes/homework.ts';
 import { registerImportantRoutes } from './routes/important.ts';
 import { registerFileRoutes } from './routes/files.ts';
 import { registerNotificationRoutes } from './routes/notifications.ts';
+import { registerPushRoutes } from './routes/push.ts';
 import { registerAnnouncementRoutes } from './routes/announcements.ts';
 import { registerDevRoutes } from './routes/dev.ts';
 import { setupActivityTracking } from './devStats.ts';
@@ -284,6 +285,7 @@ export async function buildServer(): Promise<FastifyInstance> {
   await registerImportantRoutes(app);
   await registerFileRoutes(app);
   await registerNotificationRoutes(app);
+  registerPushRoutes(app);
   registerAnnouncementRoutes(app);
   await registerDevRoutes(app);
 

@@ -292,6 +292,23 @@ export async function confirmTwoFactor(
 export async function logout(): Promise<void> {
   const token = getPwaToken();
 
+  /*
+   * Сначала снимаем подписку на push, пока токен ещё действителен.
+   *
+   * Иначе устройство осталось бы подписанным на аккаунт, с которого человек
+   * вышел, и следующий владелец телефона получал бы чужие оценки на экран
+   * блокировки. Импорт динамический: lib/push тянет API-клиент, который сам
+   * зависит от этого модуля, и статический импорт замкнул бы цикл.
+   */
+  try {
+    if (token) {
+      const { disablePush } = await import('./lib/push');
+      await disablePush();
+    }
+  } catch {
+    // Не смогли отписаться — не повод не выходить.
+  }
+
   try {
     if (token) {
       await fetch('/api/auth/logout', {

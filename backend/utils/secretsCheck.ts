@@ -55,5 +55,31 @@ export function validateSecrets(env: NodeJS.ProcessEnv = process.env): SecretsCh
     warnings.push('DEV_STATS_TOKEN короче 16 символов — слабый секрет.');
   }
 
+  /*
+   * VAPID-ключи. Отсутствие обоих — штатный режим «только Telegram», поэтому
+   * предупреждение, а не ошибка. А вот один ключ без второго или мусор вместо
+   * base64url — ошибка: push-канал молча не заработает, и искать причину
+   * придётся по логам каждой отправки.
+   */
+  const vapidPublic = (env.VAPID_PUBLIC_KEY ?? '').trim();
+  const vapidPrivate = (env.VAPID_PRIVATE_KEY ?? '').trim();
+  const vapidSubject = (env.VAPID_SUBJECT ?? '').trim();
+
+  if (!vapidPublic && !vapidPrivate) {
+    warnings.push('VAPID-ключи не заданы — push-уведомления в PWA выключены.');
+  } else if (!vapidPublic || !vapidPrivate) {
+    errors.push('Задан только один VAPID-ключ: нужны и VAPID_PUBLIC_KEY, и VAPID_PRIVATE_KEY.');
+  } else {
+    if (!/^[A-Za-z0-9_-]{40,120}$/.test(vapidPublic)) {
+      errors.push('VAPID_PUBLIC_KEY не похож на base64url-ключ.');
+    }
+    if (!/^[A-Za-z0-9_-]{40,120}$/.test(vapidPrivate)) {
+      errors.push('VAPID_PRIVATE_KEY не похож на base64url-ключ.');
+    }
+    if (vapidSubject && !/^(mailto:|https:)/.test(vapidSubject)) {
+      errors.push('VAPID_SUBJECT должен начинаться с mailto: или https:.');
+    }
+  }
+
   return { errors, warnings };
 }

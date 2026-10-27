@@ -540,6 +540,14 @@ IMAP `mail.mpei.ru:993` режется Forefront TMG (RST на ClientHello), п�
 который регистрирует `tg/telegramService.ts`. Уведомление отправляется только при
 числовом `telegramId` и `notificationsEnabled !== false`.
 
+Второй канал — **Web Push (VAPID)**. Он независим от Telegram: у каждого свой
+флаг (`notificationsEnabled` и `pushEnabled`), поэтому человек сам выбирает —
+Telegram, приложение, оба или ни одного. Подписки браузеров хранятся в
+`StoredUser.pushSubscriptions` (до 10 устройств), мёртвые (404/410) удаляются
+автоматически. Payload содержит только тип события, без оценок и тем писем: он
+показывается на заблокированном экране. Тап открывает нужную вкладку через
+`/?tab=grades|profile`.
+
 `diffSnapshots` даёт четыре события: `grade` (дельта по КМ), `mail` (письма с
 `uid > prev`), `order` (рост числа приказов), `scholarship` (смена статуса).
 При истечении сессии БАРС — `clearAuth` + снимок + `forgetBarsClient`.
@@ -571,6 +579,8 @@ IMAP `mail.mpei.ru:993` режется Forefront TMG (RST на ClientHello), п�
 | POST/GET/DELETE | `/api/files/…` (upload, meta, preview, share) | токен |
 | GET | `/api/files/share/:token` | токен в URL |
 | POST/GET | `/api/notifications/toggle`, `/state` | токен |
+| GET | `/api/push/key`, `/api/push/state` | токен |
+| POST | `/api/push/subscribe`, `/api/push/unsubscribe` | токен |
 | GET | `/api/notifications`, `/api/notifications/unread-count` | токен + БАРС |
 | POST | `/api/notifications/read-all` | токен + БАРС |
 | GET/POST | `/api/notifications/next`, `/:id/read` | токен + БАРС |
@@ -601,6 +611,12 @@ API_HOST=127.0.0.1
 
 # Telegram ID админов бота (через запятую). Их нельзя снять из бота.
 ADMIN_TELEGRAM_IDS=
+
+# --- Web Push (VAPID) ---
+# npx web-push generate-vapid-keys
+VAPID_PUBLIC_KEY=
+VAPID_PRIVATE_KEY=
+VAPID_SUBJECT=mailto:noreply@mood.local
 ```
 
 **Отладка:** `API_PERF_LOG=1` (все запросы API), `?perf=1`/`mood_perf`
@@ -617,6 +633,7 @@ ADMIN_TELEGRAM_IDS=
 | `PWA_AUTH_SECRET` | вход в приложение невозможен |
 | `API_PORT` | API не поднимается |
 | `PWA_URL` | кнопки «Открыть приложение» нет, CORS без него |
+| `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` | push-канал выключен, Telegram работает |
 
 ---
 

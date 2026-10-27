@@ -181,25 +181,62 @@ export const api = {
 
   // ── уведомления ──────────────────────────────────────────────────────────
   /**
-   * Включает или выключает уведомления в Telegram.
+   * Включает или выключает канал уведомлений.
    *
    * Идемпотентно: сервер запоминает флаг и отвечает тем же, что прислали, —
    * поэтому кнопку можно нажимать дважды подряд без побочных эффектов.
+   * Канал по умолчанию — Telegram (старый контракт).
    */
-  toggleNotifications: (enabled: boolean) =>
-    request<{ ok: true; enabled: boolean; telegramId: number | null }>('/notifications/toggle', {
+  toggleNotifications: (enabled: boolean, channel: 'telegram' | 'push' = 'telegram') =>
+    request<{
+      ok: true;
+      channel: 'telegram' | 'push';
+      enabled: boolean;
+      telegramId: number | null;
+      pushEnabled: boolean;
+      pushDevices: number;
+    }>('/notifications/toggle', {
       method: 'POST',
-      body: { enabled },
+      body: { enabled, channel },
     }),
 
   /**
-   * Текущее состояние подписки.
+   * Текущее состояние подписок.
    *
    * Отдельный лёгкий маршрут вместо повторного bootstrap: «Кабинет» перечитывает
    * состояние при возврате на вкладку, а bootstrap ходит в БАРС и IMAP.
    */
   notificationsState: () =>
-    request<{ telegramId: number | null; notificationsEnabled: boolean }>('/notifications/state'),
+    request<{
+      telegramId: number | null;
+      notificationsEnabled: boolean;
+      pushEnabled: boolean;
+      pushDevices: number;
+    }>('/notifications/state'),
+
+  // ── Web Push ─────────────────────────────────────────────────────────────
+  /** Публичный VAPID-ключ. Пустая строка — канал на сервере не настроен. */
+  pushKey: () => request<{ publicKey: string }>('/push/key'),
+
+  /** Сохранить подписку устройства (идемпотентно по endpoint). */
+  pushSubscribe: (subscription: {
+    endpoint: string;
+    keys: { p256dh: string; auth: string };
+  }) =>
+    request<{ ok: true; devices: number }>('/push/subscribe', {
+      method: 'POST',
+      body: subscription,
+    }),
+
+  /** Удалить подписку устройства. */
+  pushUnsubscribe: (endpoint: string) =>
+    request<{ ok: true; devices: number }>('/push/unsubscribe', {
+      method: 'POST',
+      body: { endpoint },
+    }),
+
+  /** Состояние push-канала: флаг и число устройств. */
+  pushState: () => request<{ pushEnabled: boolean; devices: number }>('/push/state'),
 
   // ── объявления внутри приложения ─────────────────────────────────────────
   /** Следующее непрочитанное объявление (очередь админа) или null. */

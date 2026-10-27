@@ -477,3 +477,78 @@ async function trimCache(cache, limit) {
     await cache.delete(key);
   }
 }
+/* ── Web Push ─────────────────────────────────────────────────────────────── */
+
+/**
+ * Пуш приходит от нашего сервера и содержит только тип события.
+ *
+ * Детали (предмет, оценка, тема письма) сюда не попадают: уведомление видно на
+ * заблокированном экране, и показывать чужие оценки рядом с телефоном нельзя.
+ * Полный текст человек увидит, открыв приложение.
+ */
+self.addEventListener('push', (event) => {
+  let payload = {};
+
+  try {
+    payload = event.data ? event.data.json() : {};
+  } catch {
+    payload = {};
+  }
+
+  const body = typeof payload.body === 'string' && payload.body ? payload.body : 'Новое событие';
+  const kind = typeof payload.kind === 'string' && payload.kind ? payload.kind : 'mood';
+  const url = typeof payload.url === 'string' && payload.url.startsWith('/') ? payload.url : '/';
+
+  event.waitUntil(
+    self.registration.showNotification('Mood', {
+      body,
+      icon: '/icons/icon-192.png',
+      badge: '/icons/icon-192.png',
+      // Один тег на тип: серия одинаковых событий заменяет предыдущее, а не
+      // выстраивает десяток уведомлений в шторке.
+      tag: `mood-${kind}`,
+      data: { url },
+    }),
+  );
+});
+
+/**
+ * Тап по уведомлению открывает приложение на нужной вкладке.
+ *
+ * Ссылка относительная (`/?tab=grades`): маршрутизации нет, вкладку выбирает
+ * ScheduleApp по параметру при старте. Если приложение уже открыто — сначала
+ * фокусируем существующее окно, чтобы не плодить копии.
+ */
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+
+  const url =
+    event.notification.data && typeof event.notification.data.url === 'string'
+      ? event.notification.data.url
+      : '/';
+
+  event.waitUntil(
+    (async () => {
+      const clients = await self.clients.matchAll({
+        type: 'window',
+        includeUncontrolled: true,
+      });
+
+      for (const client of clients) {
+        if ('focus' in client) {
+          await client.focus();
+          if ('navigate' in client) await client.navigate(url);
+          return;
+        }
+      }
+
+      await self.clients.openWindow(url);
+    })(),
+  );
+});
+
+/*
+ * pushsubscriptionchange здесь намеренно не обрабатывается: переподписка
+ * требует VAPID-ключа и авторизованного запроса, а у Service Worker нет токена.
+ * Новую подписку создаёт syncPush при следующем открытии приложения.
+ */
