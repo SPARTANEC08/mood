@@ -124,12 +124,37 @@ export async function sendPushToUser(
   user: StoredUser,
   event: NotificationEvent,
 ): Promise<boolean> {
+  return sendPushPayload(user, buildPushPayload(event));
+}
+
+/**
+ * Произвольный payload (рассылка администратора).
+ *
+ * Тот же транспорт и та же чистка подписок, но текст задаёт админ. Деталей
+ * пользователя здесь нет — только то, что он написал.
+ */
+export async function sendBroadcastPush(
+  user: StoredUser,
+  text: string,
+  url?: string,
+): Promise<boolean> {
+  const payload = JSON.stringify({
+    title: 'Mood',
+    body: text,
+    kind: 'broadcast',
+    url: url && url.startsWith('/') ? url : '/?tab=profile',
+  });
+
+  return sendPushPayload(user, payload);
+}
+
+/** Общая отправка готового payload на все устройства пользователя. */
+export async function sendPushPayload(user: StoredUser, payload: string): Promise<boolean> {
   if (!configureWebPush()) return false;
 
   const subscriptions = user.pushSubscriptions ?? [];
   if (subscriptions.length === 0) return false;
 
-  const payload = buildPushPayload(event);
   const results = await Promise.allSettled(
     subscriptions.map((subscription) =>
       webpush.sendNotification(

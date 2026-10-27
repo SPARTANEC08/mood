@@ -572,22 +572,3 @@ export function getStats(options: { windowEnd?: number } = {}): StatsResponse {
     files: { totalFiles, totalBytes, byUser: filesByUser },
   };
 }
-
-/* ───────────────────────────── доступ /dev/ ───────────────────────────── */
-
-export function isDevStatsEnabled(): boolean {
-  return Boolean(process.env.DEV_STATS_TOKEN?.trim());
-}
-
-export function isDevTokenValid(provided: string): boolean {
-  const expected = process.env.DEV_STATS_TOKEN?.trim();
-  if (!expected) return false;
-
-  // Сравнение постоянного времени: токен — единственная защита страницы.
-  const a = Buffer.from(provided);
-  const b = Buffer.from(expected);
-  if (a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i += 1) diff |= a[i] ^ b[i];
-  return diff === 0;
-}

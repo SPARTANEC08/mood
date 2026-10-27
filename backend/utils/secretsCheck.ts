@@ -9,7 +9,6 @@
  * Правила по-разному строгие:
  *  - не задан → предупреждение (по README процесс умеет жить без части секретов);
  *  - задан, но неверного формата → ошибка (лучше не стартовать, чем портить данные);
- *  - задан и короткий там, где длина не критична (DEV_STATS_TOKEN) → предупреждение.
  */
 
 /** 64 hex-символа или ровно 32 байта UTF-8 — форматы AES-ключа и PWA-секрета. */
@@ -46,13 +45,6 @@ export function validateSecrets(env: NodeJS.ProcessEnv = process.env): SecretsCh
     warnings.push('TELEGRAM_BOT_TOKEN не задан — бот не запустится (останется только API).');
   } else if (!/^\d+:[A-Za-z0-9_-]{20,}$/.test(botToken)) {
     errors.push('TELEGRAM_BOT_TOKEN не похож на токен BotFather.');
-  }
-
-  const devToken = (env.DEV_STATS_TOKEN ?? '').trim();
-  if (!devToken) {
-    warnings.push('DEV_STATS_TOKEN не задан — страница /dev/ недоступна.');
-  } else if (devToken.length < 16) {
-    warnings.push('DEV_STATS_TOKEN короче 16 символов — слабый секрет.');
   }
 
   /*

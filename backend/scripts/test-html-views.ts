@@ -238,10 +238,15 @@ section('Кнопки меню');
   check('приветствие: выбор iOS', welcome.includes('platform_ios'));
   check('приветствие: выбор Android', welcome.includes('platform_android'));
 
-  const adminCbs = buildAdminMenu().keyboard.flat().map((b) => b.callback_data);
-  for (const expected of ['admin_stats', 'admin_reports:0', 'admin_mail', 'admin_broadcast', 'admin_add', 'admin_remove', 'menu']) {
+  const adminButtons = buildAdminMenu().keyboard.flat();
+  const adminCbs = adminButtons.map((b) => b.callback_data);
+  for (const expected of ['admin_reports:0', 'admin_mail', 'admin_broadcast', 'admin_add', 'admin_remove', 'menu']) {
     check(`админ-меню: ${expected}`, adminCbs.includes(expected));
   }
+  check(
+    'админ-меню: ссылка на статистику в PWA',
+    adminButtons.some((b) => typeof b.url === 'string' && b.url.includes('admin=stats')),
+  );
 }
 
 section('Экран /app совпадает с приветствием');
@@ -313,13 +318,14 @@ section('Тексты пуш-уведомлений');
   };
 
   const events = diffSnapshots(
-    base(),
+    base({ ordersInitialized: true, ordersSeen: [] }),
     base({
       gradesHash: { 'Математический анализ_КТ1': 42, 'Физика_КТ1': 5 },
       lastSeenMailUid: 15,
       ordersCount: 3,
       scholarshipStatus: 'Академическая, 01.09.2026-31.01.2027',
     }),
+    { orders: [{ number: '1', title: 'О переводе', date: '01.10.2026' }] },
   );
 
   check('найдены события', events.length > 0, `получено ${events.length}`);

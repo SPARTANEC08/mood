@@ -107,6 +107,8 @@ export type NotificationSender = (
 let sender: NotificationSender | null = null;
 let timer: NodeJS.Timeout | null = null;
 let isCycleRunning = false;
+/** Когда закончился последний полный круг (для админской диагностики). */
+let lastCycleFinishedAt: number | null = null;
 
 /**
  * Функция доставки одного события в Web Push.
@@ -435,7 +437,21 @@ export async function runCycle(): Promise<void> {
     // падении процесса привели бы к повторным уведомлениям на следующем круге.
     snapshotStore.flush();
     isCycleRunning = false;
+    lastCycleFinishedAt = Date.now();
   }
+}
+
+/** Состояние нотификатора для админской диагностики. */
+export function notifierRuntimeStatus(): {
+  running: boolean;
+  lastCycleFinishedAt: number | null;
+  activeWindow: boolean;
+} {
+  return {
+    running: isCycleRunning,
+    lastCycleFinishedAt,
+    activeWindow: isWithinActiveWindow(),
+  };
 }
 
 /** Идёт ли сейчас любой прогон (фоновый или принудительный). */
@@ -542,6 +558,7 @@ export async function runCycleForced(onProgress?: ForcedCycleProgress): Promise<
   } finally {
     snapshotStore.flush();
     isCycleRunning = false;
+    lastCycleFinishedAt = Date.now();
   }
 
   return { processed, notified, errors };

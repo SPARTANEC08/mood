@@ -10,6 +10,7 @@
 import type { FastifyRequest } from 'fastify';
 
 import type { StoredUser } from '../../../../db/storage/userStore.ts';
+import { isPwaAdmin } from '../../../utils/adminAuth.ts';
 import { AuthError } from '../../middleware/auth.ts';
 import type { BootstrapResponse } from '../../types.ts';
 
@@ -66,6 +67,7 @@ export function buildProfile(user: StoredUser): BootstrapResponse['profile'] {
     notificationsEnabled: user.notificationsEnabled !== false,
     pushEnabled: user.pushEnabled !== false,
     pushDevices: user.pushSubscriptions?.length ?? 0,
+    isAdmin: isPwaAdmin(user),
     fullName: user.studentProfile?.fullName?.trim() || user.firstName || 'Студент',
     groupName: user.groupName ?? user.studentProfile?.groupName ?? '',
     faculty: user.faculty,

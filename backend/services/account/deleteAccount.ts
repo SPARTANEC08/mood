@@ -39,6 +39,7 @@ import { importantStore } from '../../../db/storage/importantStore.ts';
 import { announcementStore } from '../../../db/storage/announcementStore.ts';
 import { botFlowsStore } from '../../../db/storage/botFlowsStore.ts';
 import { removeAdmin } from '../../../db/storage/adminsStore.ts';
+import { pwaAdminsStore } from '../../../db/storage/pwaAdminsStore.ts';
 import { deleteAllFiles } from '../../../db/storage/fileStore.ts';
 import { forgetUser as forgetStatsUser } from '../../server/devStats.ts';
 import { forgetBarsClient, forgetBarsSessionValid } from '../bars/barsServiceFactory.ts';
@@ -101,6 +102,7 @@ export async function deleteAccount(user: StoredUser): Promise<void> {
     botFlowsStore.delete(telegramId);
     removeAdmin(telegramId);
   }
+  pwaAdminsStore.forget(userId);
 
   // 7. Кэши в памяти. Без этого удалённый человек мог бы ещё минут двадцать
   // отдаваться из снимка БАРС или считаться в опросе почты.

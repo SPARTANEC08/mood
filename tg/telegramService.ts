@@ -2,6 +2,7 @@ import { Bot, InputFile } from 'grammy';
 
 import { flushSnapshots, setNotificationSender, startNotifier } from '../backend/services/notifications/barsNotifier.ts';
 import { startDailyReport } from '../backend/services/notifications/dailyReport.ts';
+import { setAdminTelegramSender } from '../backend/services/admin/broadcast.ts';
 import { buildMailRefreshRunningView } from './adminView.ts';
 import { processTelegramCallback, processTelegramMessage, type MailProgress } from './botEngine.ts';
 import { type BroadcastSend } from './broadcast.ts';
@@ -160,6 +161,21 @@ export async function initTelegramBot(): Promise<void> {
       await bot.api.sendMessage(chatId, text, {
         parse_mode: HTML_PARSE_MODE,
         reply_markup: { inline_keyboard: keyboard },
+      });
+    });
+
+    /*
+     * Рассылка из админки PWA идёт тем же ботом.
+     *
+     * Текст пишет админ, поэтому parse_mode не ставим: случайный «<» в тексте
+     * сломал бы отправку. Ссылка — обычная inline-кнопка.
+     */
+    setAdminTelegramSender(async (telegramId, text, url) => {
+      await bot.api.sendMessage(telegramId, text, {
+        link_preview_options: { is_disabled: true },
+        ...(url
+          ? { reply_markup: { inline_keyboard: [[{ text: 'Открыть приложение', url }]] } }
+          : {}),
       });
     });
 

@@ -24,7 +24,7 @@
     "test:html": "tsx backend/scripts/test-html-views.ts",
     "test:isolation": "tsx backend/scripts/test-group-isolation.ts",
     "check:files": "tsx backend/scripts/check-files.ts",
-    "test:all": "tsx backend/scripts/test-bars-login-hash.ts && tsx backend/scripts/test-pwa-auth.ts && tsx backend/scripts/test-pwa-routes.ts && tsx backend/scripts/test-bars-snapshot.ts && tsx backend/scripts/test-group-isolation.ts && tsx backend/scripts/test-notifier.ts && tsx backend/scripts/test-owa.ts && tsx backend/scripts/test-grades-calc.ts && tsx backend/scripts/test-html-views.ts && tsx backend/scripts/test-bot.ts && tsx backend/scripts/test-bot-edges.ts && tsx backend/scripts/test-owa-edges.ts && tsx backend/scripts/test-notifier-edges.ts && tsx backend/scripts/test-files-edges.ts && tsx backend/scripts/test-time.ts && tsx backend/scripts/test-login-limiter.ts && tsx backend/scripts/test-schedule-cache.ts && tsx backend/scripts/test-maintenance.ts && npm run test:files && npm run test:notifications && npm run test:push && npm run test:account-delete && npm run test:scholarship && npm run test:consents",
+    "test:all": "tsx backend/scripts/test-bars-login-hash.ts && tsx backend/scripts/test-pwa-auth.ts && tsx backend/scripts/test-pwa-routes.ts && tsx backend/scripts/test-bars-snapshot.ts && tsx backend/scripts/test-group-isolation.ts && tsx backend/scripts/test-notifier.ts && tsx backend/scripts/test-owa.ts && tsx backend/scripts/test-grades-calc.ts && tsx backend/scripts/test-html-views.ts && tsx backend/scripts/test-bot.ts && tsx backend/scripts/test-bot-edges.ts && tsx backend/scripts/test-owa-edges.ts && tsx backend/scripts/test-notifier-edges.ts && tsx backend/scripts/test-files-edges.ts && tsx backend/scripts/test-time.ts && tsx backend/scripts/test-login-limiter.ts && tsx backend/scripts/test-schedule-cache.ts && tsx backend/scripts/test-maintenance.ts && npm run test:files && npm run test:notifications && npm run test:push && npm run test:admin && npm run test:account-delete && npm run test:scholarship && npm run test:consents",
     "test:grades-calc": "tsx backend/scripts/test-grades-calc.ts",
     "test:auth": "tsx backend/scripts/test-bars-auth.ts",
     "test:client": "tsx backend/scripts/test-bars-client.ts",
@@ -60,7 +60,8 @@
     "test:bars-login-hash": "tsx backend/scripts/test-bars-login-hash.ts",
     "test:snapshot": "tsx backend/scripts/test-bars-snapshot.ts",
     "test:notifications": "tsx backend/scripts/test-notifications-toggle.ts",
-    "test:push": "tsx backend/scripts/test-push.ts"
+    "test:push": "tsx backend/scripts/test-push.ts",
+    "test:admin": "tsx backend/scripts/test-admin.ts"
   },
   "dependencies": {
     "@fastify/cors": "^11.3.1",

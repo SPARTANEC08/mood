@@ -21,19 +21,15 @@ function backToAdmin(): InlineButton[] {
 }
 
 /**
- * Ссылка на живую страницу статистики с токеном из env.
+ * Ссылка на статистику внутри PWA.
  *
- * Токен кладётся во ФРАГМЕНТ (`#`), а не в query: именно так его читает сама
- * страница `/dev/` (`getTokenFromHash` → localStorage). С `?key=` она токен не
- * видит и показывает форму ввода — снаружи это выглядело как «ссылка просит
- * токен». Фрагмент к тому же не уходит на сервер и не попадает в access-логи.
+ * Отдельной страницы /dev/ больше нет: цифры живут на админском экране.
+ * Параметр `admin=stats` открывает нужный раздел сразу после входа во вкладку
+ * «Кабинет»; обычный пользователь просто увидит свой профиль.
  */
 export function buildStatsUrl(): string | null {
-  const token = process.env.DEV_STATS_TOKEN?.trim();
-  if (!token) return null;
-
   const base = (process.env.PWA_URL?.trim() || 'https://109-120-129-61.sslip.io').replace(/\/+$/, '');
-  return `${base}/dev/#${encodeURIComponent(token)}`;
+  return `${base}/?tab=profile&admin=stats`;
 }
 
 /** Главное админ-меню. */
@@ -72,7 +68,7 @@ export function buildAdminMenu(): BotViewResult {
   };
 }
 
-/** Статистика: одна и та же ссылка, без генерации. */
+/** Статистика: ссылка на админский экран внутри PWA. */
 export function buildStatsView(): BotViewResult {
   const url = buildStatsUrl();
 
@@ -80,9 +76,7 @@ export function buildStatsView(): BotViewResult {
     return {
       text: joinBlocks([
         `📊 ${b('Статистика')}`,
-        '`DEV_STATS_TOKEN` не задан на сервере — ссылка недоступна.',
-        '',
-        i('Добавь токен в .env и перезапусти сервис.'),
+        'Не задан `PWA_URL` — ссылку собрать не из чего.',
       ]),
       keyboard: [backToAdmin()],
     };
@@ -91,11 +85,9 @@ export function buildStatsView(): BotViewResult {
   return {
     text: joinBlocks([
       `📊 ${b('Статистика')}`,
-      'Живая страница статистики (доступ по токену):',
+      'Цифры и история — в приложении, в админском разделе «Статистика».',
       '',
-      link(url, '🌐 Открыть /dev/'),
-      '',
-      i('Ссылка постоянная. Токен не показывается в тексте.'),
+      link(url, '🌐 Открыть статистику'),
     ]),
     keyboard: [
       [{ text: '🌐 Открыть статистику', url }],

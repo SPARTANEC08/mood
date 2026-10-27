@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ArrowUpRight,
   BookOpen,
@@ -9,6 +9,7 @@ import {
   MessageCircle,
   ScrollText,
   Send,
+  Settings,
 } from 'lucide-react';
 
 import { Header } from '@/components/TabBar';
@@ -25,6 +26,7 @@ import { useAppData } from '@/lib/dataContext';
 import { plural } from '@/lib/dates';
 import { haptic, openLink } from '@/lib/env';
 import { logout } from '@/auth';
+import { AdminScreen, type AdminSection } from './admin/AdminScreen';
 import type { BootstrapResponse } from '@/types/api';
 
 /**
@@ -108,6 +110,34 @@ export function ProfilePage({ profile }: { profile: BootstrapResponse }) {
 
   const { profile: p } = profile;
 
+  /*
+   * Админка: шестерёнка в шапке и deep link из бота `?admin=stats`.
+   *
+   * Ссылка открывает нужный раздел один раз и сразу убирает параметр, чтобы
+   * перезагрузка не возвращала туда же. Обычному пользователю параметр ничего
+   * не открывает — сервер всё равно проверит права.
+   */
+  const [adminOpen, setAdminOpen] = useState(false);
+  const [adminSection, setAdminSection] = useState<AdminSection>('menu');
+
+  useEffect(() => {
+    if (!p.isAdmin) return;
+
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('admin') !== 'stats') return;
+
+    setAdminSection('stats');
+    setAdminOpen(true);
+
+    params.delete('admin');
+    const search = params.toString();
+    window.history.replaceState(
+      null,
+      '',
+      window.location.pathname + (search ? `?${search}` : '') + window.location.hash,
+    );
+  }, [p.isAdmin]);
+
   const initials = p.fullName
     .split(' ')
     .slice(0, 2)
@@ -146,6 +176,19 @@ export function ProfilePage({ profile }: { profile: BootstrapResponse }) {
       ? `${books.length} ${plural(books.length, 'книга', 'книги', 'книг')}${overdue > 0 ? ` · ${overdue} просрочена` : ''}`
       : 'Книг нет';
 
+  if (adminOpen) {
+    return (
+      <AdminScreen
+        profile={p}
+        initial={adminSection}
+        onClose={() => {
+          setAdminOpen(false);
+          setAdminSection('menu');
+        }}
+      />
+    );
+  }
+
   if (hiddenOpen) return <HiddenMenuScreen onBack={() => setHiddenOpen(false)} />;
 
   return (
@@ -159,7 +202,26 @@ export function ProfilePage({ profile }: { profile: BootstrapResponse }) {
             // Почта перечитывается при каждом заходе — её в счётчик не берём
             // (иначе спиннер мигал бы постоянно и ничего не значил). Здесь видно
             // обновление разделов БАРС.
-            right={<RefreshIndicator active={barsRefreshing && !pull.suppressBackground} />}
+            right={
+              <>
+                {p.isAdmin ? (
+                  <button
+                    type="button"
+                    aria-label="Администрирование"
+                    onClick={() => {
+                      haptic('light');
+                      setAdminSection('menu');
+                      setAdminOpen(true);
+                    }}
+                    className="pressable rounded-full p-2 active:pressable-active"
+                    style={{ color: 'var(--accent)' }}
+                  >
+                    <Settings size={19} aria-hidden />
+                  </button>
+                ) : null}
+                <RefreshIndicator active={barsRefreshing && !pull.suppressBackground} />
+              </>
+            }
           />
         }
         pull={pull}

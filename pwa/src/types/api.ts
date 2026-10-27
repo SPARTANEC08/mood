@@ -47,6 +47,8 @@ export interface BootstrapProfile {
   pushEnabled?: boolean;
   /** Сколько устройств подписано на push. */
   pushDevices?: number;
+  /** Админ: показывает шестерёнку и доступ к /api/admin. */
+  isAdmin?: boolean;
   fullName: string;
   groupName: string;
   faculty?: string;
@@ -441,3 +443,127 @@ export interface NotificationsFeedResponse {
   unread: number;
 }
 
+/* ── админка ──────────────────────────────────────────────────────────────── */
+
+export interface AdminDayStats {
+  date: string;
+  requests: number;
+  visits: number;
+  maxOnline: number;
+  newBarsSessions: number;
+  currentBars: number;
+  currentOnline: number;
+  homework: { created: number; deleted: number; total: number };
+  important: { created: number; deleted: number; total: number };
+  platforms: { ios: number; android: number; web: number; unknown: number };
+  files: { totalFiles: number; totalBytes: number };
+  sessionsCount: number;
+  hours: Array<{ label: string; value: number }> | null;
+  source: 'json' | 'html';
+}
+
+export type AdminStatsPeriod = 'today' | 'yesterday' | 'week' | 'month' | 'date';
+
+export interface AdminStatsResponse {
+  period: AdminStatsPeriod;
+  from: string;
+  to: string;
+  live: {
+    requestsByHour: Array<{ label: string; value: number }>;
+    windowStart: number;
+    windowEnd: number;
+    moscowNow: { date: string; time: string };
+  } | null;
+  days: AdminDayStats[];
+  totals: {
+    requests: number;
+    visits: number;
+    maxOnline: number;
+    newBarsSessions: number;
+    homeworkCreated: number;
+    homeworkDeleted: number;
+    importantCreated: number;
+    importantDeleted: number;
+  };
+  latest: AdminDayStats | null;
+  availableDates: string[];
+}
+
+export interface AdminUserSummary {
+  id: string;
+  name: string;
+  group: string;
+  platform: string;
+  lastSeenAt: number;
+  bars: 'active' | 'none';
+  telegram: boolean;
+  push: number;
+  isGuest: boolean;
+  isAdmin: boolean;
+  createdAt: string;
+}
+
+export interface AdminUserDetails extends AdminUserSummary {
+  faculty: string;
+  recordBookNumber: string;
+  barsAuthedAt: string | null;
+  pwaTokens: number;
+  pushEnabled: boolean;
+  notificationsEnabled: boolean;
+  telegramId: number | null;
+  sessionValid: boolean;
+}
+
+export interface AdminJob {
+  id: string;
+  kind: 'broadcast' | 'notifier';
+  status: 'running' | 'done' | 'failed';
+  startedAt: string;
+  finishedAt?: string;
+  total: number;
+  done: number;
+  progress: Record<string, number>;
+  message?: string;
+  error?: string;
+}
+
+export interface AdminAnnouncement {
+  id: string;
+  text: string;
+  createdAt: string;
+  createdBy?: number | string;
+  targetUserId?: string;
+}
+
+export interface AdminAuditEntry {
+  id: string;
+  at: string;
+  adminUserId: string;
+  adminName: string;
+  action: string;
+  target?: string;
+  details?: string;
+}
+
+export interface AdminDiagnostics {
+  uptimeSec: number;
+  memory: { rss: number; heapUsed: number; heapTotal: number };
+  disk: { totalBytes: number; freeBytes: number; usedRatio: number } | null;
+  users: {
+    total: number;
+    guests: number;
+    barsAuthorized: number;
+    withTelegram: number;
+    withPush: number;
+  };
+  pushDevices: number;
+  notifier: { running: boolean; lastCycleFinishedAt: number | null; activeWindow: boolean };
+  registrationOpen: boolean;
+  jobs: { broadcast: string | null; notifier: string | null };
+  audit: AdminAuditEntry[];
+}
+
+export interface AdminAdminsResponse {
+  env: { barsLogins: string[]; telegramIds: string[]; barsHashes: number };
+  assigned: Array<{ userId: string; name: string; group: string; addedAt: string }>;
+}

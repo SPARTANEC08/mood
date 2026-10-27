@@ -28,6 +28,15 @@ import type {
   NextNotificationResponse,
   NotificationsFeedResponse,
   GuestGroupsResponse,
+  AdminStatsPeriod,
+  AdminStatsResponse,
+  AdminUserSummary,
+  AdminUserDetails,
+  AdminJob,
+  AdminAnnouncement,
+  AdminDiagnostics,
+  AdminAdminsResponse,
+  AdminAuditEntry,
 } from '@/types/api';
 import {
   deleteFile,
@@ -256,6 +265,70 @@ export const api = {
   /** «Закрыть»: рассылка скрывается, событие помечается прочитанным. */
   readNotification: (id: string) =>
     request<{ ok: true }>(`/notifications/${encodeURIComponent(id)}/read`, { method: 'POST' }),
+
+  // ── админка ──────────────────────────────────────────────────────────────
+  adminStats: (params: { period: AdminStatsPeriod; date?: string }) => {
+    const query = new URLSearchParams({ period: params.period });
+    if (params.date) query.set('date', params.date);
+    return request<AdminStatsResponse>(`/admin/stats?${query.toString()}`);
+  },
+
+  adminUsers: (query: string, limit = 50) =>
+    request<{ users: AdminUserSummary[]; total: number }>(
+      `/admin/users?query=${encodeURIComponent(query)}&limit=${limit}`,
+    ),
+
+  adminUser: (id: string) =>
+    request<AdminUserDetails>(`/admin/users/${encodeURIComponent(id)}`),
+
+  adminResetSessions: (id: string) =>
+    request<{ ok: true }>(`/admin/users/${encodeURIComponent(id)}/reset-sessions`, {
+      method: 'POST',
+    }),
+
+  adminDeleteUser: (id: string, confirmation: string) =>
+    request<{ ok: true }>(`/admin/users/${encodeURIComponent(id)}/delete`, {
+      method: 'POST',
+      body: { confirmation },
+    }),
+
+  adminBroadcast: (body: { text: string; url?: string; userId?: string }) =>
+    request<{ jobId: string; total: number }>('/admin/broadcast', { method: 'POST', body }),
+
+  adminRunNotifier: () =>
+    request<{ jobId: string; total: number }>('/admin/notifier/run', { method: 'POST' }),
+
+  adminJob: (id: string) => request<AdminJob>(`/admin/jobs/${encodeURIComponent(id)}`),
+
+  adminAnnouncements: () =>
+    request<{ items: AdminAnnouncement[] }>('/admin/announcements'),
+
+  adminCreateAnnouncement: (body: { text: string; userId?: string }) =>
+    request<{ item: AdminAnnouncement }>('/admin/announcements', { method: 'POST', body }),
+
+  adminDeleteAnnouncement: (id: string) =>
+    request<{ ok: true }>(`/admin/announcements/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+
+  adminDiagnostics: () => request<AdminDiagnostics>('/admin/diagnostics'),
+
+  adminMaintenance: () =>
+    request<{ result: Record<string, number | null> }>('/admin/maintenance', { method: 'POST' }),
+
+  adminRegistration: () => request<{ open: boolean }>('/admin/registration'),
+
+  adminSetRegistration: (open: boolean) =>
+    request<{ open: boolean }>('/admin/registration', { method: 'POST', body: { open } }),
+
+  adminAdmins: () => request<AdminAdminsResponse>('/admin/admins'),
+
+  adminAddAdmin: (userId: string) =>
+    request<{ ok: true }>('/admin/admins', { method: 'POST', body: { userId } }),
+
+  adminRemoveAdmin: (userId: string) =>
+    request<{ ok: true }>(`/admin/admins/${encodeURIComponent(userId)}`, { method: 'DELETE' }),
+
+  adminAudit: (limit = 50) =>
+    request<{ items: AdminAuditEntry[] }>(`/admin/audit?limit=${limit}`),
 };
 
 export type Api = typeof api;

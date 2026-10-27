@@ -212,16 +212,13 @@ section('Секреты: формат ключей и стартовая про�
     ENCRYPTION_SECRET_KEY: 'короткий',
     PWA_AUTH_SECRET: 'a'.repeat(64),
     TELEGRAM_BOT_TOKEN: '123:abcdefghijklmnopqrstuvwx',
-    DEV_STATS_TOKEN: 'short',
   });
   check('битый ENCRYPTION — ошибка', bad.errors.some((e) => e.includes('ENCRYPTION_SECRET_KEY')));
-  check('короткий DEV_STATS — предупреждение', bad.warnings.some((w) => w.includes('DEV_STATS_TOKEN')));
 
   const good = validateSecrets({
     ENCRYPTION_SECRET_KEY: 'a'.repeat(64),
     PWA_AUTH_SECRET: 'b'.repeat(64),
     TELEGRAM_BOT_TOKEN: '123:abcdefghijklmnopqrstuvwx',
-    DEV_STATS_TOKEN: 'z'.repeat(24),
   });
   check('корректные секреты без ошибок', good.errors.length === 0, JSON.stringify(good.errors));
 
@@ -260,17 +257,17 @@ section('Рассылка: превью экранируется');
 
 section('Ссылка на статистику');
 {
-  const saved = process.env.DEV_STATS_TOKEN;
-  delete process.env.DEV_STATS_TOKEN;
-  check('без токена ссылки нет', buildStatsUrl() === null);
-
-  process.env.DEV_STATS_TOKEN = 'secret-token';
+  const saved = process.env.PWA_URL;
+  process.env.PWA_URL = 'https://example.test';
   const url = buildStatsUrl();
-  // Токен идёт во фрагменте: страница /dev/ читает его из location.hash.
-  check('с токеном ссылка есть (во фрагменте)', Boolean(url?.includes('/dev/#secret-token')), String(url));
+  check(
+    'ссылка ведёт в админку PWA',
+    url === 'https://example.test/?tab=profile&admin=stats',
+    String(url),
+  );
 
-  if (saved === undefined) delete process.env.DEV_STATS_TOKEN;
-  else process.env.DEV_STATS_TOKEN = saved;
+  if (saved === undefined) delete process.env.PWA_URL;
+  else process.env.PWA_URL = saved;
 }
 
 console.log(`\n${'='.repeat(52)}`);

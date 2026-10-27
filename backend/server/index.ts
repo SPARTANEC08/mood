@@ -26,8 +26,8 @@ import { registerImportantRoutes } from './routes/important.ts';
 import { registerFileRoutes } from './routes/files.ts';
 import { registerNotificationRoutes } from './routes/notifications.ts';
 import { registerPushRoutes } from './routes/push.ts';
+import { registerAdminRoutes } from './routes/admin.ts';
 import { registerAnnouncementRoutes } from './routes/announcements.ts';
-import { registerDevRoutes } from './routes/dev.ts';
 import { setupActivityTracking } from './devStats.ts';
 import { GroupNotReadyError } from './routes/studentContext.ts';
 import { MAX_FILE_SIZE_BYTES } from '../../db/storage/fileStore.ts';
@@ -286,8 +286,8 @@ export async function buildServer(): Promise<FastifyInstance> {
   await registerFileRoutes(app);
   await registerNotificationRoutes(app);
   registerPushRoutes(app);
+  registerAdminRoutes(app);
   registerAnnouncementRoutes(app);
-  await registerDevRoutes(app);
 
   return app;
 }

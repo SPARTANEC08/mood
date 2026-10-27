@@ -22,8 +22,13 @@ export interface AppAnnouncement {
   id: string;
   text: string;
   createdAt: string;
-  /** Telegram ID админа, отправившего объявление (для разбора инцидентов). */
-  createdBy?: number;
+  /**
+   * Кто отправил: userId админа из PWA или Telegram ID из бота. Оба варианта
+   * исторические, поэтому тип объединённый.
+   */
+  createdBy?: number | string;
+  /** Личное объявление: видит только этот пользователь. */
+  targetUserId?: string;
 }
 
 interface AnnouncementsDocument {
@@ -59,19 +64,27 @@ function commit(doc: AnnouncementsDocument): void {
  * Если даты нет (очень старая запись), фильтр не применяем — лучше показать
  * лишнее, чем потерять объявление.
  */
-function visibleSince(items: AppAnnouncement[], since?: string): AppAnnouncement[] {
-  return since ? items.filter((item) => item.createdAt >= since) : items;
+function visibleSince(
+  items: AppAnnouncement[],
+  userId: string,
+  since?: string,
+): AppAnnouncement[] {
+  return items.filter((item) => {
+    if (item.targetUserId && item.targetUserId !== userId) return false;
+    return since ? item.createdAt >= since : true;
+  });
 }
 
 export const announcementStore = {
   /** Ставит объявление в очередь. */
-  create(text: string, createdBy?: number): AppAnnouncement {
+  create(text: string, createdBy?: number | string, targetUserId?: string): AppAnnouncement {
     const doc = read();
     const item: AppAnnouncement = {
       id: randomUUID(),
       text: text.trim(),
       createdAt: new Date().toISOString(),
       createdBy,
+      ...(targetUserId ? { targetUserId } : {}),
     };
 
     doc.items.push(item);
@@ -97,7 +110,7 @@ export const announcementStore = {
   nextFor(userId: string, since?: string): AppAnnouncement | null {
     const doc = read();
     const dismissed = new Set(doc.dismissed[userId] ?? []);
-    return visibleSince(doc.items, since).find((item) => !dismissed.has(item.id)) ?? null;
+    return visibleSince(doc.items, userId, since).find((item) => !dismissed.has(item.id)) ?? null;
   },
 
   /**
@@ -110,7 +123,7 @@ export const announcementStore = {
     const doc = read();
     const dismissed = new Set(doc.dismissed[userId] ?? []);
 
-    return [...visibleSince(doc.items, since)]
+    return [...visibleSince(doc.items, userId, since)]
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
       .map((item) => ({ ...item, read: dismissed.has(item.id) }));
   },
@@ -119,7 +132,7 @@ export const announcementStore = {
   unreadCount(userId: string, since?: string): number {
     const doc = read();
     const dismissed = new Set(doc.dismissed[userId] ?? []);
-    return visibleSince(doc.items, since).reduce(
+    return visibleSince(doc.items, userId, since).reduce(
       (count, item) => count + (dismissed.has(item.id) ? 0 : 1),
       0,
     );
@@ -131,7 +144,7 @@ export const announcementStore = {
     const dismissed = new Set(doc.dismissed[userId] ?? []);
     let added = 0;
 
-    for (const item of visibleSince(doc.items, since)) {
+    for (const item of visibleSince(doc.items, userId, since)) {
       if (dismissed.has(item.id)) continue;
       dismissed.add(item.id);
       added += 1;
@@ -150,6 +163,27 @@ export const announcementStore = {
     if (!(userId in doc.dismissed)) return;
     delete doc.dismissed[userId];
     commit(doc);
+  },
+
+  /** Все объявления очереди, новые сверху (для админки). */
+  listAll(): AppAnnouncement[] {
+    return [...read().items].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  },
+
+  /** Удаляет объявление по id. */
+  remove(id: string): boolean {
+    const doc = read();
+    const before = doc.items.length;
+    doc.items = doc.items.filter((item) => item.id !== id);
+    if (doc.items.length === before) return false;
+
+    for (const ids of Object.values(doc.dismissed)) {
+      const index = ids.indexOf(id);
+      if (index >= 0) ids.splice(index, 1);
+    }
+
+    commit(doc);
+    return true;
   },
 
   /** Удаляет объявления, созданные указанным Telegram-аккаунтом. */

@@ -53,12 +53,17 @@ const EMPTY_BOOTSTRAP: BootstrapResponse = {
 
 const URL_TABS: TabId[] = ['schedule', 'grades', 'tasks', 'profile'];
 
-/** Вкладка из `?tab=` (ссылка из push), иначе расписание. */
+/** Вкладка из `?tab=` (push) или `?admin=` (ссылка из бота), иначе расписание. */
 function initialTabFromUrl(): TabId {
   if (typeof window === 'undefined') return 'schedule';
 
   try {
-    const raw = new URLSearchParams(window.location.search).get('tab');
+    const params = new URLSearchParams(window.location.search);
+
+    // Ссылка на админку всегда открывает «Кабинет»: шестерёнка живёт там.
+    if (params.has('admin')) return 'profile';
+
+    const raw = params.get('tab');
     if (raw && URL_TABS.includes(raw as TabId)) return raw as TabId;
   } catch {
     // Битый URL — не повод не открыть приложение.
@@ -89,9 +94,18 @@ export function ScheduleApp({
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    if (!new URLSearchParams(window.location.search).has('tab')) return;
 
-    window.history.replaceState(null, '', window.location.pathname + window.location.hash);
+    const params = new URLSearchParams(window.location.search);
+    if (!params.has('tab')) return;
+
+    // Остальные параметры не трогаем: `admin=stats` читает «Кабинет».
+    params.delete('tab');
+    const search = params.toString();
+    window.history.replaceState(
+      null,
+      '',
+      window.location.pathname + (search ? `?${search}` : '') + window.location.hash,
+    );
   }, []);
 
   /**

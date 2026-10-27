@@ -22,6 +22,7 @@ import path from 'node:path';
 import { InputFile, type Bot } from 'grammy';
 
 import { getStats, type StatsResponse } from '../../server/devStats.ts';
+import { saveDailyStats } from '../admin/statsHistory.ts';
 import { renderReportHtml } from './reportHtml.ts';
 
 /** Каталог файлов отчётов. */
@@ -102,19 +103,28 @@ export interface SendReportOptions {
 
 /** Формирует отчёт, при необходимости сохраняет и отправляет файлом. */
 export async function sendDailyReport(bot: Bot, options: SendReportOptions = {}): Promise<boolean> {
-  const chatId = recipientId();
-  if (!chatId) {
-    console.warn('[DailyReport] DAILY_REPORT_TELEGRAM_ID не задан — отчёт не отправлен.');
-    return false;
-  }
-
   const windowEnd = options.windowEnd ?? windowEndForDailyReport();
   const stats: StatsResponse = getStats({ windowEnd });
   const fileName = `stats-${dayLabel(windowEnd)}.html`;
   const html = renderReportHtml(stats, options.note);
 
-  // Отчёт по кнопке в базу не пишется: он нужен здесь и сейчас (см. шапку файла).
-  if (options.keep !== false) writeReportFile(fileName, html);
+  /*
+   * Срез дня сохраняется независимо от Telegram.
+   *
+   * История статистики в PWA не должна зависеть от мессенджера: отказ от
+   * Telegram — вопрос времени, а данные за прошлые дни нужны уже сейчас.
+   * Отчёт по кнопке (keep === false) в историю не пишется.
+   */
+  if (options.keep !== false) {
+    writeReportFile(fileName, html);
+    saveDailyStats(stats, dayLabel(windowEnd).replace(/\./g, '-'));
+  }
+
+  const chatId = recipientId();
+  if (!chatId) {
+    console.log('[DailyReport] срез дня сохранён, Telegram-получатель не задан.');
+    return false;
+  }
 
   // Кнопка «Закрыть» убирает сообщение из переписки: иначе ежедневные отчёты
   // копятся и забивают чат.
@@ -135,11 +145,11 @@ export async function sendDailyReport(bot: Bot, options: SendReportOptions = {})
  * отправки (не setInterval): расписание не «съезжает» после рестарта.
  */
 export function startDailyReport(bot: Bot): void {
-  if (!recipientId()) {
-    console.log('[DailyReport] выключен: не задан DAILY_REPORT_TELEGRAM_ID.');
-    return;
-  }
-
+  /*
+   * Планировщик работает всегда: в полночь нужно сохранить срез для истории
+   * статистики, даже если Telegram-получатель не задан. Отправка файла —
+   * отдельная ветка внутри sendDailyReport.
+   */
   const schedule = (): void => {
     const delay = msUntilNextMoscowMidnight();
     const timer = setTimeout(() => {

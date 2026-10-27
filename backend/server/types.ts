@@ -34,6 +34,8 @@ export interface BootstrapProfile {
   pushEnabled?: boolean;
   /** Сколько устройств подписано на push. */
   pushDevices?: number;
+  /** Админ: показывает шестерёнку и доступ к /api/admin. */
+  isAdmin?: boolean;
   fullName: string;
   groupName: string;
   faculty?: string;
