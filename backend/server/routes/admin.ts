@@ -201,7 +201,6 @@ export function registerAdminRoutes(app: FastifyInstance): void {
 
     const users = userStore
       .all()
-      .filter((user) => user.isGuest !== true)
       .map(userSummary)
       .filter((user) => {
         if (!search) return true;
@@ -288,8 +287,17 @@ export function registerAdminRoutes(app: FastifyInstance): void {
     }
 
     const targetUserId = text(body?.userId) || undefined;
-    if (targetUserId && !userStore.getByUserId(targetUserId)) {
-      return reply.code(404).send({ error: 'not_found', message: 'Получатель не найден.' });
+    if (targetUserId) {
+      const target = userStore.getByUserId(targetUserId);
+      if (!target) {
+        return reply.code(404).send({ error: 'not_found', message: 'Получатель не найден.' });
+      }
+      if (target.isGuest === true) {
+        return reply.code(400).send({
+          error: 'bad_request',
+          message: 'Гость не получает уведомления — выберите обычного пользователя.',
+        });
+      }
     }
 
     const job = startBroadcast({
@@ -373,8 +381,17 @@ export function registerAdminRoutes(app: FastifyInstance): void {
     }
 
     const targetUserId = text(body?.userId) || undefined;
-    if (targetUserId && !userStore.getByUserId(targetUserId)) {
-      return reply.code(404).send({ error: 'not_found', message: 'Получатель не найден.' });
+    if (targetUserId) {
+      const target = userStore.getByUserId(targetUserId);
+      if (!target) {
+        return reply.code(404).send({ error: 'not_found', message: 'Получатель не найден.' });
+      }
+      if (target.isGuest === true) {
+        return reply.code(400).send({
+          error: 'bad_request',
+          message: 'Гостю нельзя адресовать объявление.',
+        });
+      }
     }
 
     const item = announcementStore.create(message, admin.userId, targetUserId);

@@ -44,7 +44,7 @@ export function AdminAdmins({ onBack }: { onBack: () => void }) {
     const timer = window.setTimeout(() => {
       void api
         .adminUsers(query.trim(), 20)
-        .then((result) => setUsers(result.users))
+        .then((result) => setUsers(result.users.filter((user) => !user.isGuest)))
         .catch(() => setUsers([]));
     }, 250);
 

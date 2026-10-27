@@ -74,6 +74,7 @@ console.log('\n=== Админка PWA ===\n');
 const root = createUser('root-admin');
 const plain = createUser('plain-user');
 const target = createUser('target-user');
+const guest = createUser('guest-user', { isGuest: true });
 
 // ── Доступ ────────────────────────────────────────────────────────────────────
 console.log('— Доступ —');
@@ -103,6 +104,17 @@ const list = await app.inject({
   headers: root.auth,
 });
 check('поиск по имени работает', list.statusCode === 200 && list.json<{ users: unknown[] }>().users.length === 1);
+
+const guestList = await app.inject({
+  method: 'GET',
+  url: '/api/admin/users?query=guest',
+  headers: root.auth,
+});
+check(
+  'гость виден в списке',
+  guestList.json<{ users: Array<{ isGuest: boolean }> }>().users.some((user) => user.isGuest),
+);
+check('гость помечен в ответе', guestList.json<{ users: Array<{ id: string }> }>().users.some((user) => user.id === guest.user.userId));
 
 const card = await app.inject({
   method: 'GET',

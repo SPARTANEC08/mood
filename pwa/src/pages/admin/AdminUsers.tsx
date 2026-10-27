@@ -108,7 +108,7 @@ export function AdminUsers({ onBack }: { onBack: () => void }) {
                 {selected.group || 'без группы'}
               </p>
               <p className="mt-0.5 text-[12px]" style={{ color: 'var(--text-tertiary)' }}>
-                {selected.faculty || 'факультет не указан'}
+                {selected.isGuest ? 'гостевой профиль · только расписание' : selected.faculty || 'факультет не указан'}
                 {selected.recordBookNumber ? ` · зачётка ${selected.recordBookNumber}` : ''}
               </p>
             </Card>
@@ -278,6 +278,11 @@ export function AdminUsers({ onBack }: { onBack: () => void }) {
                     </span>
                   </span>
                   <span className="flex shrink-0 items-center gap-1.5 text-[10px] font-semibold">
+                    {user.isGuest ? (
+                      <span className="rounded-full px-2 py-0.5" style={{ background: 'var(--surface-grouped)', color: 'var(--text-secondary)' }}>
+                        гость
+                      </span>
+                    ) : null}
                     {user.isAdmin ? (
                       <span className="rounded-full px-2 py-0.5" style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}>
                         админ
