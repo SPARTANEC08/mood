@@ -174,6 +174,10 @@ function isPublicApiPath(request: { url: string; method: string }): boolean {
   // авторизация — сам одноразовый токен в пути (см. routes/files.ts).
   if (request.method === 'GET' && route.startsWith('/api/files/share/')) return true;
 
+  // Публичный конфиг входа: TTL токена и рубильник регистрации. Нужен
+  // экрану входа до появления токена, секретов не содержит.
+  if (request.method === 'GET' && route === '/api/auth/config') return true;
+
   // Гостю токен ещё не выдан: поиск группы и создание сессии открыты.
   if (request.method === 'GET' && route === '/api/guest/groups') return true;
   if (request.method === 'POST' && route === '/api/guest/session') return true;
