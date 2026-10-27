@@ -144,13 +144,13 @@ export const DAYS = (() => {
 
 const API = {
   '/api/bootstrap': {
-    profile: { telegramId: 1, fullName: 'Студентов Студент', groupName: 'А-19-1' },
+    profile: { telegramId: 1, fullName: 'Лысенко Никита', groupName: 'ИЭ-11-26', recordBookNumber: '0421-26', faculty: 'ИЭЭиВТ' },
     barsAuthorized: true,
     sessionValid: true,
     today: TODAY,
     weekNumber: 38,
     scheduleRange: { start: DAYS[0].rawDate, finish: DAYS[DAYS.length - 1].rawDate },
-    mailUnread: 3,
+    mailUnread: 2,
   },
   '/api/schedule': { groupName: 'А-19-1', facultyName: 'ИТ', days: DAYS },
   '/api/homework': {
@@ -199,9 +199,25 @@ const API = {
     bySubject: [],
   },
   '/api/bars/more': {
-    orders: [],
-    scholarship: { isAppointed: false },
-    libraryBooks: [],
+    orders: [
+      { number: '10564/у', date: '20.10.2026', title: 'О назначении стипендии', status: 'действует' },
+      { number: '385/иэ', date: '21.08.2026', title: 'О назначении академической стипендии', status: 'действует' },
+      { number: '77/у', date: '15.09.2026', title: 'О зачислении в вуз', status: 'действует' },
+    ],
+    scholarship: {
+      isAppointed: true,
+      type: 'Академическая стипендия (первый семестр)',
+      period: '01.09.2026 — 31.01.2027',
+      amount: '100%',
+      items: [
+        { type: 'Академическая стипендия (первый семестр)', period: '01.09.2026 — 31.01.2027', amount: '100%', isActive: true },
+        { type: 'Стипендия (вид не указан)', period: '01.09.2026 — 28.02.2027', amount: '4 000,00 ₽', isActive: true },
+      ],
+    },
+    libraryBooks: [
+      { title: 'Математический анализ', author: 'Ильин В. А.', issueDate: '10.09.2026', dueDate: '10.11.2026', isOverdue: false },
+      { title: 'Курс физики', author: 'Савельев И. В.', issueDate: '12.09.2026', dueDate: '12.10.2026', isOverdue: true },
+    ],
     rating: {
       period: 'осенний семестр',
       academicScore: 78,
@@ -217,7 +233,11 @@ const API = {
       distribution: { fives: 14, fours: 9, threes: 3, twos: 2, total: 28 },
     },
   },
-  '/api/mail': { total: 12, unseen: 3, messages: [] },
+  '/api/mail': { total: 12, unseen: 2, messages: [] },
+  '/api/notifications/state': { telegramId: 1, notificationsEnabled: true },
+  '/api/notifications/next': { item: null },
+  '/api/notifications/unread-count': { unread: 3, events: 3, broadcasts: 0 },
+  '/api/announcements/next': { item: null },
 };
 
 /**

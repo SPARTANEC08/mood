@@ -266,12 +266,15 @@ export function Header({
   large,
   right,
   subtitle,
+  kicker,
 }: {
   title: string;
   /** Крупный заголовок в стиле iOS Large Title. */
   large?: boolean;
   subtitle?: string;
   right?: React.ReactNode;
+  /** Маленькая надпись над крупным заголовком, например «Личный кабинет». */
+  kicker?: string;
 }) {
   return (
     <header
@@ -280,6 +283,14 @@ export function Header({
     >
       <div className="mx-auto flex max-w-[560px] items-center justify-between gap-3">
         <div className="min-w-0">
+          {kicker ? (
+            <p
+              className="mb-0.5 truncate text-[11px] font-semibold uppercase tracking-[0.1em]"
+              style={{ color: 'var(--text-tertiary)' }}
+            >
+              {kicker}
+            </p>
+          ) : null}
           <h1 className={cn('truncate font-semibold tracking-tight', large ? 'text-[30px] leading-tight' : 'text-[17px]')}>
             {title}
           </h1>

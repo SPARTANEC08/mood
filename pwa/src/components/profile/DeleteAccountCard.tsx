@@ -1,15 +1,14 @@
 /**
  * Полное удаление аккаунта.
  *
- * Кнопка вынесена в отдельный блок «Опасная зона»: случайно нажать её рядом с
- * выходом или настройками нельзя. Второй барьер — ввод слова «УДАЛИТЬ»:
- * подтверждение не сводится к одному тапу, а сервер проверяет его ещё раз.
+ * В финальном макете это маленькая ссылка в подвале, а не отдельный блок:
+ * аккаунт не должен отвлекать. Опасность закрыта вторым барьером — вводом
+ * слова «УДАЛИТЬ»; сервер проверяет его ещё раз.
  */
 
 import { useState } from 'react';
-import { Trash2, TriangleAlert } from 'lucide-react';
 
-import { BottomSheet, Card } from '@/components/ui';
+import { BottomSheet } from '@/components/ui';
 import { ApiError, api } from '@/lib/api';
 import { clearPwaToken } from '@/auth';
 import { haptic } from '@/lib/env';
@@ -48,53 +47,19 @@ export function DeleteAccountCard() {
 
   return (
     <>
-      <section>
-        <h2
-          className="mb-2 mt-6 px-1 text-[13px] font-semibold uppercase tracking-wide"
-          style={{ color: 'var(--danger)' }}
-        >
-          Опасная зона
-        </h2>
-
-        <Card className="px-4 py-4">
-          <div className="flex items-start gap-3">
-            <span
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full"
-              style={{ background: 'rgba(255,59,48,0.1)', color: 'var(--danger)' }}
-              aria-hidden
-            >
-              <TriangleAlert size={19} />
-            </span>
-
-            <div className="min-w-0 flex-1">
-              <p className="text-[15px] font-semibold">Удалить аккаунт</p>
-              <p className="mt-1 text-[13px] leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
-                Безвозвратно удалит профиль, вход в БАРС, привязку Telegram,
-                файлы, задания, историю уведомлений и статистику.
-              </p>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => {
-              haptic('medium');
-              setConfirmation('');
-              setError(null);
-              setOpen(true);
-            }}
-            className="pressable mt-3 flex w-full items-center justify-center gap-1.5 rounded-[12px] border px-4 py-2.5 text-[14px] font-semibold active:pressable-active"
-            style={{
-              borderColor: 'var(--danger)',
-              color: 'var(--danger)',
-              background: 'transparent',
-            }}
-          >
-            <Trash2 size={15} aria-hidden />
-            Удалить аккаунт
-          </button>
-        </Card>
-      </section>
+      <button
+        type="button"
+        onClick={() => {
+          haptic('medium');
+          setConfirmation('');
+          setError(null);
+          setOpen(true);
+        }}
+        className="pressable text-[12px] font-semibold active:pressable-active"
+        style={{ color: 'var(--danger)' }}
+      >
+        Удалить аккаунт
+      </button>
 
       <BottomSheet
         open={open}

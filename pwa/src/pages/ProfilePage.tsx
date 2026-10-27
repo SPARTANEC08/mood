@@ -1,32 +1,42 @@
 import { useCallback, useState } from 'react';
 import {
+  ArrowUpRight,
   BookOpen,
   ChevronRight,
-  CircleCheck,
   GitBranch,
   GraduationCap,
-  LogOut,
   Mail,
   MessageCircle,
-  Send,
   ScrollText,
+  Send,
   TriangleAlert,
 } from 'lucide-react';
 
 import { Header } from '@/components/TabBar';
 import { Page } from '@/components/Page';
-import { Card, ListGroup, Row, SkeletonCard, Toast } from '@/components/ui';
+import { Card, SkeletonCard, Toast } from '@/components/ui';
 import { RefreshIndicator } from '@/components/RefreshIndicator';
 import { usePullToRefresh } from '@/components/PullToRefresh';
 import { DeleteAccountCard } from '@/components/profile/DeleteAccountCard';
-import { NotificationsCard } from '@/components/profile/NotificationsCard';
-import { ThemeCard } from '@/components/profile/ThemeCard';
+import { SettingsCard } from '@/components/profile/SettingsCard';
+import { StudyLine, StudySection } from '@/components/profile/StudySection';
 import { useAppData } from '@/lib/dataContext';
 import { plural } from '@/lib/dates';
 import { haptic, openLink } from '@/lib/env';
 import { logout } from '@/auth';
 import type { BootstrapResponse } from '@/types/api';
 
+/**
+ * «Кабинет» по финальному макету.
+ *
+ * Порядок блоков выбран по частоте использования:
+ *  1. кто я;
+ *  2. почта — единственное, что хочется открыть сразу;
+ *  3. учёба: стипендии, приказы, библиотека — свёрнуты, пока не нужны;
+ *  4. настройки приложения;
+ *  5. контакты и код;
+ *  6. тихий подвал с выходом и удалением аккаунта.
+ */
 export function ProfilePage({ profile }: { profile: BootstrapResponse }) {
   // Почта и остальные разделы приходят из общего кэша: переключение вкладок
   // не должно снова ходить ни в IMAP, ни в БАРС. Грузятся они лениво — при
@@ -73,233 +83,294 @@ export function ProfilePage({ profile }: { profile: BootstrapResponse }) {
     .map((w) => w[0]?.toUpperCase() ?? '')
     .join('');
 
-  const overdue = more?.libraryBooks.filter((b) => b.isOverdue).length ?? 0;
+  const scholarships = more?.scholarship.items?.length
+    ? more.scholarship.items
+    : more?.scholarship.isAppointed
+      ? [
+          {
+            type: more.scholarship.type ?? 'Стипендия',
+            period: more.scholarship.period,
+            amount: more.scholarship.amount,
+            isActive: true,
+          },
+        ]
+      : [];
+
+  const orders = more?.orders ?? [];
+  const books = more?.libraryBooks ?? [];
+  const overdue = books.filter((book) => book.isOverdue).length;
+
+  const scholarshipSubtitle =
+    scholarships.length > 0
+      ? `${scholarships.length} ${plural(scholarships.length, 'назначение', 'назначения', 'назначений')}`
+      : 'Стипендия не назначена';
+
+  const ordersSubtitle =
+    orders.length > 0
+      ? `${orders.length} ${plural(orders.length, 'запись', 'записи', 'записей')}`
+      : 'Приказов нет';
+
+  const librarySubtitle =
+    books.length > 0
+      ? `${books.length} ${plural(books.length, 'книга', 'книги', 'книг')}${overdue > 0 ? ` · ${overdue} просрочена` : ''}`
+      : 'Книг нет';
 
   return (
     <>
-    <Page
-      header={
-        <Header
-          title="Кабинет"
-          large
-          // Почта перечитывается при каждом заходе — её в счётчик не берём
-          // (иначе спиннер мигал бы постоянно и ничего не значил). Здесь видно
-          // обновление разделов БАРС.
-          right={<RefreshIndicator active={barsRefreshing && !pull.suppressBackground} />}
-        />
-      }
-      pull={pull}
-    >
-      <div className="space-y-4">
-        {/* Профиль */}
-        <Card className="px-5 py-5">
-          <div className="flex items-center gap-4">
+      <Page
+        header={
+          <Header
+            title="Кабинет"
+            kicker="Личный кабинет"
+            large
+            // Почта перечитывается при каждом заходе — её в счётчик не берём
+            // (иначе спиннер мигал бы постоянно и ничего не значил). Здесь видно
+            // обновление разделов БАРС.
+            right={<RefreshIndicator active={barsRefreshing && !pull.suppressBackground} />}
+          />
+        }
+        pull={pull}
+      >
+        <div className="space-y-3">
+          {/* Профиль */}
+          <Card
+            className="relative overflow-hidden px-5 py-5"
+            style={{ border: '1px solid var(--separator-soft)' }}
+          >
             <div
-              className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full text-[19px] font-semibold"
+              className="pointer-events-none absolute -right-12 -top-20 h-48 w-48 rounded-full"
+              style={{
+                background: 'radial-gradient(circle, var(--accent-soft) 0%, transparent 70%)',
+              }}
+              aria-hidden
+            />
+
+            <div className="relative flex items-center gap-4">
+              <div
+                className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full text-[19px] font-semibold"
+                style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}
+                aria-hidden
+              >
+                {initials || 'С'}
+              </div>
+
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[19px] font-semibold leading-tight">{p.fullName}</p>
+                {p.groupName ? (
+                  <p className="mt-0.5 text-[14px] font-medium" style={{ color: 'var(--accent)' }}>
+                    {p.groupName}
+                  </p>
+                ) : null}
+                {p.recordBookNumber || p.faculty ? (
+                  <p className="mt-0.5 truncate text-[12px] text-[var(--text-tertiary)]">
+                    {p.recordBookNumber ? `Зачётная книжка ${p.recordBookNumber}` : ''}
+                    {p.recordBookNumber && p.faculty ? ' · ' : ''}
+                    {p.faculty ?? ''}
+                  </p>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="relative mt-3 flex flex-wrap gap-1.5">
+              {barsAuthorized ? (
+                <span
+                  className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold"
+                  style={{ background: 'rgba(52,199,89,0.12)', color: 'var(--success)' }}
+                >
+                  <span className="h-1.5 w-1.5 rounded-full" style={{ background: 'var(--success)' }} />
+                  БАРС активен
+                </span>
+              ) : (
+                <span
+                  className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold"
+                  style={{ background: 'rgba(255,149,0,0.12)', color: 'var(--warning)' }}
+                >
+                  <TriangleAlert size={12} aria-hidden />
+                  БАРС не подключён
+                </span>
+              )}
+
+              <span
+                className="inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold"
+                style={{ background: 'var(--surface-grouped)', color: 'var(--text-secondary)' }}
+              >
+                {typeof p.telegramId === 'number' ? 'Telegram подключён' : 'Telegram не подключён'}
+              </span>
+            </div>
+          </Card>
+
+          {/* Почта — первая строка после профиля */}
+          <button
+            type="button"
+            onClick={() => {
+              haptic('light');
+              openLink('https://mail.mpei.ru/owa');
+            }}
+            className="pressable flex w-full items-center gap-3 rounded-[18px] border px-4 py-3.5 text-left active:pressable-active"
+            style={{
+              borderColor: 'var(--accent-soft)',
+              background:
+                'radial-gradient(110% 120% at 100% 0%, var(--accent-soft), transparent 58%), var(--surface)',
+            }}
+            aria-label="Открыть почту ОСЭП"
+          >
+            <span
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[11px]"
               style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}
               aria-hidden
             >
-              {initials || 'С'}
-            </div>
+              <Mail size={20} />
+            </span>
 
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-[19px] font-semibold leading-tight">{p.fullName}</p>
-              {p.groupName ? (
-                <p className="mt-0.5 text-[14px]" style={{ color: 'var(--accent)' }}>
-                  {p.groupName}
-                </p>
-              ) : null}
-              {p.recordBookNumber ? (
-                <p className="mt-0.5 text-[12px] text-[var(--text-tertiary)]">
-                  Зачётная книжка {p.recordBookNumber}
-                </p>
-              ) : null}
-            </div>
-          </div>
-
-          {p.faculty ? (
-            <p className="mt-3 border-t border-[var(--separator-soft)] pt-3 text-[12px] leading-relaxed text-[var(--text-secondary)]">
-              {p.faculty}
-            </p>
-          ) : null}
-
-          {!barsAuthorized ? (
-            <div
-              className="mt-3 flex items-start gap-2 rounded-[12px] px-3 py-2.5"
-              style={{ background: 'var(--warning)', opacity: 0.12 }}
-            >
-              <TriangleAlert size={15} className="mt-0.5 shrink-0" style={{ color: 'var(--warning)' }} aria-hidden />
-              <p className="text-[13px] leading-relaxed">
-                Не выполнен вход в БАРС МЭИ — часть данных недоступна. Войдите через бота.
-              </p>
-            </div>
-          ) : null}
-        </Card>
-
-        {/* Почта ОСЭП — только количество, без списка и тел писем */}
-        <section>
-          <h2 className="mb-2 px-1 text-[13px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
-            Почта ОСЭП
-          </h2>
-          <Card className="overflow-hidden">
-            <button
-              type="button"
-              onClick={() => {
-                haptic('light');
-                openLink('https://mail.mpei.ru/owa');
-              }}
-              className="pressable flex w-full items-center gap-3 px-4 py-3 text-left active:pressable-active"
-            >
-              <Mail
-                size={18}
-                className="shrink-0"
-                style={{ color: unseen > 0 ? 'var(--accent)' : 'var(--text-tertiary)' }}
-                aria-hidden
-              />
-              <span className="min-w-0 flex-1">
-                <span className="block text-[14px] font-medium">Почта</span>
-                <span
-                  className="block text-[12px]"
-                  style={{ color: mailError ? 'var(--danger)' : 'var(--text-tertiary)' }}
-                >
-                  {mailError
-                    ? mailError
-                    : mailPending
-                      ? 'Проверяем…'
-                      : unseen > 0
-                        ? `${unseen} ${plural(unseen, 'новое письмо', 'новых письма', 'новых писем')}`
-                        : 'Нет новых писем'}
-                </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-[15px] font-semibold leading-snug">Почта ОСЭП</span>
+              <span
+                className="mt-0.5 block truncate text-[12px] leading-snug"
+                style={{ color: mailError ? 'var(--danger)' : 'var(--text-secondary)' }}
+              >
+                {mailError
+                  ? mailError
+                  : mailPending
+                    ? 'Проверяем…'
+                    : unseen > 0
+                      ? `${unseen} ${plural(unseen, 'новое письмо', 'новых письма', 'новых писем')}`
+                      : 'Нет новых писем'}
               </span>
-              <ChevronRight size={16} className="shrink-0" style={{ color: 'var(--text-tertiary)' }} aria-hidden />
-            </button>
-          </Card>
-        </section>
+            </span>
 
-        <NotificationsCard profile={p} />
+            {unseen > 0 ? (
+              <span
+                className="flex h-6 min-w-6 shrink-0 items-center justify-center rounded-full px-1.5 text-[11px] font-bold text-white"
+                style={{ background: 'var(--accent)' }}
+              >
+                {unseen > 9 ? '9+' : unseen}
+              </span>
+            ) : null}
 
-        {/* Стипендия */}
-        <section>
-          <h2 className="mb-2 mt-6 px-1 text-[13px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
-            Стипендия
+            <span
+              className="hidden shrink-0 items-center gap-0.5 text-[11px] font-semibold min-[360px]:inline-flex"
+              style={{ color: 'var(--accent)' }}
+            >
+              Открыть
+              <ArrowUpRight size={12} aria-hidden />
+            </span>
+          </button>
+
+          <h2 className="px-1 pt-2 text-[12px] font-semibold uppercase tracking-[0.09em] text-[var(--text-secondary)]">
+            Учёба
           </h2>
 
           {morePending ? (
-            <SkeletonCard lines={2} />
+            <div className="space-y-2">
+              <SkeletonCard lines={2} />
+              <SkeletonCard lines={2} />
+              <SkeletonCard lines={2} />
+            </div>
           ) : moreError ? (
             <Card className="px-4 py-4">
-              <p className="text-[13px]" style={{ color: 'var(--danger)' }}>
+              <p className="text-[13px] leading-snug" style={{ color: 'var(--danger)' }}>
                 {moreError}
               </p>
             </Card>
-          ) : more ? (
-            <Card className="px-4 py-4">
-              <div className="flex items-start gap-3">
-                {more.scholarship.isAppointed ? (
-                  <CircleCheck size={22} style={{ color: 'var(--success)' }} aria-hidden />
+          ) : (
+            <div className="space-y-2">
+              <StudySection
+                icon={GraduationCap}
+                title="Стипендии"
+                subtitle={scholarshipSubtitle}
+                defaultOpen
+                tone="success"
+                badge={
+                  scholarships.length > 0 ? (
+                    <span className="rounded-full px-2 py-0.5 text-[11px] font-semibold" style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}>
+                      {scholarships.length}
+                    </span>
+                  ) : null
+                }
+              >
+                {scholarships.length > 0 ? (
+                  scholarships.map((item, index) => (
+                    <StudyLine key={`${item.type}-${item.period ?? ''}-${index}`}>
+                      <p
+                        className="text-[14px] font-semibold leading-snug"
+                        style={{ opacity: item.isActive ? 1 : 0.55 }}
+                      >
+                        {item.type}
+                      </p>
+                      {item.period ? (
+                        <p className="mt-0.5 text-[12px] leading-snug text-[var(--text-secondary)]">
+                          {item.period}
+                        </p>
+                      ) : null}
+                      {item.amount ? (
+                        <p className="mt-0.5 text-[12px] leading-snug text-[var(--text-secondary)]">
+                          {item.amount}
+                        </p>
+                      ) : null}
+                      <p
+                        className="mt-1 text-[11px] font-semibold"
+                        style={{ color: item.isActive ? 'var(--success)' : 'var(--text-tertiary)' }}
+                      >
+                        {item.isActive ? '● активна' : 'Не действует'}
+                      </p>
+                    </StudyLine>
+                  ))
                 ) : (
-                  <GraduationCap size={22} style={{ color: 'var(--text-tertiary)' }} aria-hidden />
-                )}
-
-                <div className="min-w-0 flex-1">
-                  <p className="text-[15px] font-medium">
-                    {more.scholarship.isAppointed ? 'Стипендия' : 'Стипендия не назначена'}
+                  <p className="py-2 text-[13px] text-[var(--text-secondary)]">
+                    Стипендия не назначена
                   </p>
+                )}
+              </StudySection>
 
-                  {more.scholarship.items && more.scholarship.items.length > 0 ? (
-                    <div className="mt-2 space-y-2">
-                      {more.scholarship.items.map((item, index) => (
-                        <div
-                          key={`${item.type}-${item.period ?? ''}-${index}`}
-                          className={item.isActive ? undefined : 'opacity-55'}
-                        >
-                          <p className="text-[14px] font-medium">{item.type}</p>
-                          {item.period ? (
-                            <p className="mt-0.5 text-[13px] text-[var(--text-secondary)]">
-                              Период: {item.period}
-                            </p>
-                          ) : null}
-                          {item.amount ? (
-                            <p className="mt-0.5 text-[13px] text-[var(--text-secondary)]">
-                              Сумма: {item.amount}
-                            </p>
-                          ) : null}
-                          {!item.isActive ? (
-                            <p className="mt-0.5 text-[12px] text-[var(--text-tertiary)]">
-                              Не действует
-                            </p>
-                          ) : null}
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <>
-                      {more.scholarship.period ? (
-                        <p className="mt-0.5 text-[13px] text-[var(--text-secondary)]">
-                          Период: {more.scholarship.period}
-                        </p>
-                      ) : null}
-                      {more.scholarship.amount ? (
-                        <p className="mt-0.5 text-[13px] text-[var(--text-secondary)]">
-                          Сумма: {more.scholarship.amount}
-                        </p>
-                      ) : null}
-                    </>
-                  )}
-                </div>
-              </div>
-            </Card>
-          ) : null}
-        </section>
-
-        {/* Приказы */}
-        {more && more.orders.length > 0 ? (
-          <section>
-            <h2 className="mb-2 mt-6 px-1 text-[13px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
-              Приказы
-            </h2>
-            <ListGroup>
-              {more.orders.slice(0, 8).map((order, index) => (
-                <Row key={`${order.number}-${index}`}>
-                  <div className="flex items-start gap-3">
-                    <ScrollText size={15} className="mt-0.5 shrink-0" style={{ color: 'var(--text-tertiary)' }} aria-hidden />
-                    <div className="min-w-0 flex-1">
+              <StudySection
+                icon={ScrollText}
+                title="Приказы"
+                subtitle={ordersSubtitle}
+                badge={
+                  orders.length > 0 ? (
+                    <span className="rounded-full px-2 py-0.5 text-[11px] font-semibold" style={{ background: 'var(--surface-grouped)', color: 'var(--text-secondary)' }}>
+                      {orders.length}
+                    </span>
+                  ) : null
+                }
+              >
+                {orders.length > 0 ? (
+                  orders.map((order, index) => (
+                    <StudyLine key={`${order.number}-${index}`}>
                       <p className="text-[14px] leading-snug">{order.title}</p>
                       <p className="mt-0.5 text-[12px] text-[var(--text-tertiary)]">
                         № {order.number}
                         {order.date ? ` · ${order.date}` : ''}
                       </p>
-                    </div>
-                  </div>
-                </Row>
-              ))}
-            </ListGroup>
-          </section>
-        ) : null}
+                    </StudyLine>
+                  ))
+                ) : (
+                  <p className="py-2 text-[13px] text-[var(--text-secondary)]">Приказов нет</p>
+                )}
+              </StudySection>
 
-        {/* Библиотека */}
-        {more && more.libraryBooks.length > 0 ? (
-          <section>
-            <h2 className="mb-2 mt-6 flex items-center justify-between px-1 text-[13px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
-              <span>Библиотека НТБ</span>
-              {overdue > 0 ? (
-                <span className="text-[12px] font-medium normal-case" style={{ color: 'var(--danger)' }}>
-                  просрочено: {overdue}
-                </span>
-              ) : null}
-            </h2>
-            <ListGroup>
-              {more.libraryBooks.map((book, index) => (
-                <Row key={`${book.title}-${index}`}>
-                  <div className="flex items-start gap-3">
-                    <BookOpen
-                      size={15}
-                      className="mt-0.5 shrink-0"
-                      style={{ color: book.isOverdue ? 'var(--danger)' : 'var(--text-tertiary)' }}
-                      aria-hidden
-                    />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-[14px] leading-snug">{book.title}</p>
+              <StudySection
+                icon={BookOpen}
+                title="Библиотека НТБ"
+                subtitle={librarySubtitle}
+                tone={overdue > 0 ? 'warning' : 'accent'}
+                badge={
+                  overdue > 0 ? (
+                    <span className="rounded-full px-2 py-0.5 text-[11px] font-semibold" style={{ background: 'rgba(255,59,48,0.1)', color: 'var(--danger)' }}>
+                      {overdue}
+                    </span>
+                  ) : null
+                }
+              >
+                {books.length > 0 ? (
+                  books.map((book, index) => (
+                    <StudyLine key={`${book.title}-${index}`}>
+                      <p
+                        className="text-[14px] leading-snug"
+                        style={{ color: book.isOverdue ? 'var(--danger)' : undefined }}
+                      >
+                        {book.title}
+                      </p>
                       {book.author ? (
                         <p className="mt-0.5 text-[12px] text-[var(--text-tertiary)]">{book.author}</p>
                       ) : null}
@@ -310,18 +381,23 @@ export function ProfilePage({ profile }: { profile: BootstrapResponse }) {
                         Вернуть до {book.dueDate}
                         {book.isOverdue ? ' — просрочено' : ''}
                       </p>
-                    </div>
-                  </div>
-                </Row>
-              ))}
-            </ListGroup>
-          </section>
-        ) : null}
+                    </StudyLine>
+                  ))
+                ) : (
+                  <p className="py-2 text-[13px] text-[var(--text-secondary)]">Книг нет</p>
+                )}
+              </StudySection>
+            </div>
+          )}
 
-        <ThemeCard />
+          <h2 className="px-1 pt-2 text-[12px] font-semibold uppercase tracking-[0.09em] text-[var(--text-secondary)]">
+            Настройки приложения
+          </h2>
+          <SettingsCard profile={p} />
 
-        <section className="space-y-2">
-          <h2 className="px-1 text-[13px] font-semibold text-[var(--text-secondary)]">Связь</h2>
+          <h2 className="px-1 pt-2 text-[12px] font-semibold uppercase tracking-[0.09em] text-[var(--text-secondary)]">
+            Контакты и код
+          </h2>
           <Card className="divide-y divide-[var(--separator-soft)] overflow-hidden">
             <button
               type="button"
@@ -331,12 +407,16 @@ export function ProfilePage({ profile }: { profile: BootstrapResponse }) {
               }}
               className="pressable flex w-full items-center gap-3 px-4 py-3 text-left active:pressable-active"
             >
-              <MessageCircle size={18} className="shrink-0" style={{ color: 'var(--accent)' }} aria-hidden />
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px]" style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }} aria-hidden>
+                <MessageCircle size={17} />
+              </span>
               <span className="min-w-0 flex-1">
-                <span className="block text-[14px] font-medium">Поддержка и сообщения об ошибках</span>
+                <span className="block text-[14px] font-medium">Поддержка</span>
                 <span className="block text-[12px] text-[var(--text-tertiary)]">@mood_mpei_sup</span>
               </span>
+              <ChevronRight size={16} className="shrink-0" style={{ color: 'var(--text-tertiary)' }} aria-hidden />
             </button>
+
             <button
               type="button"
               onClick={() => {
@@ -345,12 +425,16 @@ export function ProfilePage({ profile }: { profile: BootstrapResponse }) {
               }}
               className="pressable flex w-full items-center gap-3 px-4 py-3 text-left active:pressable-active"
             >
-              <Send size={18} className="shrink-0" style={{ color: 'var(--accent)' }} aria-hidden />
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px]" style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }} aria-hidden>
+                <Send size={17} />
+              </span>
               <span className="min-w-0 flex-1">
                 <span className="block text-[14px] font-medium">Telegram-канал Mood</span>
                 <span className="block text-[12px] text-[var(--text-tertiary)]">@mood_mpei</span>
               </span>
+              <ChevronRight size={16} className="shrink-0" style={{ color: 'var(--text-tertiary)' }} aria-hidden />
             </button>
+
             <button
               type="button"
               onClick={() => {
@@ -359,48 +443,39 @@ export function ProfilePage({ profile }: { profile: BootstrapResponse }) {
               }}
               className="pressable flex w-full items-center gap-3 px-4 py-3 text-left active:pressable-active"
             >
-              <GitBranch size={18} className="shrink-0" style={{ color: 'var(--accent)' }} aria-hidden />
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px]" style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }} aria-hidden>
+                <GitBranch size={17} />
+              </span>
               <span className="min-w-0 flex-1">
-                <span className="block text-[14px] font-medium">Исходный код на GitHub</span>
+                <span className="block text-[14px] font-medium">Исходный код</span>
                 <span className="block text-[12px] text-[var(--text-tertiary)]">SPARTANEC08/mood</span>
               </span>
+              <ChevronRight size={16} className="shrink-0" style={{ color: 'var(--text-tertiary)' }} aria-hidden />
             </button>
           </Card>
-        </section>
 
-        {/*
-          Выход с устройства.
-          
-          Отзывается ровно этот токен, а не все: человек вправе быть подписан на
-          телефоне и на ноутбуке, и выход на одном устройстве не должен выкидывать
-          его с другого. В боте выход делает другое — освобождает логин БАРС для
-          входа в PWA.
-        */}
-        <DeleteAccountCard />
+          <div className="flex items-center justify-between gap-3 px-2 pt-4">
+            <button
+              type="button"
+              onClick={() => {
+                haptic('medium');
+                void logout();
+              }}
+              className="pressable text-[12px] font-semibold active:pressable-active"
+              style={{ color: 'var(--text-tertiary)' }}
+            >
+              Выйти с устройства
+            </button>
+            <DeleteAccountCard />
+          </div>
 
-        <div className="mt-4 flex justify-center">
-          <button
-            type="button"
-            onClick={() => {
-              haptic('medium');
-              void logout();
-            }}
-            className="pressable flex items-center gap-1.5 rounded-[12px] border border-[var(--separator-soft)] px-4 py-2 text-[13px] font-semibold text-[var(--text-secondary)] active:pressable-active"
-          >
-            <LogOut size={13} aria-hidden />
-            Выйти с этого устройства
-          </button>
+          <p className="px-1 pt-3 text-center text-[11px] leading-relaxed text-[var(--text-tertiary)]">
+            Mood · БАРС МЭИ · ОСЭП
+          </p>
         </div>
+      </Page>
 
-        <p className="px-1 pt-4 text-center text-[12px] leading-relaxed text-[var(--text-tertiary)]">
-          Данные из личного кабинета БАРС МЭИ и корпоративной почты ОСЭП.
-          <br />
-          Сессия истекает — обновите её, войдя заново логином БАРС.
-        </p>
-      </div>
-    </Page>
-
-    {toast ? <Toast text={toast} onClose={() => setToast(null)} /> : null}
+      {toast ? <Toast text={toast} onClose={() => setToast(null)} /> : null}
     </>
   );
 }
@@ -452,4 +527,3 @@ export function NeedLoginScreen({ onReLogin }: { onReLogin: () => void }) {
     </div>
   );
 }
-
