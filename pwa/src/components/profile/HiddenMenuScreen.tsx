@@ -9,10 +9,12 @@ import { haptic, openLink } from '@/lib/env';
  * Открывается десятью быстрыми тапами по карточке профиля. Ни в навигации, ни
  * в текстах на него нет ссылки — это и есть весь смысл экрана.
  *
- * Ссылка задаётся здесь. Пока строка пуста, кнопки нет и экран остаётся пустым.
+ * Кнопки задаются здесь. Пустой список — экран остаётся пустым.
  */
-const HIDDEN_LINK = 'https://my.aeza.net/auth/login';
-const HIDDEN_LINK_LABEL = 'Открыть';
+const HIDDEN_LINKS: Array<{ label: string; url: string }> = [
+  { label: 'Открыть', url: 'https://my.aeza.net/auth/login' },
+  { label: 'Открыть', url: 'https://sex-studentki.vodka/hq-porn' },
+];
 
 export function HiddenMenuScreen({ onBack }: { onBack: () => void }) {
   return (
@@ -39,18 +41,23 @@ export function HiddenMenuScreen({ onBack }: { onBack: () => void }) {
         </header>
       }
     >
-      {HIDDEN_LINK ? (
-        <button
-          type="button"
-          onClick={() => {
-            haptic('light');
-            openLink(HIDDEN_LINK);
-          }}
-          className="pressable surface flex w-full items-center gap-3 px-4 py-3 text-left active:pressable-active"
-        >
-          <ArrowUpRight size={18} className="shrink-0" style={{ color: 'var(--accent)' }} aria-hidden />
-          <span className="min-w-0 flex-1 text-[15px] font-medium">{HIDDEN_LINK_LABEL}</span>
-        </button>
+      {HIDDEN_LINKS.length > 0 ? (
+        <div className="space-y-2">
+          {HIDDEN_LINKS.map((link) => (
+            <button
+              key={link.url}
+              type="button"
+              onClick={() => {
+                haptic('light');
+                openLink(link.url);
+              }}
+              className="pressable surface flex w-full items-center gap-3 px-4 py-3 text-left active:pressable-active"
+            >
+              <ArrowUpRight size={18} className="shrink-0" style={{ color: 'var(--accent)' }} aria-hidden />
+              <span className="min-w-0 flex-1 text-[15px] font-medium">{link.label}</span>
+            </button>
+          ))}
+        </div>
       ) : null}
     </Page>
   );
