@@ -7,12 +7,12 @@
  */
 
 import { useState } from 'react';
-import { LogIn, Monitor, Moon, Sun, type LucideIcon } from 'lucide-react';
+import { ChevronRight, GitBranch, LogIn, MessageCircle, Monitor, Moon, Send, Sun, type LucideIcon } from 'lucide-react';
 
 import { GuestGroupField } from './GuestGroupField';
-import { BottomSheet } from '@/components/ui';
+import { BottomSheet, Card } from '@/components/ui';
 import { ApiError, api } from '@/lib/api';
-import { haptic } from '@/lib/env';
+import { haptic, openLink } from '@/lib/env';
 import { useTheme, type ThemeMode } from '@/lib/theme';
 import type { BootstrapProfile, GuestGroup } from '@/types/api';
 
@@ -141,6 +141,65 @@ export function GuestSettingsSheet({
         >
           {busy ? 'Сохраняем…' : 'Сохранить'}
         </button>
+
+        <div className="space-y-1.5">
+          <span className="px-1 text-[12px] font-medium text-[var(--text-secondary)]">Контакты</span>
+          <Card className="divide-y divide-[var(--separator-soft)] overflow-hidden">
+            <button
+              type="button"
+              onClick={() => {
+                haptic('light');
+                openLink('https://t.me/mood_mpei_sup');
+              }}
+              className="pressable flex w-full items-center gap-3 px-4 py-3 text-left active:pressable-active"
+            >
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px]" style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }} aria-hidden>
+                <MessageCircle size={17} />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-[14px] font-medium">Поддержка</span>
+                <span className="block text-[12px] text-[var(--text-tertiary)]">@mood_mpei_sup</span>
+              </span>
+              <ChevronRight size={16} className="shrink-0" style={{ color: 'var(--text-tertiary)' }} aria-hidden />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                haptic('light');
+                openLink('https://t.me/mood_mpei');
+              }}
+              className="pressable flex w-full items-center gap-3 px-4 py-3 text-left active:pressable-active"
+            >
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px]" style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }} aria-hidden>
+                <Send size={17} />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-[14px] font-medium">Telegram-канал Mood</span>
+                <span className="block text-[12px] text-[var(--text-tertiary)]">@mood_mpei</span>
+              </span>
+              <ChevronRight size={16} className="shrink-0" style={{ color: 'var(--text-tertiary)' }} aria-hidden />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                haptic('light');
+                openLink('https://github.com/SPARTANEC08/mood');
+              }}
+              className="pressable flex w-full items-center gap-3 px-4 py-3 text-left active:pressable-active"
+            >
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px]" style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }} aria-hidden>
+                <GitBranch size={17} />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-[14px] font-medium">Исходный код</span>
+                <span className="block text-[12px] text-[var(--text-tertiary)]">SPARTANEC08/mood</span>
+              </span>
+              <ChevronRight size={16} className="shrink-0" style={{ color: 'var(--text-tertiary)' }} aria-hidden />
+            </button>
+          </Card>
+        </div>
 
         <div className="border-t border-[var(--separator-soft)] pt-3">
           <button
