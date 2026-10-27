@@ -31,6 +31,7 @@ const { adminAuditStore } = await import('../../db/storage/adminAuditStore.ts');
 const { parseHtml, summarize, saveDailyStats, readDailyStats } = await import(
   '../services/admin/statsHistory.ts'
 );
+const { isBackgroundRequest, recordActivity, getStats } = await import('../server/devStats.ts');
 
 const app = await buildServer();
 await app.ready();
@@ -331,6 +332,33 @@ check('диагностика содержит нотификатор', typeof d
 const audit = await app.inject({ method: 'GET', url: '/api/admin/audit', headers: root.auth });
 check('аудит пишется', audit.json<{ items: unknown[] }>().items.length > 0);
 check('аудит содержит рассылку', adminAuditStore.list().some((entry) => entry.action === 'broadcast_all'));
+
+// ── Активность ────────────────────────────────────────────────────────────────
+console.log('— Фоновая активность —');
+
+check('админка не считается активностью', isBackgroundRequest('/api/admin/stats'));
+check('прогресс задач не считается активностью', isBackgroundRequest('/api/admin/jobs/abc'));
+check('опрос уведомлений не считается активностью', isBackgroundRequest('/api/notifications/next'));
+check('счётчик уведомлений не считается активностью', isBackgroundRequest('/api/notifications/unread-count'));
+check('синхронизация push не считается активностью', isBackgroundRequest('/api/push/subscribe'));
+check('bootstrap — это заход', !isBackgroundRequest('/api/bootstrap'));
+check('оценки — это активность', !isBackgroundRequest('/api/bars/grades'));
+
+{
+  const before = getStats().window;
+  recordActivity('stats-test-user', '/api/admin/stats');
+  recordActivity('stats-test-user', '/api/notifications/next');
+  recordActivity('stats-test-user', '/api/push/subscribe');
+  const after = getStats().window;
+
+  check('фоновые запросы не увеличили «Запросы»', after.requests === before.requests);
+  check('фоновые запросы не увеличили «Заходы»', after.visits === before.visits);
+
+  recordActivity('stats-test-user', '/api/bootstrap');
+  const withBootstrap = getStats().window;
+  check('bootstrap увеличил запросы', withBootstrap.requests === before.requests + 1);
+  check('bootstrap увеличил заходы', withBootstrap.visits === before.visits + 1);
+}
 
 console.log(`\n${failures === 0 ? '✅' : '❌'} Проверок: ${checks}, провалов: ${failures}\n`);
 
