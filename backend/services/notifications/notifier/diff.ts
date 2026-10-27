@@ -168,7 +168,7 @@ export function diffSnapshots(
    * сохраняет прежнее множество.
    */
   const seenOrders = prev.ordersSeen;
-  if (Array.isArray(seenOrders) && context.orders) {
+  if (prev.ordersInitialized === true && Array.isArray(seenOrders) && context.orders) {
     const seen = new Set(seenOrders);
     const newOrders = context.orders.filter((order) => !seen.has(orderKey(order)));
 

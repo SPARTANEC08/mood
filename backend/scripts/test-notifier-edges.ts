@@ -40,6 +40,7 @@ function snapshot(over: Partial<UserSnapshot> = {}): UserSnapshot {
     lastSeenMailUid: 0,
     ordersCount: 0,
     ordersSeen: [],
+    ordersInitialized: false,
     scholarshipStatus: 'нет',
     lastCheckedAt: new Date().toISOString(),
     ...over,

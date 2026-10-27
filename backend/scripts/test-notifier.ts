@@ -71,6 +71,7 @@ function baseSnapshot(over: Partial<UserSnapshot> = {}): UserSnapshot {
     lastSeenMailUid: 0,
     ordersCount: 0,
     ordersSeen: [],
+    ordersInitialized: false,
     scholarshipStatus: 'нет',
     lastCheckedAt: new Date().toISOString(),
     ...over,
@@ -133,6 +134,7 @@ async function run(): Promise<void> {
     lastSeenMailUid: 100,
     ordersCount: 5,
     ordersSeen: ['n:1|01.09.2026'],
+    ordersInitialized: true,
     scholarshipStatus: 'нет',
   });
 
@@ -211,6 +213,7 @@ async function run(): Promise<void> {
       lastSeenMailUid: 100,
       ordersCount: 7,
       ordersSeen: ['n:1|01.09.2026', 'n:2|02.09.2026'],
+      ordersInitialized: true,
       scholarshipStatus: 'нет',
     }),
     { orders: [{ number: '2', date: '02.09.2026', title: 'О назначении стипендии' }] },
@@ -230,6 +233,7 @@ async function run(): Promise<void> {
       ...prev,
       ordersCount: 7,
       ordersSeen: ['n:1|01.09.2026'],
+      ordersInitialized: true,
     }),
     { orders: [{ number: '1', date: '01.09.2026', title: 'Старый приказ' }] },
   ).filter((event) => event.kind === 'order');
@@ -237,8 +241,8 @@ async function run(): Promise<void> {
 
   // Старый снимок без ordersSeen: первый круг — миграционная база, не спам.
   const migrated = diffSnapshots(
-    baseSnapshot({ ordersCount: 5, ordersSeen: undefined }),
-    baseSnapshot({ ordersCount: 6, ordersSeen: ['n:1|01.09.2026'] }),
+    baseSnapshot({ ordersCount: 5, ordersSeen: undefined, ordersInitialized: false }),
+    baseSnapshot({ ordersCount: 6, ordersSeen: ['n:1|01.09.2026'], ordersInitialized: true }),
     { orders: [{ number: '1', date: '01.09.2026', title: 'Старый приказ' }] },
   ).filter((event) => event.kind === 'order');
   check('старый снимок не даёт ложный приказ', migrated.length === 0, JSON.stringify(migrated));
@@ -286,6 +290,7 @@ async function run(): Promise<void> {
       lastSeenMailUid: 150,
       ordersCount: 6,
       ordersSeen: ['n:1|01.09.2026', 'n:2|02.09.2026'],
+      ordersInitialized: true,
       scholarshipStatus: 'академическая',
     }),
     { orders: [{ number: '2', date: '02.09.2026', title: 'О назначении стипендии' }] },
@@ -395,6 +400,7 @@ async function run(): Promise<void> {
     lastSeenMailUid: 777,
     ordersCount: 9,
     ordersSeen: ['n:1|01.09.2026'],
+    ordersInitialized: true,
     scholarshipStatus: 'нет',
   });
   // Круг, на котором БАРС не опрашивался: state со всеми null
@@ -403,6 +409,7 @@ async function run(): Promise<void> {
     lastSeenMailUid: keptPrev.lastSeenMailUid,
     ordersCount: keptPrev.ordersCount,
     ordersSeen: keptPrev.ordersSeen,
+    ordersInitialized: keptPrev.ordersInitialized,
     scholarshipStatus: keptPrev.scholarshipStatus,
     lastCheckedAt: new Date().toISOString(),
   };

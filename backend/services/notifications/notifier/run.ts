@@ -165,7 +165,9 @@ export async function checkUser(
   const currentOrderKeys = state.orders !== null ? state.orders.map(orderKey) : null;
   const seenOrders = currentOrderKeys
     ? Array.from(new Set([...(prev?.ordersSeen ?? []), ...currentOrderKeys])).slice(-500)
-    : (prev?.ordersSeen ?? []);
+    : prev?.ordersSeen;
+  const ordersInitialized =
+    state.orders !== null ? true : (prev?.ordersInitialized ?? false);
 
   const next: UserSnapshot = {
     gradesHash:
@@ -179,6 +181,7 @@ export async function checkUser(
         : (prev?.lastSeenMailUid ?? 0),
     ordersCount: state.orders !== null ? state.orders.length : (prev?.ordersCount ?? 0),
     ordersSeen: seenOrders,
+    ordersInitialized,
     scholarshipStatus:
       state.scholarship !== null
         ? buildScholarshipStatus(state.scholarship)
