@@ -417,9 +417,3 @@ export interface NotificationsFeedResponse {
   unread: number;
 }
 
-/** Ответ GET /api/notifications/unread-count. */
-export interface NotificationsUnreadResponse {
-  unread: number;
-  events: number;
-  broadcasts: number;
-}

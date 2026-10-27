@@ -34,14 +34,7 @@ export function notificationTitle(item: AppNotification): string {
   return item.label ?? KIND_META[item.kind].title;
 }
 
-export function NotificationContent({
-  item,
-  unread = false,
-}: {
-  item: AppNotification;
-  /** Показать точку непрочитанного (только в ленте). */
-  unread?: boolean;
-}) {
+export function NotificationContent({ item }: { item: AppNotification }) {
   const details = item.details ?? [];
   const isBroadcast = item.kind === 'broadcast';
   const Icon = KIND_META[item.kind].icon;
@@ -89,14 +82,6 @@ export function NotificationContent({
             ))}
           </ul>
         ) : null}
-
-        {unread ? (
-          <span
-            className="mt-1.5 inline-block h-1.5 w-1.5 rounded-full"
-            style={{ background: 'var(--accent)' }}
-            aria-label="Не прочитано"
-          />
-        ) : null}
       </div>
     </div>
   );
@@ -108,23 +93,13 @@ export function NotificationContent({
  * Пока есть только у почты: содержимое письма в приложении не показывается,
  * поэтому единственное осмысленное действие — открыть ОСЭП.
  */
-export function NotificationActions({
-  item,
-  onOpen,
-}: {
-  item: AppNotification;
-  /** Дополнительное действие перед переходом (в ленте — отметить прочитанным). */
-  onOpen?: () => void;
-}) {
+export function NotificationActions({ item }: { item: AppNotification }) {
   if (item.kind !== 'mail') return null;
 
   return (
     <button
       type="button"
-      onClick={() => {
-        onOpen?.();
-        openLink(OSEP_MAIL_URL);
-      }}
+      onClick={() => openLink(OSEP_MAIL_URL)}
       className="pressable mt-2 flex w-full items-center justify-center gap-1.5 rounded-[12px] py-2.5 text-[13px] font-semibold active:pressable-active"
       style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}
     >

@@ -1,7 +1,8 @@
 /**
  * Колокольчик в шапке.
  *
- * Одна кнопка на всё приложение: цифра непрочитанных и открытие ленты.
+ * Одна кнопка на всё приложение: открывает историю уведомлений. Счётчика
+ * непрочитанных нет — новое уведомление и так всплывает на весь экран.
  * Если провайдера нет (экран входа, установка, согласия), компонент молча
  * ничего не рисует — шапки там всё равно нет.
  */
@@ -15,12 +16,12 @@ export function NotificationBell() {
   const notifications = useNotifications();
   if (!notifications) return null;
 
-  const { unread, openHub } = notifications;
+  const { openHub } = notifications;
 
   return (
     <button
       type="button"
-      aria-label={unread > 0 ? `Уведомления, непрочитанных: ${unread}` : 'Уведомления'}
+      aria-label="Уведомления"
       onClick={() => {
         haptic('light');
         openHub();
@@ -29,16 +30,6 @@ export function NotificationBell() {
       style={{ color: 'var(--accent)' }}
     >
       <Bell size={19} aria-hidden />
-
-      {unread > 0 ? (
-        <span
-          aria-hidden
-          className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-semibold leading-none text-white"
-          style={{ background: 'var(--danger)' }}
-        >
-          {unread > 9 ? '9+' : unread}
-        </span>
-      ) : null}
     </button>
   );
 }

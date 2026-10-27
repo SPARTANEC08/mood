@@ -80,9 +80,8 @@ export function AnnouncementGate() {
       showing.current = false;
       setItem(null);
       setClosing(false);
-      // Событие прочитано: обновляем бейдж и кэш ленты, если она открыта.
+      // Событие прочитано: обновляем историю, если лист открыт.
       notifications?.invalidateFeed();
-      void notifications?.refreshUnread();
       // Очередь: сразу берём следующее уведомление, если оно есть.
       void load();
     }

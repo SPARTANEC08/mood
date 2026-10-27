@@ -2,20 +2,22 @@
  * Центр уведомлений: вся история в одном листе.
  *
  * Лента собирается сервером из двух источников — событий нотификатора и
- * объявлений администратора. Здесь только показ, фильтры и отметка
- * прочитанного. Открытие листа не сбрасывает бейдж: человек сам решает, что
- * уже прочитано, кнопкой «Прочитать все» или тапом по карточке.
+ * объявлений администратора. Здесь только история и фильтры.
+ *
+ * Отметок прочитанного в интерфейсе нет: новое уведомление и так показывается
+ * полноэкранно, а затемнение старых карточек только мешало читать. Служебная
+ * отметка на сервере осталась ради полноэкранной очереди — она не даёт
+ * показывать одно и то же событие повторно.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { BottomSheet, EmptyState, SkeletonList } from '@/components/ui';
-import { cn } from '@/lib/cn';
 import { api } from '@/lib/api';
 import { formatMoscowDayLabel, moscowRawDate } from '@/lib/dates';
 import { haptic } from '@/lib/env';
 import type { AppNotification, AppNotificationKind } from '@/types/api';
-import { NotificationActions, NotificationContent, notificationTitle } from './NotificationContent';
+import { NotificationActions, NotificationContent } from './NotificationContent';
 
 type Filter = 'all' | AppNotificationKind;
 
@@ -38,22 +40,16 @@ export function NotificationsSheet({
   open,
   onClose,
   revision,
-  onRead,
-  onReadAll,
 }: {
   open: boolean;
   onClose: () => void;
-  /** Меняется, когда модалка или другой экран пометили что-то прочитанным. */
+  /** Меняется, когда полноэкранная модалка показала новое уведомление. */
   revision: number;
-  onRead: () => void;
-  onReadAll: () => void;
 }) {
   const [items, setItems] = useState<AppNotification[] | null>(null);
-  const [unread, setUnread] = useState(0);
   const [filter, setFilter] = useState<Filter>('all');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -62,7 +58,6 @@ export function NotificationsSheet({
     try {
       const data = await api.notificationsFeed();
       setItems(data.items);
-      setUnread(data.unread);
     } catch {
       setError('Не удалось загрузить уведомления. Проверьте связь и попробуйте ещё раз.');
     } finally {
@@ -100,46 +95,6 @@ export function NotificationsSheet({
     return [...map.values()];
   }, [filtered]);
 
-  const markRead = useCallback(
-    async (item: AppNotification) => {
-      if (item.read || busy) return;
-
-      haptic('light');
-      setItems((current) =>
-        current?.map((entry) => (entry.id === item.id ? { ...entry, read: true } : entry)) ?? null,
-      );
-      setUnread((current) => Math.max(0, current - 1));
-
-      try {
-        await api.readNotification(item.id);
-        onRead();
-      } catch {
-        // Не смогли сохранить на сервере — перечитываем ленту, чтобы не
-        // показывать человеку ложное «прочитано».
-        void load();
-      }
-    },
-    [busy, load, onRead],
-  );
-
-  const markAll = useCallback(async () => {
-    if (busy || unread === 0) return;
-
-    setBusy(true);
-    haptic('medium');
-
-    try {
-      await api.readAllNotifications();
-      setItems((current) => current?.map((entry) => ({ ...entry, read: true })) ?? null);
-      setUnread(0);
-      onReadAll();
-    } catch {
-      setError('Не удалось отметить уведомления прочитанными. Попробуйте ещё раз.');
-    } finally {
-      setBusy(false);
-    }
-  }, [busy, onReadAll, unread]);
-
   return (
     <BottomSheet
       open={open}
@@ -149,19 +104,6 @@ export function NotificationsSheet({
       // Высота зафиксирована: иначе при смене фильтра список становится короче,
       // и всё окно прыгает вверх-вниз. Внутри лента прокручивается сама.
       height="min(720px, 85dvh)"
-      headerRight={
-        unread > 0 ? (
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => void markAll()}
-            className="pressable text-[13px] font-semibold active:pressable-active disabled:opacity-40"
-            style={{ color: 'var(--accent)' }}
-          >
-            Прочитать все
-          </button>
-        ) : null
-      }
     >
       <div className="scroll-hidden -mx-1 mb-3 flex gap-1.5 overflow-x-auto px-1 pb-1">
         {FILTERS.map((entry) => {
@@ -175,9 +117,7 @@ export function NotificationsSheet({
                 haptic('light');
                 setFilter(entry.id);
               }}
-              className={cn(
-                'pressable shrink-0 rounded-full px-3 py-1.5 text-[12px] font-semibold active:pressable-active',
-              )}
+              className="pressable shrink-0 rounded-full px-3 py-1.5 text-[12px] font-semibold active:pressable-active"
               style={{
                 background: active ? 'var(--accent-soft)' : 'var(--surface-grouped)',
                 color: active ? 'var(--accent)' : 'var(--text-secondary)',
@@ -227,25 +167,14 @@ export function NotificationsSheet({
                 {group.items.map((item) => (
                   <div
                     key={item.id}
-                    className={cn(
-                      'rounded-[14px] border p-3 transition-opacity',
-                      item.read && 'opacity-60',
-                    )}
+                    className="rounded-[14px] border p-3"
                     style={{
                       background: 'var(--surface-grouped)',
                       borderColor: 'var(--separator-soft)',
                     }}
                   >
-                    <button
-                      type="button"
-                      onClick={() => void markRead(item)}
-                      className="pressable w-full text-left active:pressable-active"
-                      aria-label={`${notificationTitle(item)}${item.read ? '' : ', не прочитано'}`}
-                    >
-                      <NotificationContent item={item} unread={!item.read} />
-                    </button>
-
-                    <NotificationActions item={item} onOpen={() => void markRead(item)} />
+                    <NotificationContent item={item} />
+                    <NotificationActions item={item} />
                   </div>
                 ))}
               </div>

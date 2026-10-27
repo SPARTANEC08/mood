@@ -25,7 +25,6 @@ import type {
   NextAnnouncementResponse,
   NextNotificationResponse,
   NotificationsFeedResponse,
-  NotificationsUnreadResponse,
 } from '@/types/api';
 import {
   deleteFile,
@@ -189,14 +188,6 @@ export const api = {
 
   /** Вся лента: объявления и события, новые сверху. */
   notificationsFeed: () => request<NotificationsFeedResponse>('/notifications'),
-
-  /** Только счётчик для бейджа на колокольчике. */
-  notificationsUnread: () =>
-    request<NotificationsUnreadResponse>('/notifications/unread-count'),
-
-  /** «Прочитать все»: отметить все события и закрыть объявления. */
-  readAllNotifications: () =>
-    request<{ ok: true; unread: 0 }>('/notifications/read-all', { method: 'POST' }),
 
   /** «Закрыть»: рассылка скрывается, событие помечается прочитанным. */
   readNotification: (id: string) =>
