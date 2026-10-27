@@ -37,7 +37,7 @@ import {
   getJob,
   runningJob,
 } from '../../services/admin/jobs.ts';
-import { getStats } from '../devStats.ts';
+import { activityByUser, getStats } from '../devStats.ts';
 import { runMaintenance } from '../../services/maintenance/run.ts';
 import { getDiskUsage } from '../../services/maintenance/cleanup.ts';
 import {
@@ -75,28 +75,26 @@ function readUrl(body: unknown): string | undefined {
   }
 }
 
-function lastSeenAt(user: StoredUser): number {
-  const times: number[] = [];
-  for (const token of user.pwaTokens ?? []) {
-    for (const value of [token.lastUsedAt, token.createdAt]) {
-      const ts = value ? Date.parse(value) : Number.NaN;
-      if (Number.isFinite(ts)) times.push(ts);
-    }
-  }
-  for (const value of [user.barsAuthedAt, user.updatedAt, user.createdAt]) {
-    const ts = value ? Date.parse(value) : Number.NaN;
-    if (Number.isFinite(ts)) times.push(ts);
-  }
-  return times.length > 0 ? Math.max(...times) : 0;
+/**
+ * «Последний вход» — только реальная активность.
+ *
+ * `updatedAt` и `lastUsedAt` токена трогает фоновый нотификатор и плановые
+ * опросы, поэтому они показывали «только что» у людей, которые приложение не
+ * открывали. `barsAuthedAt` — честный вход в БАРС, его оставляем запасным.
+ */
+function lastSeenAt(user: StoredUser, activity: Map<string, number>): number {
+  const live = activity.get(user.userId) ?? 0;
+  const login = user.barsAuthedAt ? Date.parse(user.barsAuthedAt) : Number.NaN;
+  return Math.max(live, Number.isFinite(login) ? login : 0);
 }
 
-function userSummary(user: StoredUser) {
+function userSummary(user: StoredUser, activity: Map<string, number>) {
   return {
     id: user.userId,
     name: adminName(user),
     group: user.groupName ?? user.studentProfile?.groupName ?? '',
     platform: user.platform ?? 'unknown',
-    lastSeenAt: lastSeenAt(user),
+    lastSeenAt: lastSeenAt(user, activity),
     bars: isBarsAuthorized(user) ? ('active' as const) : ('none' as const),
     telegram: typeof user.telegramId === 'number',
     push: user.pushSubscriptions?.length ?? 0,
@@ -199,9 +197,10 @@ export function registerAdminRoutes(app: FastifyInstance): void {
     const search = text(query.query).toLowerCase();
     const limit = Math.min(100, Math.max(1, Number(query.limit) || 50));
 
+    const activity = activityByUser();
     const users = userStore
       .all()
-      .map(userSummary)
+      .map((user) => userSummary(user, activity))
       .filter((user) => {
         if (!search) return true;
         return (
@@ -220,7 +219,7 @@ export function registerAdminRoutes(app: FastifyInstance): void {
     const user = findUser(request);
 
     return reply.send({
-      ...userSummary(user),
+      ...userSummary(user, activityByUser()),
       faculty: user.faculty ?? '',
       recordBookNumber: user.studentProfile?.recordBookNumber ?? '',
       barsAuthedAt: user.barsAuthedAt ?? null,

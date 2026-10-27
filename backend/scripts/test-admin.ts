@@ -105,6 +105,29 @@ const list = await app.inject({
 });
 check('поиск по имени работает', list.statusCode === 200 && list.json<{ users: unknown[] }>().users.length === 1);
 
+const idle = createUser('idle-user');
+
+const idleList = await app.inject({
+  method: 'GET',
+  url: '/api/admin/users?query=idle',
+  headers: root.auth,
+});
+const idleRow = idleList.json<{ users: Array<{ lastSeenAt: number }> }>().users[0];
+check('updatedAt не считается активностью', idleRow?.lastSeenAt === 0, String(idleRow?.lastSeenAt));
+
+recordActivity(idle.user.userId, '/api/bars/grades');
+const idleAfter = await app.inject({
+  method: 'GET',
+  url: '/api/admin/users?query=idle',
+  headers: root.auth,
+});
+const idleAfterRow = idleAfter.json<{ users: Array<{ lastSeenAt: number }> }>().users[0];
+check(
+  'реальная активность видна',
+  (idleAfterRow?.lastSeenAt ?? 0) > Date.now() - 5_000,
+  String(idleAfterRow?.lastSeenAt),
+);
+
 const guestList = await app.inject({
   method: 'GET',
   url: '/api/admin/users?query=guest',

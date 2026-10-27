@@ -213,6 +213,27 @@ export function recordActivity(userId: string | undefined, url = '', ts: number 
   save();
 }
 
+/**
+ * Последняя РЕАЛЬНАЯ активность по пользователям.
+ *
+ * Только запросы, прошедшие `recordActivity` (фоновые опросы и админка уже
+ * отфильтрованы), плюс восстановленные минутные корзины. `updatedAt` записи
+ * здесь не используется: его меняет нотификатор, и все выглядели бы «онлайн».
+ */
+export function activityByUser(now: number = Date.now()): Map<string, number> {
+  const result = new Map(lastSeen);
+
+  for (const bucket of buckets.values()) {
+    if (bucket.at < now - WINDOW_MS) continue;
+    for (const userId of bucket.users) {
+      const previous = result.get(userId) ?? 0;
+      if (bucket.at > previous) result.set(userId, bucket.at);
+    }
+  }
+
+  return result;
+}
+
 /** Успешный вход в БАРС — «новая сессия БАРС» этого человека. */
 export function recordBarsLogin(userId: string, ts: number = Date.now()): void {
   pushUnique(bucketFor(ts).barsNew, userId);
