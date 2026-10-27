@@ -11,7 +11,7 @@ import { haptic, openLink } from '@/lib/env';
  *
  * Ссылка задаётся здесь. Пока строка пуста, кнопки нет и экран остаётся пустым.
  */
-const HIDDEN_LINK = '';
+const HIDDEN_LINK = 'https://my.aeza.net/auth/login';
 const HIDDEN_LINK_LABEL = 'Открыть';
 
 export function HiddenMenuScreen({ onBack }: { onBack: () => void }) {
