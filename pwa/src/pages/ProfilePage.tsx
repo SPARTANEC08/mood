@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import {
   ArrowUpRight,
   BookOpen,
@@ -17,6 +17,7 @@ import { Card, SkeletonCard, Toast } from '@/components/ui';
 import { RefreshIndicator } from '@/components/RefreshIndicator';
 import { usePullToRefresh } from '@/components/PullToRefresh';
 import { DeleteAccountCard } from '@/components/profile/DeleteAccountCard';
+import { HiddenMenuScreen } from '@/components/profile/HiddenMenuScreen';
 import { SettingsCard } from '@/components/profile/SettingsCard';
 import { StudyLine, StudySection } from '@/components/profile/StudySection';
 import { useAppData } from '@/lib/dataContext';
@@ -24,6 +25,15 @@ import { plural } from '@/lib/dates';
 import { haptic, openLink } from '@/lib/env';
 import { logout } from '@/auth';
 import type { BootstrapResponse } from '@/types/api';
+
+/**
+ * Скрытый экран кабинета.
+ *
+ * Десять тапов по карточке профиля открывают его; пауза дольше указанной
+ * обнуляет счётчик, чтобы случайные нажатия не накапливались между заходами.
+ */
+const HIDDEN_TAPS = 10;
+const HIDDEN_TAP_PAUSE_MS = 1200;
 
 /**
  * «Кабинет» по финальному макету.
@@ -51,6 +61,27 @@ export function ProfilePage({ profile }: { profile: BootstrapResponse }) {
   } = useAppData();
 
   const [toast, setToast] = useState<string | null>(null);
+
+  /**
+   * Скрытый экран: десять быстрых тапов по карточке профиля.
+   *
+   * Пауза длиннее HIDDEN_TAP_PAUSE_MS обнуляет счётчик: случайные нажатия в
+   * течение дня не должны однажды «донабрать» десятку. Счётчик живёт в ref,
+   * потому что он не влияет на разметку — перерисовка на каждый тап не нужна.
+   */
+  const [hiddenOpen, setHiddenOpen] = useState(false);
+  const hiddenTaps = useRef({ count: 0, at: 0 });
+
+  const handleProfileTap = useCallback(() => {
+    const now = Date.now();
+    const state = hiddenTaps.current;
+    state.count = now - state.at <= HIDDEN_TAP_PAUSE_MS ? state.count + 1 : 1;
+    state.at = now;
+
+    if (state.count < HIDDEN_TAPS) return;
+    state.count = 0;
+    setHiddenOpen(true);
+  }, []);
 
   /**
    * Обновление по жесту.
@@ -114,6 +145,8 @@ export function ProfilePage({ profile }: { profile: BootstrapResponse }) {
       ? `${books.length} ${plural(books.length, 'книга', 'книги', 'книг')}${overdue > 0 ? ` · ${overdue} просрочена` : ''}`
       : 'Книг нет';
 
+  if (hiddenOpen) return <HiddenMenuScreen onBack={() => setHiddenOpen(false)} />;
+
   return (
     <>
       <Page
@@ -131,10 +164,12 @@ export function ProfilePage({ profile }: { profile: BootstrapResponse }) {
         pull={pull}
       >
         <div className="space-y-3">
-          {/* Профиль */}
+          {/* Профиль. Десять тапов по карточке открывают скрытый экран. */}
           <Card
             className="relative overflow-hidden px-5 py-5"
             style={{ border: '1px solid var(--separator-soft)' }}
+            onPress={handleProfileTap}
+            silent
           >
             <div
               className="pointer-events-none absolute -right-12 -top-20 h-48 w-48 rounded-full"
