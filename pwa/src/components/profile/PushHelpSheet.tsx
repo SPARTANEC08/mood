@@ -6,9 +6,10 @@
  * пользователям этот экран не показывается.
  */
 
-import { ArrowLeft, BellOff, Smartphone } from 'lucide-react';
+import { ArrowLeft, BellOff, MessageCircle, Smartphone } from 'lucide-react';
 
-import { haptic } from '@/lib/env';
+import { haptic, openLink } from '@/lib/env';
+import { SUPPORT_URL } from '@/lib/links';
 
 type HelpKind = 'denied' | 'ios';
 
@@ -25,7 +26,13 @@ function detectPlatform(): Platform {
   return 'desktop';
 }
 
-function steps(kind: HelpKind, platform: Platform): string[] {
+/** Samsung Internet: у него своя настройка «безопасных соединений», которая
+ *  блокирует часть сайтов и прячет разрешения. */
+function isSamsungBrowser(): boolean {
+  return typeof navigator !== 'undefined' && /SamsungBrowser/i.test(navigator.userAgent);
+}
+
+function steps(kind: HelpKind, platform: Platform, samsung: boolean): string[] {
   if (kind === 'ios') {
     return [
       'Откройте сайт Mood в Safari.',
@@ -41,6 +48,16 @@ function steps(kind: HelpKind, platform: Platform): string[] {
       'Откройте «Настройки» iPhone → «Уведомления» → «Mood».',
       'Включите «Разрешить уведомления».',
       'Вернитесь в Mood и нажмите «Включить» в настройках приложения.',
+    ];
+  }
+
+  if (platform === 'android' && samsung) {
+    return [
+      'Откройте Samsung Internet → ⋮ → «Настройки» → «Конфиденциальность и безопасность».',
+      'Включите «Использовать безопасные соединения» (может называться «Безопасное соединение»).',
+      'Вернитесь на сайт Mood и обновите страницу.',
+      'Нажмите замок рядом с адресом → «Разрешения» → «Уведомления» → «Разрешить».',
+      'Если пункта «Уведомления» всё ещё нет — откройте Mood в Chrome или Firefox.',
     ];
   }
 
@@ -69,7 +86,7 @@ export function PushHelpSheet({
   onClose: () => void;
 }) {
   const platform = detectPlatform();
-  const items = steps(kind, platform);
+  const items = steps(kind, platform, isSamsungBrowser());
 
   return (
     <div className="fixed inset-0 z-[80] flex items-end justify-center bg-black/50">
@@ -118,18 +135,36 @@ export function PushHelpSheet({
           приложения → Push-уведомления.
         </p>
 
-        <button
-          type="button"
-          onClick={() => {
-            haptic('light');
-            onClose();
-          }}
-          className="pressable mt-4 flex w-full items-center justify-center gap-2 rounded-[12px] py-3 text-[15px] font-semibold text-white active:pressable-active"
-          style={{ background: 'var(--accent)' }}
-        >
-          <ArrowLeft size={16} aria-hidden />
-          Понятно
-        </button>
+        <p className="mt-2 text-[12px] leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+          Если ничего не помогло — напишите в поддержку, разберёмся вместе.
+        </p>
+
+        <div className="mt-4 flex gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              haptic('light');
+              openLink(SUPPORT_URL);
+            }}
+            className="pressable flex flex-1 items-center justify-center gap-2 rounded-[12px] py-3 text-[15px] font-semibold active:pressable-active"
+            style={{ background: 'var(--surface-grouped)', color: 'var(--accent)' }}
+          >
+            <MessageCircle size={16} aria-hidden />
+            Поддержка
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              haptic('light');
+              onClose();
+            }}
+            className="pressable flex flex-1 items-center justify-center gap-2 rounded-[12px] py-3 text-[15px] font-semibold text-white active:pressable-active"
+            style={{ background: 'var(--accent)' }}
+          >
+            <ArrowLeft size={16} aria-hidden />
+            Понятно
+          </button>
+        </div>
       </div>
     </div>
   );

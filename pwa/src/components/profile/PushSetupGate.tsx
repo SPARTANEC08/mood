@@ -16,6 +16,7 @@ import { useEffect, useState } from 'react';
 import { BellRing } from 'lucide-react';
 
 import { api } from '@/lib/api';
+import { PushHelpSheet } from '@/components/profile/PushHelpSheet';
 import { haptic } from '@/lib/env';
 import { enablePush, pushPermission, pushSupport, syncPush } from '@/lib/push';
 import type { BootstrapProfile } from '@/types/api';
@@ -88,6 +89,12 @@ export function PushSetupGate({ profile }: { profile: BootstrapProfile }) {
 
   if (!open) return null;
 
+  // Запрет в браузере или iOS без установки — показываем подробную инструкцию
+  // с кнопкой поддержки, а не краткий текст.
+  if (mode !== 'ready') {
+    return <PushHelpSheet kind={mode} onClose={() => setOpen(false)} />;
+  }
+
   async function turnOn(): Promise<void> {
     if (busy) return;
 
@@ -114,13 +121,6 @@ export function PushSetupGate({ profile }: { profile: BootstrapProfile }) {
     }
   }
 
-  const title =
-    mode === 'ios'
-      ? 'Сначала установите приложение'
-      : mode === 'denied'
-        ? 'Уведомления запрещены'
-        : 'Включите уведомления';
-
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 px-5">
       <div className="surface w-full max-w-[380px] rounded-[20px] px-5 py-5">
@@ -132,68 +132,35 @@ export function PushSetupGate({ profile }: { profile: BootstrapProfile }) {
           <BellRing size={22} />
         </span>
 
-        <h2 className="mt-3 text-[19px] font-semibold leading-tight">{title}</h2>
+        <h2 className="mt-3 text-[19px] font-semibold leading-tight">Включите уведомления</h2>
 
-        {mode === 'ready' ? (
-          <>
-            <p className="mt-2 text-[14px] leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
-              Оценки, письма, приказы и стипендия теперь приходят только в приложение.
-              Разрешите уведомления, чтобы не пропустить их.
-            </p>
-            <p className="mt-2 text-[12px] leading-relaxed" style={{ color: 'var(--text-tertiary)' }}>
-              Включить или выключить можно в любой момент: Кабинет → Настройки приложения →
-              Push-уведомления.
-            </p>
-          </>
-        ) : null}
-
-        {mode === 'ios' ? (
-          <p className="mt-2 text-[14px] leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
-            На iPhone уведомления работают только у установленного приложения. Нажмите
-            «Поделиться» → «На экран Домой», затем откройте Mood с иконки и включите push
-            в настройках.
-          </p>
-        ) : null}
-
-        {mode === 'denied' ? (
-          <p className="mt-2 text-[14px] leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
-            Уведомления запрещены в настройках браузера. Разрешите их для Mood в настройках
-            Safari или Chrome и вернитесь в приложение. Включить их можно и позже — в
-            «Кабинете».
-          </p>
-        ) : null}
+        <p className="mt-2 text-[14px] leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+          Оценки, письма, приказы и стипендия теперь приходят только в приложение.
+          Разрешите уведомления, чтобы не пропустить их.
+        </p>
+        <p className="mt-2 text-[12px] leading-relaxed" style={{ color: 'var(--text-tertiary)' }}>
+          Включить или выключить можно в любой момент: Кабинет → Настройки приложения →
+          Push-уведомления.
+        </p>
 
         <div className="mt-4 flex gap-2">
-          {mode === 'ready' ? (
-            <>
-              <button
-                type="button"
-                onClick={() => setOpen(false)}
-                className="pressable flex-1 rounded-[12px] py-2.5 text-[15px] font-semibold active:pressable-active"
-                style={{ background: 'var(--surface-grouped)', color: 'var(--text-primary)' }}
-              >
-                Позже
-              </button>
-              <button
-                type="button"
-                onClick={() => void turnOn()}
-                disabled={busy}
-                className="pressable flex-1 rounded-[12px] py-2.5 text-[15px] font-semibold text-white active:pressable-active disabled:opacity-50"
-                style={{ background: 'var(--accent)' }}
-              >
-                {busy ? 'Включаем…' : 'Включить'}
-              </button>
-            </>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setOpen(false)}
-              className="pressable w-full rounded-[12px] py-2.5 text-[15px] font-semibold text-white active:pressable-active"
-              style={{ background: 'var(--accent)' }}
-            >
-              Понятно
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={() => setOpen(false)}
+            className="pressable flex-1 rounded-[12px] py-2.5 text-[15px] font-semibold active:pressable-active"
+            style={{ background: 'var(--surface-grouped)', color: 'var(--text-primary)' }}
+          >
+            Позже
+          </button>
+          <button
+            type="button"
+            onClick={() => void turnOn()}
+            disabled={busy}
+            className="pressable flex-1 rounded-[12px] py-2.5 text-[15px] font-semibold text-white active:pressable-active disabled:opacity-50"
+            style={{ background: 'var(--accent)' }}
+          >
+            {busy ? 'Включаем…' : 'Включить'}
+          </button>
         </div>
       </div>
     </div>
