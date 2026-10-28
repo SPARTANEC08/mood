@@ -1,17 +1,17 @@
 /**
- * Встроенный просмотр PDF для Android.
+ * Встроенный просмотр PDF для Android: непрерывный документ.
  *
- * Рендер — react-pdf (тот же pdf.js), жесты — react-zoom-pan-pinch. Свой зум и
- * скролл больше не пишем: библиотека делает pinch, pan и плавный transform без
- * пересчёта layout. Из-за самодельного пересчёта страниц и прыгало с 10-й на
- * 100-ю.
+ * Все страницы лежат в одном окне, листать кнопками не нужно. При этом в DOM
+ * живут только страницы рядом с видимой областью: 91 canvas сразу — это
+ * сотни мегабайт и фриз на телефоне.
  *
- * Постраничный режим: одна страница, навигация кнопками, свайпом и вводом
- * номера. iOS не трогаем — там системный просмотрщик Safari.
+ * Зум и панорамирование — react-zoom-pan-pinch (transform, без пересчёта
+ * layout). Поэтому увеличение не двигает страницы и не сбрасывает позицию.
+ * iOS не трогаем: там системный просмотрщик Safari.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, ChevronLeft, ChevronRight, Download, Loader2, ZoomIn, ZoomOut } from 'lucide-react';
+import { ArrowLeft, Download, Loader2, ZoomIn, ZoomOut } from 'lucide-react';
 import { Document, Page, pdfjs } from 'react-pdf';
 import {
   TransformComponent,
@@ -48,6 +48,7 @@ if (
 
 const MAX_WIDTH = 560;
 const PAGE_MARGIN = 24;
+const PAGE_GAP = 12;
 const MIN_ZOOM = 1;
 const MAX_ZOOM = 4;
 
@@ -72,13 +73,28 @@ export function PdfViewerScreen({
   const [pages, setPages] = useState(0);
   const [pageNumber, setPageNumber] = useState(1);
   const [baseWidth, setBaseWidth] = useState(contentWidth());
+  const [aspect, setAspect] = useState(1.414);
   const [zoomPercent, setZoomPercent] = useState(100);
+  const [visible, setVisible] = useState({ start: 1, end: 3 });
   const [progress, setProgress] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [jumpOpen, setJumpOpen] = useState(false);
-  const [jumpValue, setJumpValue] = useState('1');
 
   const controlsRef = useRef<ReactZoomPanPinchRef | null>(null);
+  const wrapperRef = useRef<HTMLDivElement | null>(null);
+  const pagesRef = useRef(0);
+  const stepRef = useRef(Math.round(contentWidth() * 1.414) + PAGE_GAP);
+
+  const pageHeight = Math.round(baseWidth * aspect);
+  const pageStep = pageHeight + PAGE_GAP;
+  const contentHeight = Math.max(1, pages * pageStep);
+
+  useEffect(() => {
+    pagesRef.current = pages;
+  }, [pages]);
+
+  useEffect(() => {
+    stepRef.current = pageStep;
+  }, [pageStep]);
 
   useEffect(() => {
     const onResize = () => setBaseWidth(contentWidth());
@@ -122,32 +138,33 @@ export function PdfViewerScreen({
     };
   }, [file.fileId, srcUrl]);
 
-  const documentFile = useMemo(
-    () => (fileData ? { data: fileData } : null),
-    [fileData],
-  );
+  const documentFile = useMemo(() => (fileData ? { data: fileData } : null), [fileData]);
 
-  useEffect(() => {
-    // Новая страница — новый TransformWrapper (key), зум сбрасывается.
-    setZoomPercent(100);
-  }, [pageNumber]);
+  /* ── какие страницы держать в DOM ───────────────────────────────────── */
+
+  const updateVisible = useCallback((state: { scale: number; positionX: number; positionY: number }) => {
+    const wrapper = wrapperRef.current;
+    const total = pagesRef.current;
+    if (!wrapper || total === 0) return;
+
+    const step = stepRef.current;
+    const top = -state.positionY / state.scale;
+    const height = wrapper.clientHeight / state.scale;
+
+    const start = Math.max(1, Math.floor(top / step) - 1);
+    const end = Math.min(total, Math.ceil((top + height) / step) + 1);
+    const center = Math.min(total, Math.max(1, Math.floor((top + height / 2) / step) + 1));
+
+    setVisible((previous) =>
+      previous.start === start && previous.end === end ? previous : { start, end },
+    );
+    setPageNumber(center);
+  }, []);
 
   const close = useCallback(() => {
     haptic('light');
     onClose();
   }, [onClose]);
-
-  function goToPage(next: number): void {
-    haptic('light');
-    setPageNumber(Math.min(pages, Math.max(1, next)));
-  }
-
-  function submitJump(): void {
-    const parsed = Number.parseInt(jumpValue, 10);
-    if (!Number.isFinite(parsed)) return;
-    goToPage(parsed);
-    setJumpOpen(false);
-  }
 
   function zoomIn(): void {
     controlsRef.current?.zoomIn(0.25);
@@ -186,7 +203,7 @@ export function PdfViewerScreen({
           <div className="min-w-0 flex-1">
             <p className="truncate text-[15px] font-semibold leading-tight">{file.originalName}</p>
             <p className="text-[11px]" style={{ color: 'var(--text-tertiary)' }}>
-              {pages > 0 ? `${pageNumber} / ${pages}` : 'PDF'}
+              {pages > 0 ? `стр. ${pageNumber} / ${pages}` : 'PDF'}
             </p>
           </div>
 
@@ -194,7 +211,7 @@ export function PdfViewerScreen({
             <button
               type="button"
               aria-label="Уменьшить"
-              disabled={zoomPercent <= 100}
+              disabled={zoomPercent <= MIN_ZOOM * 100}
               onClick={zoomOut}
               className="pressable rounded-full p-1.5 active:pressable-active disabled:opacity-30"
               style={{ color: 'var(--accent)' }}
@@ -241,7 +258,7 @@ export function PdfViewerScreen({
         </div>
       </header>
 
-      <div className="relative min-h-0 flex-1 overflow-hidden">
+      <div ref={wrapperRef} className="relative min-h-0 flex-1 overflow-hidden">
         {error ? (
           <div className="flex h-full items-start justify-center px-3 py-2">
             <div className="surface w-full max-w-[420px] rounded-[14px] px-4 py-5 text-center">
@@ -280,18 +297,26 @@ export function PdfViewerScreen({
             </div>
           </div>
         ) : (
+          <div className="h-full min-h-0">
           <Document
+            className="h-full"
             file={documentFile}
-            onLoadSuccess={({ numPages }) => setPages(numPages)}
+            onLoadSuccess={(pdf) => {
+              setPages(pdf.numPages);
+              void pdf.getPage(1).then((page) => {
+                const viewport = page.getViewport({ scale: 1 });
+                setAspect(viewport.height / viewport.width);
+              });
+            }}
             onLoadError={() => setError('Не удалось открыть PDF. Попробуйте скачать файл.')}
             loading={null}
           >
             <TransformWrapper
-              key={pageNumber}
               initialScale={MIN_ZOOM}
               minScale={MIN_ZOOM}
               maxScale={MAX_ZOOM}
-              centerOnInit
+              initialPositionX={0}
+              initialPositionY={0}
               limitToBounds
               doubleClick={{ mode: 'toggle', step: 0.7 }}
               wheel={{ step: 0.1 }}
@@ -299,143 +324,56 @@ export function PdfViewerScreen({
               panning={{ velocityDisabled: true }}
               onInit={(ref) => {
                 controlsRef.current = ref;
+                updateVisible(ref.state);
               }}
-              onTransform={(ref) => setZoomPercent(Math.round(ref.state.scale * 100))}
+              onTransform={(ref) => {
+                setZoomPercent(Math.round(ref.state.scale * 100));
+                updateVisible(ref.state);
+              }}
             >
               <TransformComponent
                 wrapperStyle={{ width: '100%', height: '100%' }}
-                contentStyle={{ width: '100%', display: 'flex', justifyContent: 'center' }}
+                contentStyle={{ width: baseWidth, height: contentHeight }}
               >
-                <Page
-                  pageNumber={pageNumber}
-                  width={baseWidth}
-                  devicePixelRatio={Math.min(2, window.devicePixelRatio || 1)}
-                  renderTextLayer={false}
-                  renderAnnotationLayer={false}
-                  loading={null}
-                />
+                <div style={{ width: baseWidth }}>
+                  {Array.from({ length: pages }, (_, index) => {
+                    const number = index + 1;
+                    const render = number >= visible.start && number <= visible.end;
+
+                    return (
+                      <div
+                        key={number}
+                        style={{ height: pageStep, paddingBottom: PAGE_GAP }}
+                      >
+                        {render ? (
+                          <Page
+                            pageNumber={number}
+                            width={baseWidth}
+                            devicePixelRatio={Math.min(2, window.devicePixelRatio || 1)}
+                            renderTextLayer={false}
+                            renderAnnotationLayer={false}
+                            loading={null}
+                          />
+                        ) : (
+                          <div
+                            className="flex h-full items-center justify-center rounded-[4px]"
+                            style={{ background: 'var(--surface-grouped)' }}
+                          >
+                            <span className="text-[12px]" style={{ color: 'var(--text-tertiary)' }}>
+                              Страница {number}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               </TransformComponent>
             </TransformWrapper>
           </Document>
+          </div>
         )}
       </div>
-
-      {pages > 1 ? (
-        <footer
-          className="shrink-0 border-t px-4 pb-[calc(env(safe-area-inset-bottom)+8px)] pt-2"
-          style={{ borderColor: 'var(--separator-soft)', background: 'var(--app-bg)' }}
-        >
-          <div className="mx-auto flex max-w-[560px] items-center justify-between">
-            <button
-              type="button"
-              aria-label="Предыдущая страница"
-              disabled={pageNumber <= 1}
-              onClick={() => goToPage(pageNumber - 1)}
-              className="pressable flex items-center gap-1 rounded-full px-3 py-2 text-[13px] font-semibold active:pressable-active disabled:opacity-30"
-              style={{ color: 'var(--accent)' }}
-            >
-              <ChevronLeft size={18} aria-hidden />
-              Назад
-            </button>
-
-            <button
-              type="button"
-              aria-label="Перейти к странице"
-              onClick={() => {
-                haptic('light');
-                setJumpValue(String(pageNumber));
-                setJumpOpen(true);
-              }}
-              className="pressable rounded-full px-3 py-2 text-[12px] font-semibold active:pressable-active"
-              style={{ background: 'var(--surface-grouped)', color: 'var(--text-primary)' }}
-            >
-              {pageNumber} / {pages}
-            </button>
-
-            <button
-              type="button"
-              aria-label="Следующая страница"
-              disabled={pageNumber >= pages}
-              onClick={() => goToPage(pageNumber + 1)}
-              className="pressable flex items-center gap-1 rounded-full px-3 py-2 text-[13px] font-semibold active:pressable-active disabled:opacity-30"
-              style={{ color: 'var(--accent)' }}
-            >
-              Вперёд
-              <ChevronRight size={18} aria-hidden />
-            </button>
-          </div>
-        </footer>
-      ) : null}
-
-      {jumpOpen ? (
-        <div className="fixed inset-0 z-[95] flex items-center justify-center bg-black/50 px-5">
-          <div className="surface w-full max-w-[340px] rounded-[18px] p-4">
-            <h2 className="text-[17px] font-semibold">Перейти к странице</h2>
-            <p className="mt-1 text-[12px]" style={{ color: 'var(--text-secondary)' }}>
-              Всего {pages} стр.
-            </p>
-
-            <input
-              type="number"
-              inputMode="numeric"
-              min={1}
-              max={pages}
-              value={jumpValue}
-              onChange={(event) => setJumpValue(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') submitJump();
-              }}
-              className="mt-3 w-full rounded-[11px] px-3 py-2.5 text-[18px] font-semibold outline-none"
-              style={{ background: 'var(--surface-grouped)', color: 'var(--text-primary)' }}
-              autoFocus
-            />
-
-            <div className="mt-2 flex gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  goToPage(1);
-                  setJumpOpen(false);
-                }}
-                className="pressable flex-1 rounded-[10px] py-2 text-[12px] font-semibold active:pressable-active"
-                style={{ background: 'var(--surface-grouped)', color: 'var(--accent)' }}
-              >
-                В начало
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  goToPage(pages);
-                  setJumpOpen(false);
-                }}
-                className="pressable flex-1 rounded-[10px] py-2 text-[12px] font-semibold active:pressable-active"
-                style={{ background: 'var(--surface-grouped)', color: 'var(--accent)' }}
-              >
-                В конец
-              </button>
-            </div>
-
-            <div className="mt-3 flex gap-2">
-              <button
-                type="button"
-                onClick={() => setJumpOpen(false)}
-                className="pressable flex-1 rounded-[12px] py-2.5 text-[15px] font-semibold active:pressable-active"
-                style={{ background: 'var(--surface-grouped)', color: 'var(--text-primary)' }}
-              >
-                Отмена
-              </button>
-              <button
-                type="button"
-                onClick={submitJump}
-                className="pressable flex-1 rounded-[12px] py-2.5 text-[15px] font-semibold text-white active:pressable-active"
-                style={{ background: 'var(--accent)' }}
-              >
-                Перейти
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 }
