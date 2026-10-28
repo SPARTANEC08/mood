@@ -55,6 +55,8 @@ export function PdfViewerScreen({
   const [aspect, setAspect] = useState(1.414);
   const [progress, setProgress] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [jumpOpen, setJumpOpen] = useState(false);
+  const [jumpValue, setJumpValue] = useState('1');
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -313,6 +315,14 @@ export function PdfViewerScreen({
     scrollRef.current?.scrollTo({ top: 0, left: 0 });
   }
 
+  function submitJump(): void {
+    const parsed = Number.parseInt(jumpValue, 10);
+    if (!Number.isFinite(parsed)) return;
+
+    goToPage(parsed);
+    setJumpOpen(false);
+  }
+
   const pageWidth = Math.round(baseWidth * zoom);
   const pageHeight = Math.round(pageWidth * aspect);
 
@@ -476,9 +486,19 @@ export function PdfViewerScreen({
               Назад
             </button>
 
-            <span className="text-[12px] font-semibold" style={{ color: 'var(--text-secondary)' }}>
+            <button
+              type="button"
+              aria-label="Перейти к странице"
+              onClick={() => {
+                haptic('light');
+                setJumpValue(String(pageNumber));
+                setJumpOpen(true);
+              }}
+              className="pressable rounded-full px-3 py-2 text-[12px] font-semibold active:pressable-active"
+              style={{ background: 'var(--surface-grouped)', color: 'var(--text-primary)' }}
+            >
               {pageNumber} / {pages}
-            </span>
+            </button>
 
             <button
               type="button"
@@ -493,6 +513,70 @@ export function PdfViewerScreen({
             </button>
           </div>
         </footer>
+      ) : null}
+
+      {jumpOpen ? (
+        <div className="fixed inset-0 z-[95] flex items-center justify-center bg-black/50 px-5">
+          <div className="surface w-full max-w-[340px] rounded-[18px] p-4">
+            <h2 className="text-[17px] font-semibold">Перейти к странице</h2>
+            <p className="mt-1 text-[12px]" style={{ color: 'var(--text-secondary)' }}>
+              Всего {pages} стр.
+            </p>
+
+            <input
+              type="number"
+              inputMode="numeric"
+              min={1}
+              max={pages}
+              value={jumpValue}
+              onChange={(event) => setJumpValue(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') submitJump();
+              }}
+              className="mt-3 w-full rounded-[11px] px-3 py-2.5 text-[18px] font-semibold outline-none"
+              style={{ background: 'var(--surface-grouped)', color: 'var(--text-primary)' }}
+              autoFocus
+            />
+
+            <div className="mt-2 flex gap-2">
+              <button
+                type="button"
+                onClick={() => goToPage(1)}
+                className="pressable flex-1 rounded-[10px] py-2 text-[12px] font-semibold active:pressable-active"
+                style={{ background: 'var(--surface-grouped)', color: 'var(--accent)' }}
+              >
+                В начало
+              </button>
+              <button
+                type="button"
+                onClick={() => goToPage(pages)}
+                className="pressable flex-1 rounded-[10px] py-2 text-[12px] font-semibold active:pressable-active"
+                style={{ background: 'var(--surface-grouped)', color: 'var(--accent)' }}
+              >
+                В конец
+              </button>
+            </div>
+
+            <div className="mt-3 flex gap-2">
+              <button
+                type="button"
+                onClick={() => setJumpOpen(false)}
+                className="pressable flex-1 rounded-[12px] py-2.5 text-[15px] font-semibold active:pressable-active"
+                style={{ background: 'var(--surface-grouped)', color: 'var(--text-primary)' }}
+              >
+                Отмена
+              </button>
+              <button
+                type="button"
+                onClick={submitJump}
+                className="pressable flex-1 rounded-[12px] py-2.5 text-[15px] font-semibold text-white active:pressable-active"
+                style={{ background: 'var(--accent)' }}
+              >
+                Перейти
+              </button>
+            </div>
+          </div>
+        </div>
       ) : null}
     </div>
   );
