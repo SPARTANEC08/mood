@@ -39,6 +39,7 @@ import {
 } from '../../../db/storage/fileStore.ts';
 import { homeworkStore } from '../../../db/storage/homeworkStore.ts';
 import { importantStore } from '../../../db/storage/importantStore.ts';
+import type { StoredUser } from '../../../db/storage/userStore.ts';
 import { requireBars, requireUser } from '../middleware/auth.ts';
 import { requireStudentGroup } from './studentContext.ts';
 
@@ -153,6 +154,36 @@ function sendUploadError(reply: FastifyReply, err: unknown): FastifyReply {
   }
 
   return null;
+}
+
+/**
+ * Файл, который пользователь имеет право читать.
+ *
+ * Сначала свой каталог, затем — файлы, прикреплённые к записям его группы.
+ * Раньше здесь был только `getFile(student.userId, fileId)`, и вложения
+ * одногруппников не открывались ни у кого, кроме загрузившего: файл лежит в
+ * каталоге автора, а не запрашивающего. Для чтения владельцем считается
+ * `uploadedBy` из ссылки на файл, но только если файл реально привязан к
+ * записи группы.
+ */
+type StoredFile = NonNullable<Awaited<ReturnType<typeof getFile>>>;
+
+async function resolveReadableFile(
+  student: StoredUser,
+  fileId: string,
+): Promise<{ ownerId: string; found: StoredFile } | null> {
+  const own = await getFile(student.userId, fileId);
+  if (own) return { ownerId: student.userId, found: own };
+
+  const groupName = (student.groupName ?? student.studentProfile?.groupName ?? '').trim();
+  if (!groupName) return null;
+
+  const referenced = findAccessibleFile(groupName, fileId);
+  const ownerId = referenced?.file.uploadedBy;
+  if (!ownerId) return null;
+
+  const found = await getFile(ownerId, fileId);
+  return found ? { ownerId, found } : null;
 }
 
 /**
@@ -299,7 +330,8 @@ export async function registerFileRoutes(app: FastifyInstance): Promise<void> {
    * POST /api/files/:fileId/share — короткоживущая ссылка на файл для открытия
    * в Safari из standalone-PWA.
    *
-   * Авторизация обычная (PWA-токен): ссылку выдаём только владельцу файла.
+   * Авторизация обычная (PWA-токен): ссылку выдаёт любой, кому файл доступен
+   * по группе; токен хранит каталог автора.
    * Возвращаем путь, а не абсолютный URL: клиент достраивает его от своего
    * origin, поэтому ссылка всегда ведёт на тот же домен, что и приложение.
    */
@@ -312,12 +344,14 @@ export async function registerFileRoutes(app: FastifyInstance): Promise<void> {
     const body = (request.body ?? {}) as { download?: unknown };
     const disposition = body.download === true ? 'attachment' : 'inline';
 
-    const found = await getFile(student.userId, fileId);
-    if (!found) {
+    const resolved = await resolveReadableFile(student, fileId);
+    if (!resolved) {
       return reply.code(404).send({ error: 'not_found', message: 'Файл не найден.' });
     }
 
-    const { token, expiresAt } = createShareToken(student.userId, fileId, disposition);
+    // Токен хранит владельца каталога, а не запрашивающего: при выдаче по
+    // ссылке файл ищется в каталоге автора.
+    const { token, expiresAt } = createShareToken(resolved.ownerId, fileId, disposition);
     return reply.send({ path: `/api/files/share/${token}`, expiresAt, disposition });
   });
 
@@ -436,13 +470,13 @@ export async function registerFileRoutes(app: FastifyInstance): Promise<void> {
     const student = requireUser(request);
     const { fileId } = request.params as { fileId: string };
 
-    const found = await getFile(student.userId, fileId);
+    const resolved = await resolveReadableFile(student, fileId);
 
-    if (!found) {
+    if (!resolved) {
       return reply.code(404).send({ error: 'not_found', message: 'Файл не найден.' });
     }
 
-    return sendFile(reply, found, 'attachment', request.headers.range);
+    return sendFile(reply, resolved.found, 'attachment', request.headers.range);
   });
 
   /**
@@ -452,8 +486,8 @@ export async function registerFileRoutes(app: FastifyInstance): Promise<void> {
    * занимает пол-экрана. Превю в 800 пикселей — это десятки килобайт вместо
    * мегабайтов, и лента перестаёт ждать сеть.
    *
-   * Авторизация та же, что у скачивания (requireUser): файл принадлежит
-   * владельцу, превью лежит в его же каталоге.
+   * Авторизация та же, что у скачивания: свой файл или вложение записи
+   * группы. Превью строится в каталоге автора файла.
    *
    * Отказов три, и все они означают одно и то же для клиента — «бери
    * оригинал»: 404 (файла нет), 415 (это не изображение, например PDF) и 503
@@ -464,12 +498,12 @@ export async function registerFileRoutes(app: FastifyInstance): Promise<void> {
     const { fileId } = request.params as { fileId: string };
     const { width } = request.query as { width?: string; w?: string };
 
-    const found = await getFile(student.userId, fileId);
-    if (!found) {
+    const resolved = await resolveReadableFile(student, fileId);
+    if (!resolved) {
       return reply.code(404).send({ error: 'not_found', message: 'Файл не найден.' });
     }
 
-    if (!isPreviewable(found.meta.mimeType)) {
+    if (!isPreviewable(resolved.found.meta.mimeType)) {
       return reply.code(415).send({
         error: 'not_previewable',
         message: 'Для этого типа файла превью не делается.',
@@ -479,7 +513,7 @@ export async function registerFileRoutes(app: FastifyInstance): Promise<void> {
     const size = normalizePreviewWidth(width ?? (request.query as { w?: string }).w);
 
     try {
-      const { path: preview, cached } = await getPreview(student.userId, fileId, size);
+      const { path: preview, cached } = await getPreview(resolved.ownerId, fileId, size);
 
       reply.header('Content-Type', 'image/jpeg');
       reply.header('Cache-Control', 'private, max-age=31536000, immutable');
@@ -508,13 +542,13 @@ export async function registerFileRoutes(app: FastifyInstance): Promise<void> {
     const student = requireUser(request);
     const { fileId } = request.params as { fileId: string };
 
-    const found = await getFile(student.userId, fileId);
+    const resolved = await resolveReadableFile(student, fileId);
 
-    if (!found) {
+    if (!resolved) {
       return reply.code(404).send({ error: 'not_found', message: 'Файл не найден.' });
     }
 
-    return reply.send({ file: found.meta });
+    return reply.send({ file: resolved.found.meta });
   });
 
   /**
