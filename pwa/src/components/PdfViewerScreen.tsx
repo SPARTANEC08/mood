@@ -14,7 +14,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Download, Loader2 } from 'lucide-react';
+import { ArrowLeft, Download, Loader2, ZoomIn, ZoomOut } from 'lucide-react';
 
 import { api } from '@/lib/api';
 import { haptic } from '@/lib/env';
@@ -48,6 +48,12 @@ function PdfPage({
   const [visible, setVisible] = useState(false);
   const [height, setHeight] = useState(estimatedHeight);
   const [failed, setFailed] = useState(false);
+
+  // При смене масштаба placeholder должен сразу получить новую высоту,
+  // иначе страницы «прыгают» и скролл уезжает.
+  useEffect(() => {
+    setHeight(estimatedHeight);
+  }, [estimatedHeight]);
 
   useEffect(() => {
     const holder = holderRef.current;
@@ -149,20 +155,21 @@ export function PdfViewerScreen({
 }) {
   const [doc, setDoc] = useState<PdfDocument | null>(null);
   const [pages, setPages] = useState(0);
-  const [pageWidth, setPageWidth] = useState(contentWidth());
-  const [pageHeight, setPageHeight] = useState(Math.round(contentWidth() * 1.414));
+  const [baseWidth, setBaseWidth] = useState(contentWidth());
+  /** Отношение высоты первой страницы к ширине: пропорции placeholder-ов. */
+  const [aspect, setAspect] = useState(1.414);
+  const [zoom, setZoom] = useState(1);
   const [progress, setProgress] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const onResize = () => {
-      const width = contentWidth();
-      setPageWidth(width);
-      setPageHeight(Math.round(width * 1.414));
-    };
+    const onResize = () => setBaseWidth(contentWidth());
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
   }, []);
+
+  const pageWidth = Math.round(baseWidth * zoom);
+  const pageHeight = Math.round(pageWidth * aspect);
 
   useEffect(() => {
     let cancelled = false;
@@ -203,9 +210,7 @@ export function PdfViewerScreen({
         // Размер первой страницы задаёт пропорции placeholder-ов.
         const first = await loadedDoc.getPage(1);
         const base = first.getViewport({ scale: 1 });
-        const width = contentWidth();
-        setPageWidth(width);
-        setPageHeight(Math.round((width / base.width) * base.height));
+        setAspect(base.height / base.width);
         setPages(loadedDoc.numPages);
         setDoc(loadedDoc);
         setProgress(null);
@@ -259,6 +264,40 @@ export function PdfViewerScreen({
             </p>
           </div>
 
+          <div className="flex shrink-0 items-center gap-0.5">
+            <button
+              type="button"
+              aria-label="Уменьшить"
+              disabled={zoom <= 1}
+              onClick={() => setZoom((value) => Math.max(1, Math.round((value - 0.25) * 100) / 100))}
+              className="pressable rounded-full p-1.5 active:pressable-active disabled:opacity-30"
+              style={{ color: 'var(--accent)' }}
+            >
+              <ZoomOut size={18} aria-hidden />
+            </button>
+
+            <button
+              type="button"
+              aria-label="Сбросить масштаб"
+              onClick={() => setZoom(1)}
+              className="pressable min-w-[42px] rounded-full px-1 py-1 text-[11px] font-semibold active:pressable-active"
+              style={{ color: 'var(--text-secondary)' }}
+            >
+              {Math.round(zoom * 100)}%
+            </button>
+
+            <button
+              type="button"
+              aria-label="Увеличить"
+              disabled={zoom >= 3}
+              onClick={() => setZoom((value) => Math.min(3, Math.round((value + 0.25) * 100) / 100))}
+              className="pressable rounded-full p-1.5 active:pressable-active disabled:opacity-30"
+              style={{ color: 'var(--accent)' }}
+            >
+              <ZoomIn size={18} aria-hidden />
+            </button>
+          </div>
+
           {onFallback ? (
             <button
               type="button"
@@ -276,8 +315,9 @@ export function PdfViewerScreen({
         </div>
       </header>
 
-      <div className="scroll-hidden min-h-0 flex-1 overflow-y-auto overscroll-contain">
-        <div className="mx-auto max-w-[560px] space-y-3 px-3 pb-8 pt-2">
+      <div className="scroll-hidden min-h-0 flex-1 overflow-auto overscroll-contain">
+        <div className="mx-auto space-y-3 px-3 pb-8 pt-2" style={{ width: pageWidth + 24 }}>
+
           {error ? (
             <div className="surface rounded-[14px] px-4 py-5 text-center">
               <p className="text-[14px]" style={{ color: 'var(--danger)' }}>
