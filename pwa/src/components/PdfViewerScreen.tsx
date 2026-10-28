@@ -1,20 +1,16 @@
 /**
  * Встроенный просмотр PDF для Android.
  *
- * Зачем свой вьюер. На Android Chrome/TWA не рисует PDF внутри вкладки, а
- * скачивание в TWA часто заканчивается файлом, который негде открыть. Поэтому
- * на Android PDF рендерится здесь же: pdf.js → canvas, без внешнего браузера и
- * без скачивания.
+ * Постраничный режим. Причина — зум: если в DOM лежат 91 страница и менять их
+ * ширину на каждый жест, браузер пересчитывает высоты всех страниц, и скролл
+ * улетает с 10-й на 100-ю. Здесь рендерится одна страница: зум — это transform
+ * поверх canvas во время жеста и один пересчёт после его окончания.
  *
- * iOS не трогаем: там системный просмотрщик Safari работает штатно и даёт
- * «Поделиться», зум и закрытие.
- *
- * Страницы рендерятся лениво: в тестовом PDF 91 страница, и рисовать их все
- * сразу на телефоне — верный способ получить фриз и out of memory.
+ * iOS не трогаем: там системный просмотрщик Safari.
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Download, Loader2, ZoomIn, ZoomOut } from 'lucide-react';
+import { ArrowLeft, ChevronLeft, ChevronRight, Download, Loader2, ZoomIn, ZoomOut } from 'lucide-react';
 
 import { api } from '@/lib/api';
 import { haptic } from '@/lib/env';
@@ -26,118 +22,15 @@ type PdfDocument = import('pdfjs-dist').PDFDocumentProxy;
 
 const MAX_WIDTH = 560;
 const PAGE_MARGIN = 24;
+const MIN_ZOOM = 1;
+const MAX_ZOOM = 3;
 
 function contentWidth(): number {
   return Math.max(240, Math.min(MAX_WIDTH, window.innerWidth) - PAGE_MARGIN);
 }
 
-/** Одна страница: серый placeholder, пока не попала в поле зрения. */
-function PdfPage({
-  doc,
-  pageNumber,
-  width,
-  estimatedHeight,
-}: {
-  doc: PdfDocument;
-  pageNumber: number;
-  width: number;
-  estimatedHeight: number;
-}) {
-  const holderRef = useRef<HTMLDivElement | null>(null);
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const [visible, setVisible] = useState(false);
-  const [height, setHeight] = useState(estimatedHeight);
-  const [failed, setFailed] = useState(false);
-
-  // При смене масштаба placeholder должен сразу получить новую высоту,
-  // иначе страницы «прыгают» и скролл уезжает.
-  useEffect(() => {
-    setHeight(estimatedHeight);
-  }, [estimatedHeight]);
-
-  useEffect(() => {
-    const holder = holderRef.current;
-    if (!holder) return;
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((entry) => entry.isIntersecting)) {
-          setVisible(true);
-          observer.disconnect();
-        }
-      },
-      { rootMargin: '800px 0px' },
-    );
-
-    observer.observe(holder);
-    return () => observer.disconnect();
-  }, []);
-
-  useEffect(() => {
-    if (!visible) return;
-
-    let cancelled = false;
-    let task: { cancel: () => void } | null = null;
-
-    void (async () => {
-      try {
-        const page = await doc.getPage(pageNumber);
-        if (cancelled) return;
-
-        const base = page.getViewport({ scale: 1 });
-        const scale = width / base.width;
-        const viewport = page.getViewport({ scale });
-        setHeight(viewport.height);
-
-        const canvas = canvasRef.current;
-        if (!canvas) return;
-
-        const dpr = Math.min(2, window.devicePixelRatio || 1);
-        canvas.width = Math.floor(viewport.width * dpr);
-        canvas.height = Math.floor(viewport.height * dpr);
-        canvas.style.width = `${viewport.width}px`;
-        canvas.style.height = `${viewport.height}px`;
-
-        const context = canvas.getContext('2d');
-        if (!context) return;
-
-        context.scale(dpr, dpr);
-        task = page.render({ canvasContext: context, viewport });
-        await (task as unknown as { promise: Promise<void> }).promise;
-      } catch {
-        if (!cancelled) setFailed(true);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-      task?.cancel();
-    };
-  }, [visible, doc, pageNumber, width]);
-
-  return (
-    <div
-      ref={holderRef}
-      className="mx-auto overflow-hidden rounded-[6px] bg-white shadow-sm"
-      style={{ width, height }}
-    >
-      {visible && !failed ? (
-        <canvas ref={canvasRef} className="block" />
-      ) : (
-        <div className="flex h-full items-center justify-center">
-          {failed ? (
-            <span className="text-[12px]" style={{ color: 'var(--text-tertiary)' }}>
-              Страница не отрисовалась
-            </span>
-          ) : (
-            <span className="text-[12px]" style={{ color: 'var(--text-tertiary)' }}>
-              Страница {pageNumber}
-            </span>
-          )}
-        </div>
-      )}
-    </div>
-  );
+function clampZoom(value: number): number {
+  return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, value));
 }
 
 export function PdfViewerScreen({
@@ -155,94 +48,32 @@ export function PdfViewerScreen({
 }) {
   const [doc, setDoc] = useState<PdfDocument | null>(null);
   const [pages, setPages] = useState(0);
-  const [baseWidth, setBaseWidth] = useState(contentWidth());
-  /** Отношение высоты первой страницы к ширине: пропорции placeholder-ов. */
-  const [aspect, setAspect] = useState(1.414);
+  const [pageNumber, setPageNumber] = useState(1);
   const [zoom, setZoom] = useState(1);
+  const [previewScale, setPreviewScale] = useState(1);
+  const [baseWidth, setBaseWidth] = useState(contentWidth());
+  const [aspect, setAspect] = useState(1.414);
   const [progress, setProgress] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const zoomRef = useRef(1);
-  const pinchRef = useRef<{ startDistance: number; startZoom: number; lastZoom: number } | null>(null);
-  const rafRef = useRef<number | null>(null);
+  const previewScaleRef = useRef(1);
+  const pagesRef = useRef(0);
+  const scrollRatioRef = useRef<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
     zoomRef.current = zoom;
   }, [zoom]);
 
-  /*
-   * Pinch-to-zoom. Слушатели вешаем нативно и с passive:false: React-обработчик
-   * touchmove не даёт гарантии, что браузер не начнёт свой зум/скролл, а нам
-   * нужно полностью забрать жест двумя пальцами себе.
-   *
-   * Обновление масштаба через requestAnimationFrame: touchmove приходит
-   * десятки раз в секунду, и setState на каждое событие перерисовывал бы все
-   * placeholder-ы страниц.
-   */
   useEffect(() => {
-    const element = scrollRef.current;
-    if (!element) return;
+    previewScaleRef.current = previewScale;
+  }, [previewScale]);
 
-    const distance = (touches: TouchList): number => {
-      const [a, b] = [touches[0], touches[1]];
-      if (!a || !b) return 0;
-      return Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
-    };
-
-    const clamp = (value: number): number => Math.min(3, Math.max(1, value));
-
-    const onStart = (event: TouchEvent): void => {
-      if (event.touches.length !== 2) return;
-      event.preventDefault();
-      pinchRef.current = {
-        startDistance: distance(event.touches),
-        startZoom: zoomRef.current,
-        lastZoom: zoomRef.current,
-      };
-    };
-
-    const onMove = (event: TouchEvent): void => {
-      const pinch = pinchRef.current;
-      if (!pinch || event.touches.length !== 2) return;
-
-      event.preventDefault();
-      const current = distance(event.touches);
-      if (pinch.startDistance <= 0) return;
-
-      pinch.lastZoom = clamp(pinch.startZoom * (current / pinch.startDistance));
-
-      if (rafRef.current !== null) return;
-      rafRef.current = window.requestAnimationFrame(() => {
-        rafRef.current = null;
-        if (pinchRef.current) setZoom(pinchRef.current.lastZoom);
-      });
-    };
-
-    const onEnd = (event: TouchEvent): void => {
-      if (!pinchRef.current || event.touches.length >= 2) return;
-
-      if (rafRef.current !== null) {
-        window.cancelAnimationFrame(rafRef.current);
-        rafRef.current = null;
-      }
-      setZoom(pinchRef.current.lastZoom);
-      pinchRef.current = null;
-    };
-
-    element.addEventListener('touchstart', onStart, { passive: false });
-    element.addEventListener('touchmove', onMove, { passive: false });
-    element.addEventListener('touchend', onEnd, { passive: true });
-    element.addEventListener('touchcancel', onEnd, { passive: true });
-
-    return () => {
-      element.removeEventListener('touchstart', onStart);
-      element.removeEventListener('touchmove', onMove);
-      element.removeEventListener('touchend', onEnd);
-      element.removeEventListener('touchcancel', onEnd);
-      if (rafRef.current !== null) window.cancelAnimationFrame(rafRef.current);
-    };
-  }, []);
+  useEffect(() => {
+    pagesRef.current = pages;
+  }, [pages]);
 
   useEffect(() => {
     const onResize = () => setBaseWidth(contentWidth());
@@ -250,8 +81,7 @@ export function PdfViewerScreen({
     return () => window.removeEventListener('resize', onResize);
   }, []);
 
-  const pageWidth = Math.round(baseWidth * zoom);
-  const pageHeight = Math.round(pageWidth * aspect);
+  /* ── загрузка документа ─────────────────────────────────────────────── */
 
   useEffect(() => {
     let cancelled = false;
@@ -277,8 +107,7 @@ export function PdfViewerScreen({
         if (cancelled) return;
 
         const module = await import('pdfjs-dist/legacy/build/pdf');
-        // Vite/Rolldown отдают CJS-пакет как { default: api }: без этой
-        // развилки GlobalWorkerOptions/getDocument оказываются не там.
+        // Vite/Rolldown отдают CJS-пакет как { default: api }.
         const pdfjs = ((module as unknown as { default?: typeof module }).default ??
           module) as typeof module;
         pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
@@ -289,7 +118,6 @@ export function PdfViewerScreen({
           return;
         }
 
-        // Размер первой страницы задаёт пропорции placeholder-ов.
         const first = await loadedDoc.getPage(1);
         const base = first.getViewport({ scale: 1 });
         setAspect(base.height / base.width);
@@ -312,10 +140,181 @@ export function PdfViewerScreen({
     };
   }, [file.fileId, srcUrl]);
 
+  /* ── рендер одной страницы ──────────────────────────────────────────── */
+
+  useEffect(() => {
+    const pdfDoc = doc;
+    const canvas = canvasRef.current;
+    if (!pdfDoc || !canvas) return;
+
+    let cancelled = false;
+    let task: { cancel: () => void } | null = null;
+
+    void (async () => {
+      try {
+        const page = await pdfDoc.getPage(pageNumber);
+        if (cancelled) return;
+
+        const base = page.getViewport({ scale: 1 });
+        const targetWidth = Math.round(baseWidth * zoom);
+        const viewport = page.getViewport({ scale: targetWidth / base.width });
+        setAspect(base.height / base.width);
+
+        const dpr = Math.min(2, window.devicePixelRatio || 1);
+        canvas.width = Math.floor(viewport.width * dpr);
+        canvas.height = Math.floor(viewport.height * dpr);
+        canvas.style.width = `${viewport.width}px`;
+        canvas.style.height = `${viewport.height}px`;
+
+        const context = canvas.getContext('2d');
+        if (!context) return;
+
+        context.scale(dpr, dpr);
+        task = page.render({ canvasContext: context, viewport });
+        await (task as unknown as { promise: Promise<void> }).promise;
+
+        // После смены масштаба возвращаем центр страницы туда, где он был.
+        const ratio = scrollRatioRef.current;
+        const scroller = scrollRef.current;
+        if (ratio && scroller) {
+          requestAnimationFrame(() => {
+            scroller.scrollLeft = ratio.x * scroller.scrollWidth - scroller.clientWidth / 2;
+            scroller.scrollTop = ratio.y * scroller.scrollHeight - scroller.clientHeight / 2;
+            scrollRatioRef.current = null;
+          });
+        }
+      } catch {
+        if (!cancelled) setError('Страница не отрисовалась. Попробуйте ещё раз.');
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      task?.cancel();
+    };
+  }, [doc, pageNumber, zoom, baseWidth]);
+
+  /* ── жесты: pinch-zoom и свайп между страницами ─────────────────────── */
+
+  useEffect(() => {
+    const element = scrollRef.current;
+    if (!element) return;
+
+    let pinch: { distance: number; zoom: number } | null = null;
+    let swipe: { x: number; y: number; at: number } | null = null;
+    let pinched = false;
+
+    const distance = (touches: TouchList): number => {
+      const [a, b] = [touches[0], touches[1]];
+      if (!a || !b) return 0;
+      return Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+    };
+
+    const onStart = (event: TouchEvent): void => {
+      pinched = false;
+
+      if (event.touches.length === 2) {
+        pinch = { distance: distance(event.touches), zoom: zoomRef.current };
+        event.preventDefault();
+        return;
+      }
+
+      if (event.touches.length === 1) {
+        const touch = event.touches[0]!;
+        swipe = { x: touch.clientX, y: touch.clientY, at: Date.now() };
+      }
+    };
+
+    const onMove = (event: TouchEvent): void => {
+      if (!pinch || event.touches.length !== 2) return;
+
+      event.preventDefault();
+      pinched = true;
+      const current = distance(event.touches);
+      if (pinch.distance <= 0) return;
+
+      const target = clampZoom(pinch.zoom * (current / pinch.distance));
+      setPreviewScale(target / zoomRef.current);
+    };
+
+    const onEnd = (event: TouchEvent): void => {
+      if (pinch) {
+        if (event.touches.length >= 2) return;
+
+        const scroller = scrollRef.current;
+        if (scroller) {
+          scrollRatioRef.current = {
+            x: (scroller.scrollLeft + scroller.clientWidth / 2) / Math.max(1, scroller.scrollWidth),
+            y: (scroller.scrollTop + scroller.clientHeight / 2) / Math.max(1, scroller.scrollHeight),
+          };
+        }
+
+        const ratio = previewScaleRef.current;
+        pinch = null;
+        setPreviewScale(1);
+        setZoom((value) => clampZoom(value * ratio));
+        return;
+      }
+
+      // Свайп между страницами — только без зума и без pinch.
+      if (!swipe || pinched || zoomRef.current > 1) {
+        swipe = null;
+        return;
+      }
+
+      const touch = event.changedTouches[0];
+      if (!touch) return;
+
+      const dx = touch.clientX - swipe.x;
+      const dy = touch.clientY - swipe.y;
+      const elapsed = Date.now() - swipe.at;
+      swipe = null;
+
+      if (elapsed > 700) return;
+      if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+
+      if (dx < 0) setPageNumber((value) => Math.min(pagesRef.current, value + 1));
+      else setPageNumber((value) => Math.max(1, value - 1));
+      scrollRef.current?.scrollTo({ top: 0, left: 0 });
+    };
+
+    element.addEventListener('touchstart', onStart, { passive: false });
+    element.addEventListener('touchmove', onMove, { passive: false });
+    element.addEventListener('touchend', onEnd, { passive: true });
+    element.addEventListener('touchcancel', onEnd, { passive: true });
+
+    return () => {
+      element.removeEventListener('touchstart', onStart);
+      element.removeEventListener('touchmove', onMove);
+      element.removeEventListener('touchend', onEnd);
+      element.removeEventListener('touchcancel', onEnd);
+    };
+  }, []);
+
   const close = useCallback(() => {
     haptic('light');
     onClose();
   }, [onClose]);
+
+  function changeZoom(next: number): void {
+    const scroller = scrollRef.current;
+    if (scroller) {
+      scrollRatioRef.current = {
+        x: (scroller.scrollLeft + scroller.clientWidth / 2) / Math.max(1, scroller.scrollWidth),
+        y: (scroller.scrollTop + scroller.clientHeight / 2) / Math.max(1, scroller.scrollHeight),
+      };
+    }
+    setZoom(clampZoom(next));
+  }
+
+  function goToPage(next: number): void {
+    haptic('light');
+    setPageNumber(Math.min(pages, Math.max(1, next)));
+    scrollRef.current?.scrollTo({ top: 0, left: 0 });
+  }
+
+  const pageWidth = Math.round(baseWidth * zoom);
+  const pageHeight = Math.round(pageWidth * aspect);
 
   return (
     <div
@@ -340,9 +339,9 @@ export function PdfViewerScreen({
           </button>
 
           <div className="min-w-0 flex-1">
-            <p className="truncate text-[16px] font-semibold leading-tight">{file.originalName}</p>
+            <p className="truncate text-[15px] font-semibold leading-tight">{file.originalName}</p>
             <p className="text-[11px]" style={{ color: 'var(--text-tertiary)' }}>
-              {pages > 0 ? `${pages} стр.` : 'PDF'}
+              {pages > 0 ? `${pageNumber} / ${pages}` : 'PDF'}
             </p>
           </div>
 
@@ -350,8 +349,8 @@ export function PdfViewerScreen({
             <button
               type="button"
               aria-label="Уменьшить"
-              disabled={zoom <= 1}
-              onClick={() => setZoom((value) => Math.max(1, Math.round((value - 0.25) * 100) / 100))}
+              disabled={zoom <= MIN_ZOOM}
+              onClick={() => changeZoom(zoom - 0.25)}
               className="pressable rounded-full p-1.5 active:pressable-active disabled:opacity-30"
               style={{ color: 'var(--accent)' }}
             >
@@ -361,7 +360,7 @@ export function PdfViewerScreen({
             <button
               type="button"
               aria-label="Сбросить масштаб"
-              onClick={() => setZoom(1)}
+              onClick={() => changeZoom(1)}
               className="pressable min-w-[42px] rounded-full px-1 py-1 text-[11px] font-semibold active:pressable-active"
               style={{ color: 'var(--text-secondary)' }}
             >
@@ -371,8 +370,8 @@ export function PdfViewerScreen({
             <button
               type="button"
               aria-label="Увеличить"
-              disabled={zoom >= 3}
-              onClick={() => setZoom((value) => Math.min(3, Math.round((value + 0.25) * 100) / 100))}
+              disabled={zoom >= MAX_ZOOM}
+              onClick={() => changeZoom(zoom + 0.25)}
               className="pressable rounded-full p-1.5 active:pressable-active disabled:opacity-30"
               style={{ color: 'var(--accent)' }}
             >
@@ -402,10 +401,9 @@ export function PdfViewerScreen({
         className="scroll-hidden min-h-0 flex-1 overflow-auto overscroll-contain"
         style={{ touchAction: 'pan-x pan-y' }}
       >
-        <div className="mx-auto space-y-3 px-3 pb-8 pt-2" style={{ width: pageWidth + 24 }}>
-
+        <div className="flex min-h-full items-start justify-center px-3 py-2">
           {error ? (
-            <div className="surface rounded-[14px] px-4 py-5 text-center">
+            <div className="surface w-full max-w-[420px] rounded-[14px] px-4 py-5 text-center">
               <p className="text-[14px]" style={{ color: 'var(--danger)' }}>
                 {error}
               </p>
@@ -430,39 +428,72 @@ export function PdfViewerScreen({
                 </button>
               </div>
             </div>
-          ) : null}
-
-          {!error && progress !== null ? (
-            <div className="surface rounded-[14px] px-4 py-6 text-center">
+          ) : progress !== null ? (
+            <div className="surface w-full max-w-[420px] rounded-[14px] px-4 py-6 text-center">
               <Loader2 size={22} className="mx-auto animate-spin" style={{ color: 'var(--accent)' }} aria-hidden />
               <p className="mt-2 text-[13px]" style={{ color: 'var(--text-secondary)' }}>
                 Загрузка PDF… {progress}%
               </p>
             </div>
-          ) : null}
-
-          {!error && progress === null && !doc ? (
-            <div className="surface rounded-[14px] px-4 py-6 text-center">
+          ) : !doc ? (
+            <div className="surface w-full max-w-[420px] rounded-[14px] px-4 py-6 text-center">
               <Loader2 size={22} className="mx-auto animate-spin" style={{ color: 'var(--accent)' }} aria-hidden />
               <p className="mt-2 text-[13px]" style={{ color: 'var(--text-secondary)' }}>
                 Открываем PDF…
               </p>
             </div>
-          ) : null}
-
-          {doc
-            ? Array.from({ length: pages }, (_, index) => (
-                <PdfPage
-                  key={index + 1}
-                  doc={doc}
-                  pageNumber={index + 1}
-                  width={pageWidth}
-                  estimatedHeight={pageHeight}
-                />
-              ))
-            : null}
+          ) : (
+            <div
+              className="origin-top bg-white shadow-sm"
+              style={{
+                width: pageWidth,
+                height: pageHeight,
+                transform: `scale(${previewScale})`,
+                transition: previewScale === 1 ? 'transform 120ms ease-out' : 'none',
+              }}
+            >
+              <canvas ref={canvasRef} className="block" />
+            </div>
+          )}
         </div>
       </div>
+
+      {doc && pages > 1 ? (
+        <footer
+          className="shrink-0 border-t px-4 pb-[calc(env(safe-area-inset-bottom)+8px)] pt-2"
+          style={{ borderColor: 'var(--separator-soft)', background: 'var(--app-bg)' }}
+        >
+          <div className="mx-auto flex max-w-[560px] items-center justify-between">
+            <button
+              type="button"
+              aria-label="Предыдущая страница"
+              disabled={pageNumber <= 1}
+              onClick={() => goToPage(pageNumber - 1)}
+              className="pressable flex items-center gap-1 rounded-full px-3 py-2 text-[13px] font-semibold active:pressable-active disabled:opacity-30"
+              style={{ color: 'var(--accent)' }}
+            >
+              <ChevronLeft size={18} aria-hidden />
+              Назад
+            </button>
+
+            <span className="text-[12px] font-semibold" style={{ color: 'var(--text-secondary)' }}>
+              {pageNumber} / {pages}
+            </span>
+
+            <button
+              type="button"
+              aria-label="Следующая страница"
+              disabled={pageNumber >= pages}
+              onClick={() => goToPage(pageNumber + 1)}
+              className="pressable flex items-center gap-1 rounded-full px-3 py-2 text-[13px] font-semibold active:pressable-active disabled:opacity-30"
+              style={{ color: 'var(--accent)' }}
+            >
+              Вперёд
+              <ChevronRight size={18} aria-hidden />
+            </button>
+          </div>
+        </footer>
+      ) : null}
     </div>
   );
 }
