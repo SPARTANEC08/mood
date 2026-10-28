@@ -292,7 +292,7 @@ export function PdfViewerScreen({
               minScale={MIN_ZOOM}
               maxScale={MAX_ZOOM}
               centerOnInit
-              limitToBounds={false}
+              limitToBounds
               doubleClick={{ mode: 'toggle', step: 0.7 }}
               wheel={{ step: 0.1 }}
               pinch={{ step: 5 }}
