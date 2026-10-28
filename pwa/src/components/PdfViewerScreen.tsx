@@ -162,6 +162,88 @@ export function PdfViewerScreen({
   const [progress, setProgress] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const zoomRef = useRef(1);
+  const pinchRef = useRef<{ startDistance: number; startZoom: number; lastZoom: number } | null>(null);
+  const rafRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    zoomRef.current = zoom;
+  }, [zoom]);
+
+  /*
+   * Pinch-to-zoom. Слушатели вешаем нативно и с passive:false: React-обработчик
+   * touchmove не даёт гарантии, что браузер не начнёт свой зум/скролл, а нам
+   * нужно полностью забрать жест двумя пальцами себе.
+   *
+   * Обновление масштаба через requestAnimationFrame: touchmove приходит
+   * десятки раз в секунду, и setState на каждое событие перерисовывал бы все
+   * placeholder-ы страниц.
+   */
+  useEffect(() => {
+    const element = scrollRef.current;
+    if (!element) return;
+
+    const distance = (touches: TouchList): number => {
+      const [a, b] = [touches[0], touches[1]];
+      if (!a || !b) return 0;
+      return Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+    };
+
+    const clamp = (value: number): number => Math.min(3, Math.max(1, value));
+
+    const onStart = (event: TouchEvent): void => {
+      if (event.touches.length !== 2) return;
+      event.preventDefault();
+      pinchRef.current = {
+        startDistance: distance(event.touches),
+        startZoom: zoomRef.current,
+        lastZoom: zoomRef.current,
+      };
+    };
+
+    const onMove = (event: TouchEvent): void => {
+      const pinch = pinchRef.current;
+      if (!pinch || event.touches.length !== 2) return;
+
+      event.preventDefault();
+      const current = distance(event.touches);
+      if (pinch.startDistance <= 0) return;
+
+      pinch.lastZoom = clamp(pinch.startZoom * (current / pinch.startDistance));
+
+      if (rafRef.current !== null) return;
+      rafRef.current = window.requestAnimationFrame(() => {
+        rafRef.current = null;
+        if (pinchRef.current) setZoom(pinchRef.current.lastZoom);
+      });
+    };
+
+    const onEnd = (event: TouchEvent): void => {
+      if (!pinchRef.current || event.touches.length >= 2) return;
+
+      if (rafRef.current !== null) {
+        window.cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+      setZoom(pinchRef.current.lastZoom);
+      pinchRef.current = null;
+    };
+
+    element.addEventListener('touchstart', onStart, { passive: false });
+    element.addEventListener('touchmove', onMove, { passive: false });
+    element.addEventListener('touchend', onEnd, { passive: true });
+    element.addEventListener('touchcancel', onEnd, { passive: true });
+
+    return () => {
+      element.removeEventListener('touchstart', onStart);
+      element.removeEventListener('touchmove', onMove);
+      element.removeEventListener('touchend', onEnd);
+      element.removeEventListener('touchcancel', onEnd);
+      if (rafRef.current !== null) window.cancelAnimationFrame(rafRef.current);
+    };
+  }, []);
+
   useEffect(() => {
     const onResize = () => setBaseWidth(contentWidth());
     window.addEventListener('resize', onResize);
@@ -315,7 +397,11 @@ export function PdfViewerScreen({
         </div>
       </header>
 
-      <div className="scroll-hidden min-h-0 flex-1 overflow-auto overscroll-contain">
+      <div
+        ref={scrollRef}
+        className="scroll-hidden min-h-0 flex-1 overflow-auto overscroll-contain"
+        style={{ touchAction: 'pan-x pan-y' }}
+      >
         <div className="mx-auto space-y-3 px-3 pb-8 pt-2" style={{ width: pageWidth + 24 }}>
 
           {error ? (
