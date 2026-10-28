@@ -76,13 +76,20 @@ export function PdfViewerScreen({
   const [aspect, setAspect] = useState(1.414);
   const [zoomPercent, setZoomPercent] = useState(100);
   const [visible, setVisible] = useState({ start: 1, end: 3 });
+  const [scrollState, setScrollState] = useState({ visible: false, ratio: 0, thumb: 1 });
   const [progress, setProgress] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const controlsRef = useRef<ReactZoomPanPinchRef | null>(null);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
+  const trackRef = useRef<HTMLDivElement | null>(null);
+  const draggingRef = useRef(false);
   const pagesRef = useRef(0);
   const stepRef = useRef(Math.round(contentWidth() * 1.414) + PAGE_GAP);
+  const contentHeightRef = useRef(1);
+  const transformRef = useRef({ positionX: 0, positionY: 0, scale: 1 });
+  const scrollRafRef = useRef<number | null>(null);
+  const scrollPendingRef = useRef<{ visible: boolean; ratio: number; thumb: number } | null>(null);
 
   const pageHeight = Math.round(baseWidth * aspect);
   const pageStep = pageHeight + PAGE_GAP;
@@ -95,6 +102,10 @@ export function PdfViewerScreen({
   useEffect(() => {
     stepRef.current = pageStep;
   }, [pageStep]);
+
+  useEffect(() => {
+    contentHeightRef.current = contentHeight;
+  }, [contentHeight]);
 
   useEffect(() => {
     const onResize = () => setBaseWidth(contentWidth());
@@ -143,6 +154,8 @@ export function PdfViewerScreen({
   /* ── какие страницы держать в DOM ───────────────────────────────────── */
 
   const updateVisible = useCallback((state: { scale: number; positionX: number; positionY: number }) => {
+    transformRef.current = state;
+
     const wrapper = wrapperRef.current;
     const total = pagesRef.current;
     if (!wrapper || total === 0) return;
@@ -159,6 +172,46 @@ export function PdfViewerScreen({
       previous.start === start && previous.end === end ? previous : { start, end },
     );
     setPageNumber(center);
+
+    // Правый ползунок: доля видимой части и положение внутри документа.
+    const displayed = contentHeightRef.current * state.scale;
+    const viewport = wrapper.clientHeight;
+    const scrollable = Math.max(0, displayed - viewport);
+    const thumb = displayed > 0 ? Math.min(1, viewport / displayed) : 1;
+    const ratio = scrollable > 0 ? Math.min(1, Math.max(0, -state.positionY / scrollable)) : 0;
+
+    scrollPendingRef.current = {
+      visible: scrollable > 1,
+      ratio,
+      thumb,
+    };
+
+    if (scrollRafRef.current === null) {
+      scrollRafRef.current = window.requestAnimationFrame(() => {
+        scrollRafRef.current = null;
+        if (scrollPendingRef.current) setScrollState(scrollPendingRef.current);
+      });
+    }
+  }, []);
+
+  useEffect(() => {
+    // Контент/размер окна изменились без transform-события — пересчитываем
+    // ползунок и видимый диапазон.
+    updateVisible(transformRef.current);
+  }, [contentHeight, baseWidth, updateVisible]);
+
+  const scrollToClientY = useCallback((clientY: number) => {
+    const track = trackRef.current;
+    const wrapper = wrapperRef.current;
+    if (!track || !wrapper) return;
+
+    const rect = track.getBoundingClientRect();
+    const ratio = Math.min(1, Math.max(0, (clientY - rect.top) / Math.max(1, rect.height)));
+    const state = transformRef.current;
+    const displayed = contentHeightRef.current * state.scale;
+    const scrollable = Math.max(0, displayed - wrapper.clientHeight);
+
+    controlsRef.current?.setTransform(state.positionX, -ratio * scrollable, state.scale);
   }, []);
 
   const close = useCallback(() => {
@@ -373,6 +426,57 @@ export function PdfViewerScreen({
           </Document>
           </div>
         )}
+
+        {scrollState.visible ? (
+          <div
+            ref={trackRef}
+            aria-label="Прокрутка документа"
+            role="scrollbar"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={Math.round(scrollState.ratio * 100)}
+            className="absolute bottom-2 right-1 top-2 z-20 w-7 cursor-pointer touch-none select-none"
+            onPointerDown={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              draggingRef.current = true;
+              event.currentTarget.setPointerCapture(event.pointerId);
+              scrollToClientY(event.clientY);
+            }}
+            onPointerMove={(event) => {
+              if (!draggingRef.current) return;
+              event.preventDefault();
+              event.stopPropagation();
+              scrollToClientY(event.clientY);
+            }}
+            onPointerUp={(event) => {
+              draggingRef.current = false;
+              try {
+                event.currentTarget.releasePointerCapture(event.pointerId);
+              } catch {
+                // указатель уже отпущен
+              }
+            }}
+            onPointerCancel={() => {
+              draggingRef.current = false;
+            }}
+          >
+            <div
+              className="absolute bottom-0 right-[9px] top-0 w-[2px] rounded-full"
+              style={{ background: 'var(--separator-soft)', opacity: 0.7 }}
+            />
+            <div
+              className="absolute right-[7px] rounded-full transition-[height] duration-75"
+              style={{
+                top: `${scrollState.ratio * (1 - scrollState.thumb) * 100}%`,
+                height: `${Math.max(8, scrollState.thumb * 100)}%`,
+                width: 6,
+                background: 'var(--text-secondary)',
+                opacity: 0.8,
+              }}
+            />
+          </div>
+        ) : null}
       </div>
     </div>
   );
