@@ -380,6 +380,8 @@ const bootstrap: BootstrapResponse = {
     faculty: 'ИЭТЭ',
     recordBookNumber: '1020260000',
     groupId: 12345,
+    pushEnabled: true,
+    pushDevices: 1,
   },
   barsAuthorized: true,
   sessionValid: true,

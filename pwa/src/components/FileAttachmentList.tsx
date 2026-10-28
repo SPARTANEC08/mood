@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import { File as FileIcon, FileImage, FileText, Paperclip, Trash2, Upload } from 'lucide-react';
 
 import { FileThumbnail } from '@/components/FilePreview';
+import { PdfViewerScreen } from '@/components/PdfViewerScreen';
 import { BottomSheet } from '@/components/ui';
 import { InAppBrowser } from '@/components/InAppBrowser';
 import { api } from '@/lib/api';
@@ -31,6 +32,10 @@ import type { ServerFileRef } from '@/types/api';
  *  после отправки пяти мегабайт. */
 export const MAX_FILES_PER_RECORD = 10;
 export const MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024;
+
+function isAndroid(): boolean {
+  return typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent);
+}
 
 function iconFor(file: ServerFileRef) {
   if (file.mimeType.startsWith('image/')) return FileImage;
@@ -86,6 +91,8 @@ export function FileAttachmentList({
   const [openIndex, setOpenIndex] = useState<number | null>(null);
   /** Файл, который открываем прямо сейчас: защита от повторного нажатия. */
   const [pdfBusyId, setPdfBusyId] = useState<string | null>(null);
+  /** Android: PDF открываем встроенным pdf.js, без скачивания и Chrome. */
+  const [pdfViewer, setPdfViewer] = useState<ServerFileRef | null>(null);
   /**
    * Подсказка, если браузер не открыл PDF сам: показываем прямую ссылку, которую
    * человек нажмёт руками. Без неё неудачное открытие выглядело как «ничего не
@@ -177,7 +184,12 @@ export function FileAttachmentList({
                     return;
                   }
                   if (file.mimeType === 'application/pdf') {
-                    // PDF — система: Safari на iOS, Chrome на Android.
+                    // Android: встроенный просмотрщик. iOS и десктоп — как
+                    // раньше, системным браузером.
+                    if (isAndroid()) {
+                      setPdfViewer(file);
+                      return;
+                    }
                     void openPdfFile(file);
                     return;
                   }
@@ -209,6 +221,18 @@ export function FileAttachmentList({
           );
         })}
       </ul>
+
+      {pdfViewer ? (
+        <PdfViewerScreen
+          file={pdfViewer}
+          onClose={() => setPdfViewer(null)}
+          onFallback={() => {
+            const file = pdfViewer;
+            setPdfViewer(null);
+            void openPdfFile(file);
+          }}
+        />
+      ) : null}
 
       <BottomSheet
         open={Boolean(pdfFallback)}
