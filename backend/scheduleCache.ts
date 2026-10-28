@@ -59,6 +59,18 @@ function isFresh(fetchedAt: number, nowMs: number): boolean {
   return fetchedAt >= lastSundayMidnightMsk(nowMs);
 }
 
+/**
+ * Пригодно ли расписание для кэша.
+ *
+ * Пустой ответ МЭИ — не «у группы нет пар», а сбой их API: для некоторых групп
+ * широкий диапазон дат возвращает пустой массив, хотя без диапазона занятия
+ * есть. Такой ответ нельзя ни отдавать как свежий, ни записывать поверх
+ * хорошей копии — иначе расписание «пропадает» до следующего воскресенья.
+ */
+export function isUsableSchedule(schedule: ParsedSchedule | undefined): schedule is ParsedSchedule {
+  return Boolean(schedule && Array.isArray(schedule.days) && schedule.days.length > 0);
+}
+
 /** Последняя успешная загрузка (свежесть) и промис загрузки (дедупликация). */
 interface LoadState {
   /** Когда данные реально приехали с сервера. */
@@ -163,8 +175,38 @@ async function load(groupId: number, label: string, description?: string): Promi
 
   const inflight = (async () => {
     try {
-      const rawLessons = await fetchScheduleFromMpei(groupId, getScheduleDateRange());
+      /*
+       * Сначала широкий диапазон. Если МЭИ вернул пустой массив — это не
+       * «нет пар», а особенность их API для части групп: без диапазона те же
+       * занятия приходят нормально. Повторяем без дат, прежде чем что-то
+       * записывать.
+       */
+      let rawLessons = await fetchScheduleFromMpei(groupId, getScheduleDateRange());
+
+      if (rawLessons.length === 0) {
+        console.warn(
+          `[ScheduleCache] МЭИ вернул пусто по диапазону для группы ${groupId}, повторяю без диапазона`,
+        );
+        rawLessons = await fetchScheduleFromMpei(groupId);
+      }
+
       const parsed = parseSchedule(rawLessons, { id: groupId, label, description });
+
+      /*
+       * Пустое расписание не кэшируем. Если была хорошая копия — считаем это
+       * сбоем и отдаём её (catch ниже); если копии нет, возвращаем пусто, но
+       * не пишем на диск, чтобы следующий запрос попробовал снова.
+       */
+      if (!isUsableSchedule(parsed)) {
+        const previous = byHot.get(groupId)?.schedule ?? scheduleCacheStore.get(groupId)?.schedule;
+        if (isUsableSchedule(previous)) {
+          throw new Error('МЭИ вернул пустое расписание');
+        }
+
+        loadState.set(groupId, { fetchedAt: 0, bytes: 0, inflight: null });
+        return parsed;
+      }
+
       const bytes = estimateBytes(parsed);
       const fetchedAt = Date.now();
 
@@ -215,8 +257,9 @@ export async function getGroupSchedule(
   const nowMs = now.getTime();
   const cached = byHot.get(groupId);
 
-  // Свежая память: до ближайшего воскресенья 00:00 МСК.
-  if (cached && isFresh(cached.fetchedAt, nowMs)) {
+  // Свежая память: до ближайшего воскресенья 00:00 МСК. Пустую копию
+  // игнорируем — это след сбоя, а не реальное расписание.
+  if (cached && isFresh(cached.fetchedAt, nowMs) && isUsableSchedule(cached.schedule)) {
     touch(groupId, cached);
     return cached.schedule;
   }
@@ -224,7 +267,7 @@ export async function getGroupSchedule(
   // Память пуста или устарела — смотрим постоянную копию. Это главный путь
   // после рестарта сервера и для гостей, которые заходят в группу впервые.
   const persisted = scheduleCacheStore.get(groupId);
-  if (persisted && isFresh(persisted.fetchedAt, nowMs)) {
+  if (persisted && isFresh(persisted.fetchedAt, nowMs) && isUsableSchedule(persisted.schedule)) {
     const bytes = estimateBytes(persisted.schedule);
     loadState.set(groupId, { fetchedAt: persisted.fetchedAt, bytes, inflight: null });
     byHot.set(groupId, { schedule: persisted.schedule, fetchedAt: persisted.fetchedAt, bytes });
@@ -240,7 +283,12 @@ export async function getGroupSchedule(
      * если МЭИ недоступен, показываем последнюю удачную копию. Следующий
      * запрос снова попробует обновить её.
      */
-    const fallback = cached ?? persisted;
+    const fallback = isUsableSchedule(cached?.schedule)
+      ? cached
+      : isUsableSchedule(persisted?.schedule)
+        ? persisted
+        : null;
+
     if (fallback) {
       console.warn(
         `[ScheduleCache] обновление группы ${groupId} не удалось, отдаю кэш от ${new Date(fallback.fetchedAt).toISOString()}:`,

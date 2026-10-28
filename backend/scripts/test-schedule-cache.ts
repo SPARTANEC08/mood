@@ -11,7 +11,7 @@
  * Запуск: npm run test:schedule-cache
  */
 
-import { clearScheduleCache, scheduleCacheStats } from '../scheduleCache.ts';
+import { clearScheduleCache, isUsableSchedule, scheduleCacheStats } from '../scheduleCache.ts';
 import { latinToCyrillicLookalikes, normalizeGroupString } from '../parser/mpeiApi.ts';
 
 let passed = 0;
@@ -48,6 +48,13 @@ section('Состояние кэша');
   clearScheduleCache();
   clearScheduleCache(12345);
   check('очистка идемпотентна и не бросает', scheduleCacheStats().groups === 0);
+}
+
+section('Пустой ответ МЭИ');
+{
+  check('пустое расписание непригодно', !isUsableSchedule({ days: [] } as never));
+  check('undefined непригоден', !isUsableSchedule(undefined));
+  check('расписание с днями пригодно', isUsableSchedule({ days: [{}] } as never));
 }
 
 section('Нормализация группы');
