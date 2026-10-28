@@ -426,6 +426,19 @@ async function completeRegistration(input: {
   // «Главная» с группой-заглушкой. Существующего человека при этом не трогаем:
   // разовый сбой разбора страницы не должен выкидывать его из аккаунта.
   if (!existing && !profileOk) {
+    // Без пароля и токенов: только то, что увидели на странице БАРС. По этому
+    // логу видно, это «Главная» вместо ФИО, пустая группа или реально
+    // нестуденческий аккаунт.
+    console.warn(
+      '[Auth] профиль не распознан:',
+      JSON.stringify({
+        name: studentInfo.studentName,
+        group: studentInfo.groupName,
+        studyCard: studentInfo.studyCard ?? null,
+        email: studentInfo.email ?? null,
+      }),
+    );
+
     throw new AuthError(
       'Этот аккаунт БАРС не похож на студенческий: не удалось определить ФИО и группу. Войдите студенческим логином.',
       403,

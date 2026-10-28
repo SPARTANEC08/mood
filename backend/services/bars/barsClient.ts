@@ -299,8 +299,16 @@ export class BarsClient {
     const boldHeader = $('span.fw-bold').first().text().trim();
     const zkMatch = boldHeader.match(/^([^(]+?)(?:\s*\(№ЗК\s*-\s*([^)]+)\))?$/);
     if (zkMatch) {
-      if (!studentName && zkMatch[1]?.trim()) {
-        studentName = zkMatch[1].trim();
+      const boldName = zkMatch[1]?.trim() ?? '';
+      /*
+       * У части аккаунтов в активной хлебной крошке стоит «Главная», «Учёба»
+       * или другой пункт меню, а настоящее ФИО — в блоке с зачёткой. Раньше
+       * такое имя не подставлялось (крошка уже непустая), и вход падал с
+       * «аккаунт не похож на студенческий».
+       */
+      const breadcrumbIsMenu = !studentName || studentName.split(/\s+/).length < 2;
+      if (boldName.split(/\s+/).length >= 2 && breadcrumbIsMenu) {
+        studentName = boldName;
       }
       if (zkMatch[2]?.trim()) {
         studyCard = zkMatch[2].trim();
@@ -332,6 +340,11 @@ export class BarsClient {
     }
 
     if (!groupName) {
+      const boldGroup = boldHeader.match(/\b([А-ЯЁA-Z]{1,6}-\d{1,2}-\d{2})\b/i);
+      if (boldGroup) groupName = boldGroup[1];
+    }
+
+    if (!groupName) {
       $('span.fw-bold').each((_, el) => {
         const text = $(el).text().trim();
         if (/^[А-ЯЁa-zA-Z]{1,5}-\d{2}-\d{2}$/i.test(text)) {
@@ -342,7 +355,7 @@ export class BarsClient {
     }
 
     if (!groupName) {
-      const match = $.html().match(/\b([А-ЯЁ]{1,5}-\d{2}-\d{2})\b/);
+      const match = $.html().match(/\b([А-ЯЁA-Z]{1,6}-\d{1,2}-\d{2})\b/i);
       if (match) groupName = match[1];
     }
 
