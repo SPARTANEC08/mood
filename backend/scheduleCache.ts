@@ -144,10 +144,10 @@ function evict(): void {
 /**
  * Диапазон дат, который бот показывает: две недели назад и три месяца вперёд.
  */
-function getScheduleDateRange(): { start: string; finish: string } {
+function getScheduleDateRange(forwardDays = 90): { start: string; finish: string } {
   const now = new Date();
   const start = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
-  const finish = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000);
+  const finish = new Date(now.getTime() + forwardDays * 24 * 60 * 60 * 1000);
 
   const fmt = (d: Date) => {
     const y = d.getFullYear();
@@ -183,9 +183,21 @@ async function load(groupId: number, label: string, description?: string): Promi
        */
       let rawLessons = await fetchScheduleFromMpei(groupId, getScheduleDateRange());
 
+      /*
+       * Для части групп МЭИ не любит длинный диапазон: 90 дней возвращают
+       * пустой массив, а 60 — нормальное расписание. Пробуем сузить, и только
+       * потом идём без дат.
+       */
       if (rawLessons.length === 0) {
         console.warn(
-          `[ScheduleCache] МЭИ вернул пусто по диапазону для группы ${groupId}, повторяю без диапазона`,
+          `[ScheduleCache] МЭИ вернул пусто за 90 дней для группы ${groupId}, пробую 60`,
+        );
+        rawLessons = await fetchScheduleFromMpei(groupId, getScheduleDateRange(60));
+      }
+
+      if (rawLessons.length === 0) {
+        console.warn(
+          `[ScheduleCache] МЭИ вернул пусто за 60 дней для группы ${groupId}, повторяю без диапазона`,
         );
         rawLessons = await fetchScheduleFromMpei(groupId);
       }
