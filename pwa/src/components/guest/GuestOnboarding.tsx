@@ -60,7 +60,11 @@ export function GuestOnboarding({
   }
 
   return (
-    <div className="mx-auto flex min-h-full w-full max-w-[440px] flex-col justify-center gap-6 px-6 py-10">
+    <div className="min-h-0 w-full flex-1 overflow-y-auto overscroll-contain">
+      <div
+        className="mx-auto flex min-h-full w-full max-w-[440px] flex-col justify-center gap-6 px-6 py-10"
+        style={{ paddingBottom: 'calc(2.5rem + env(safe-area-inset-bottom, 0px))' }}
+      >
       <div className="flex flex-col items-center gap-3 text-center">
         <img
           src="/icons/site-icon-192.png?v=2"
@@ -186,6 +190,7 @@ export function GuestOnboarding({
         Имя и группа нужны только для статистики и показа расписания. Пароль не
         запрашивается.
       </p>
+      </div>
     </div>
   );
 }

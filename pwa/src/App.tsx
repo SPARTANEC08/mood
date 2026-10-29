@@ -402,7 +402,11 @@ function LoginScreen({
   }
 
   return (
-    <div className="mx-auto flex min-h-full w-full max-w-[440px] flex-col justify-center gap-6 px-6 py-10">
+    <div className="min-h-0 w-full flex-1 overflow-y-auto overscroll-contain">
+      <div
+        className="mx-auto flex min-h-full w-full max-w-[440px] flex-col justify-center gap-6 px-6 py-10"
+        style={{ paddingBottom: 'calc(2.5rem + env(safe-area-inset-bottom, 0px))' }}
+      >
       <div className="flex flex-col items-center gap-3 text-center">
         <img src="/icons/site-icon-192.png?v=2" width={64} height={64} alt="" className="rounded-[16px]" />
         <h1 className="text-[22px] font-semibold">Mood — расписание МЭИ</h1>
@@ -608,6 +612,7 @@ function LoginScreen({
         Логин и пароль уходят только на сервер Mood и в БАРС МЭИ. Токен хранится
         только в этом браузере и никуда не передаётся.
       </p>
+      </div>
     </div>
   );
 }

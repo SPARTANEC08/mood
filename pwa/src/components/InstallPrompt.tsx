@@ -255,7 +255,8 @@ export function InstallPrompt({ onSkip }: { onSkip: () => void }) {
   }
 
   return (
-    <div className="mx-auto flex min-h-full w-full max-w-[440px] flex-col justify-center gap-6 overflow-y-auto px-6 py-10 pb-[max(40px,env(safe-area-inset-bottom))]">
+    <div className="min-h-0 w-full flex-1 overflow-y-auto overscroll-contain">
+      <div className="mx-auto flex min-h-full w-full max-w-[440px] flex-col justify-center gap-6 px-6 py-10 pb-[max(40px,env(safe-area-inset-bottom))]">
       <div className="flex flex-col items-center gap-3 text-center">
         <Smartphone size={28} className="text-[var(--accent)]" aria-hidden />
         <h1 className="text-[22px] font-semibold leading-tight">{steps.title}</h1>
@@ -300,6 +301,7 @@ export function InstallPrompt({ onSkip }: { onSkip: () => void }) {
           Можно вернуться в браузер и продолжить работу — эта подсказка появится
           снова при следующем открытии, пока приложение не установлено.
         </p>
+      </div>
       </div>
     </div>
   );
