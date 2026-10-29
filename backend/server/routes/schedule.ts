@@ -8,7 +8,7 @@
 
 import type { FastifyInstance } from 'fastify';
 
-import { clearScheduleCache, getGroupSchedule } from '../../scheduleCache.ts';
+import { getGroupSchedule } from '../../scheduleCache.ts';
 import { safeErrorMessage } from '../../../tg/format.ts';
 import { homeworkStore, type LessonKindType } from '../../../db/storage/homeworkStore.ts';
 import type { ParsedLessonVariant, ParsedSchedule } from '../../parser/types.ts';
@@ -87,10 +87,11 @@ app.get('/api/subjects', async (request, reply) => {
     const student = requireScheduleAccess(request);
     const group = requireStudentGroup(student);
 
-    const query = (request.query ?? {}) as { startDate?: string; endDate?: string; force?: string };
-    const force = query.force === '1' || query.force === 'true';
+    const query = (request.query ?? {}) as { startDate?: string; endDate?: string };
 
-    if (force) clearScheduleCache(group.groupId);
+    // force-обновление больше не чистит кэш: если МЭИ отдаёт пусто, хорошая
+    // копия должна остаться и быть отдана пользователю. Иначе pull-to-refresh
+    // стирает расписание и оставляет пустой экран.
 
     let schedule: ParsedSchedule;
     try {
