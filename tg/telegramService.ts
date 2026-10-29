@@ -13,6 +13,7 @@
 import { Bot, InputFile } from 'grammy';
 
 import { processTelegramCallback, processTelegramMessage } from './botEngine.ts';
+import { botSubscribers } from './subscribers.ts';
 import { classifyEditError } from './editErrors.ts';
 import { safeErrorMessage } from './format.ts';
 import { type BotViewResult, type InlineButton } from './pwaView.ts';
@@ -87,6 +88,14 @@ export async function initTelegramBot(): Promise<void> {
 
     bot.catch((err) => {
       console.error('[Telegram Bot Error]:', safeErrorMessage(err));
+    });
+
+    // Запоминаем каждого, кто взаимодействует с ботом. Telegram не даёт
+    // написать тому, кто ни разу не запускал бота, поэтому список нужен
+    // именно здесь, в отдельном процессе.
+    bot.use(async (ctx, next) => {
+      if (ctx.from) botSubscribers.touch(ctx.from);
+      await next();
     });
 
     bot.command('app', async (ctx) => {

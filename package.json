@@ -11,6 +11,7 @@
     "start:app": "node dist/app.js",
     "start:bot": "node dist/bot.js",
     "bot": "node dist/bot.js",
+    "tg:broadcast": "node tg/broadcast.mjs",
     "dev": "tsx watch backend/server/main.ts",
     "dev:app": "tsx watch backend/server/main.ts",
     "dev:bot": "tsx watch tg/bot.ts",

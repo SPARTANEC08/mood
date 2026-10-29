@@ -41,6 +41,7 @@ android/keystore.properties
 # Служебное
 .DS_Store
 *.log
+bot-subscribers.json
 
 # Веб-версия (PWA)
 pwa/node_modules/
