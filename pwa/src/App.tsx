@@ -7,7 +7,7 @@ import { IosInstallGuide, useShouldShowIosInstallGuide } from '@/components/IosI
 import { DiagnosticsScreen } from '@/DiagnosticsScreen';
 import { api } from '@/lib/api';
 import { haptic, isIOS, openLink } from '@/lib/env';
-import { LOGIN_DOCUMENTS, POLICY_LINK } from './legal';
+import { LOGIN_DOCUMENTS, POLICY_LINK, PUSH_DOCUMENT } from './legal';
 import type { LegalDocId } from './types/api';
 import {
   AuthError,
@@ -288,6 +288,8 @@ function LoginScreen({
   const [secondsLeft, setSecondsLeft] = useState(0);
   /** Принятые на этом экране документы. Ни одна галочка не стоит по умолчанию. */
   const [accepted, setAccepted] = useState<Partial<Record<LegalDocId, boolean>>>({});
+  /** Push — необязательный канал: галочка не блокирует вход. */
+  const [pushAccepted, setPushAccepted] = useState(false);
 
   const allAccepted = LOGIN_DOCUMENTS.every((document) => accepted[document.id]);
 
@@ -348,6 +350,7 @@ function LoginScreen({
       const consents = LOGIN_DOCUMENTS.filter((document) => accepted[document.id]).map(
         (document) => document.id,
       );
+      if (pushAccepted) consents.push('push');
       const result = await loginWithPassword(trimmed, password, consents);
 
       if (isTwoFactorRequired(result)) {
@@ -442,6 +445,31 @@ function LoginScreen({
               </span>
             </label>
           ))}
+
+          <label className="flex items-start gap-3 border-t border-[var(--separator-soft)] pt-3">
+            <input
+              type="checkbox"
+              checked={pushAccepted}
+              onChange={(event) => setPushAccepted(event.target.checked)}
+              className="mt-0.5 h-5 w-5 shrink-0 accent-[var(--accent)]"
+            />
+            <span className="text-[13px] leading-snug">
+              Хочу push-уведомления.{' '}
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  openLink(PUSH_DOCUMENT.url);
+                }}
+                className="text-left font-medium underline decoration-[var(--accent)] underline-offset-2"
+                style={{ color: 'var(--accent)' }}
+              >
+                {PUSH_DOCUMENT.title}
+              </button>{' '}
+              <span className="text-[var(--text-tertiary)]">(необязательно)</span>
+            </span>
+          </label>
 
           <button
             type="button"

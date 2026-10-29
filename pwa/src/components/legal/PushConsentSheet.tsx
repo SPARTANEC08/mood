@@ -16,10 +16,12 @@ export function PushConsentSheet({
   open,
   onClose,
   onAccepted,
+  zIndex,
 }: {
   open: boolean;
   onClose: () => void;
   onAccepted: () => void;
+  zIndex?: number;
 }) {
   const [checked, setChecked] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -48,6 +50,7 @@ export function PushConsentSheet({
       open={open}
       onClose={onClose}
       title="Push-уведомления"
+      zIndex={zIndex}
       footer={
         <div className="flex flex-col gap-2">
           <button

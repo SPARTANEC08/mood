@@ -322,6 +322,7 @@ export function BottomSheet({
   headerRight,
   height,
   dismissible = true,
+  zIndex = 50,
 }: {
   open: boolean;
   onClose: () => void;
@@ -354,6 +355,8 @@ export function BottomSheet({
    * видимого результата, а лист останется за экраном с заблокированным фоном.
    */
   dismissible?: boolean;
+  /** z-index слоя: нужен, когда лист открывается поверх другого оверлея. */
+  zIndex?: number;
 }) {
   // Скролл фона блокируется, пока лист открыт, иначе жест прокрутки уезжает
   // на подложку под листом.
@@ -546,7 +549,7 @@ export function BottomSheet({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center">
+    <div className="fixed inset-0 z-50 flex items-end justify-center" style={{ zIndex }}>
       <button
         ref={backdropRef}
         type="button"

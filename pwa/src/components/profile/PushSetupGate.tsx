@@ -190,6 +190,7 @@ export function PushSetupGate({
       </div>
       <PushConsentSheet
         open={consentOpen}
+        zIndex={90}
         onClose={() => setConsentOpen(false)}
         onAccepted={() => {
           setConsentOpen(false);

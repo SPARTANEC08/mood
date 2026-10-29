@@ -12,7 +12,7 @@ import type { FastifyRequest } from 'fastify';
 import type { StoredUser } from '../../../../db/storage/userStore.ts';
 import { isPwaAdmin } from '../../../utils/adminAuth.ts';
 import { AuthError } from '../../middleware/auth.ts';
-import { LOGIN_CONSENTS } from '../../../legal/registry.ts';
+import { LOGIN_CONSENTS, PUSH_CONSENTS } from '../../../legal/registry.ts';
 import type { LegalDocId } from '../../../legal/types.ts';
 import type { BootstrapResponse } from '../../types.ts';
 
@@ -59,7 +59,7 @@ export function readConsents(request: FastifyRequest): LegalDocId[] {
   const body = (request.body ?? {}) as { consents?: unknown };
   if (!Array.isArray(body.consents)) return [];
 
-  const allowed = new Set<string>(LOGIN_CONSENTS);
+  const allowed = new Set<string>([...LOGIN_CONSENTS, ...PUSH_CONSENTS]);
   const seen = new Set<LegalDocId>();
 
   for (const value of body.consents) {
