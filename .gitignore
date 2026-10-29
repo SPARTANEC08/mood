@@ -29,6 +29,9 @@ mood.keystore
 *.keystore
 *.jks
 apk/
+# Копия APK для самостоятельного Telegram-бота. Бинарник не коммитим:
+# её создаёт `npm run apk:bot` (и deploy.sh) из apk/.
+tg/apk/*.apk
 android/app/build/
 android/build/
 android/.gradle/

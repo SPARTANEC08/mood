@@ -13,6 +13,7 @@ import { getGroupSchedule, peekScheduleDateRange } from '../../../scheduleCache.
 import { peekMailStatus } from '../../../services/mail/mailStatusCache.ts';
 import { PWA_TOKEN_TTL_MS } from '../../../utils/pwaAuth.ts';
 import { toMoscow } from '../../../utils/time.ts';
+import { buildLegalStatus } from '../../../legal/consentService.ts';
 import { isBarsAuthorized } from '../../../../db/storage/userStore.ts';
 import { registrationStore } from '../../../../db/storage/registrationStore.ts';
 import { requireUser } from '../../middleware/auth.ts';
@@ -81,12 +82,15 @@ export function registerBootstrapRoutes(app: FastifyInstance): void {
 
     const profile = buildProfile(student);
     const barsAuthorized = isBarsAuthorized(student);
+    const legal = buildLegalStatus(student);
 
     let sessionValid: boolean | null = null;
     let scheduleRange: BootstrapResponse['scheduleRange'] = null;
     let mailUnread: number | null = null;
 
-    if (barsAuthorized) {
+    // Пока не приняты обязательные документы, не трогаем БАРС: даже фоновая
+    // проверка сессии — это обработка данных без согласия.
+    if (barsAuthorized && !legal.consentRequired) {
       /*
        * Проверку сессии НЕ ждём.
        *
@@ -138,6 +142,7 @@ export function registerBootstrapRoutes(app: FastifyInstance): void {
       weekNumber: currentWeekNumber(),
       scheduleRange,
       mailUnread,
+      legal,
     };
 
     return reply.send(response);

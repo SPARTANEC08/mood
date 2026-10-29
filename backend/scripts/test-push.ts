@@ -25,6 +25,7 @@ delete process.env.VAPID_PRIVATE_KEY;
 const { buildServer } = await import('../server/index.ts');
 const { issuePwaToken, hashToken } = await import('../utils/pwaAuth.ts');
 const { userStore } = await import('../../db/storage/userStore.ts');
+const { acceptConsents } = await import('../legal/consentService.ts');
 const { buildPushPayload, pushUrlFor, isDeadSubscription } = await import(
   '../services/notifications/webPush.ts'
 );
@@ -55,6 +56,14 @@ function subscription(index: number, keys = { p256dh: 'p'.repeat(40), auth: 'a'.
 console.log('\n=== Web Push: подписки и payload ===\n');
 
 const userId = userStore.create({ barsLoginHash: 'push-test-hash' }).userId;
+{
+  const user = userStore.getByUserId(userId);
+  if (user) {
+    acceptConsents(user, ['processing', 'dissemination', 'terms', 'age', 'push'], {
+      method: 'pwa',
+    });
+  }
+}
 const { token } = issuePwaToken(userId);
 userStore.addToken(userId, hashToken(token), new Date(Date.now() + 86_400_000));
 const auth = { 'x-pwa-token': token };

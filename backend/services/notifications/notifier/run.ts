@@ -4,13 +4,14 @@
  * Ключевые ограничения, заложенные в архитектуру:
  * - опрос строго последовательный, с паузой между студентами (anti-ban для МЭИ);
  * - ночью (по Москве) воркер спит;
- * - любая ошибка сети глушится и переносится на следующий круг, процесс бота не падает.
+ * - любая ошибка сети глушится и переносится на следующий круг, процесс приложения не падает.
  *
- * Сервис не знает про Telegram: получателю сообщений передаётся функция отправки,
- * которую регистрирует telegramService.
+ * Сервис не знает про транспорт: сообщение собирается здесь, а доставляется
+ * через Web Push (`backend/services/notifications/webPush.ts`).
  */
 
 import { isBarsAuthorized, type StoredUser, userStore } from '../../../../db/storage/userStore.ts';
+import { missingConsents } from '../../../legal/registry.ts';
 import { safeErrorMessage } from '../../../../tg/format.ts';
 import { snapshotStore, type UserSnapshot } from '../../../../db/storage/snapshotStore.ts';
 import { userEventStore } from '../../../../db/storage/userEventStore.ts';
@@ -297,6 +298,7 @@ export async function runCycle(): Promise<void> {
     const users = userStore
       .all()
       .filter(isBarsAuthorized)
+      .filter((u) => missingConsents(u).length === 0)
       .filter((u) => (u.pwaTokens?.length ?? 0) > 0);
 
     console.log(`[Notifier] Цикл опроса: ${users.length} авторизованных пользователей.`);
@@ -496,7 +498,7 @@ export async function runCycleForced(onProgress?: ForcedCycleProgress): Promise<
 
 /**
  * Сбрасывает накопленные снимки при остановке процесса.
- * Вызывается из telegramService по SIGTERM/SIGINT, чтобы systemd-рестарт
+ * Вызывается из `backend/server/main.ts` по SIGTERM/SIGINT, чтобы systemd-рестарт
  * не приводил к повторной рассылке уже отправленных уведомлений.
  */
 export function flushSnapshots(): void {

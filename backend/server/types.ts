@@ -10,6 +10,7 @@
  */
 
 import type { LessonKindType, ServerFileRef } from '../../db/storage/homeworkStore.ts';
+import type { LegalStatus } from '../legal/types.ts';
 
 /** Профиль студента для шапки приложения. */
 export interface BootstrapProfile {
@@ -46,6 +47,8 @@ export interface BootstrapResponse {
   scheduleRange: { start: string; finish: string } | null;
   /** Непрочитанные письма ОСЭП, если удалось посчитать. */
   mailUnread: number | null;
+  /** Согласия на юридические документы. */
+  legal: LegalStatus;
 }
 
 /** Тип занятия в API. */
@@ -382,6 +385,8 @@ export interface PwaTokenResponse {
 export interface LoginBody {
   login: string;
   password: string;
+  /** Типы документов, принятые на экране входа. Версии сервер берёт сам. */
+  consents?: string[];
 }
 
 /** Тип уведомления в центре приложения. */

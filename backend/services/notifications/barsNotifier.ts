@@ -1,8 +1,8 @@
 /**
  * Публичный вход в фоновый нотификатор.
  *
- * Файл оставлен тонкой точкой входа: импорты в telegramService и скриптах
- * (`startNotifier`, `checkUserNow`, `diffSnapshots`,
+ * Файл оставлен тонкой точкой входа: импорты в `backend/server/main.ts` и
+ * скриптах (`startNotifier`, `checkUserNow`, `diffSnapshots`,
  * `isWithinActiveWindow` и т. д.) не меняются, а логика разложена по подмодулям:
  *
  *   - notifier/collect.ts — сетевой заход (БАРС + почта) с изоляцией ошибок;

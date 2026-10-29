@@ -34,7 +34,9 @@ import { type StoredUser, userStore } from '../../../../db/storage/userStore.ts'
 import { registrationStore } from '../../../../db/storage/registrationStore.ts';
 import { detectPlatform, type UserPlatform } from '../../../utils/platform.ts';
 import { AuthError } from '../../middleware/auth.ts';
-import { clientKey, readCredentials } from './helpers.ts';
+import { acceptConsents } from '../../../legal/consentService.ts';
+import type { LegalDocId } from '../../../legal/types.ts';
+import { assertLoginConsents, clientKey, readConsents, readCredentials } from './helpers.ts';
 import { issueToken } from './tokens.ts';
 import type { BarsLoginResult, LoginOutcome, PendingLogin } from './types.ts';
 
@@ -117,6 +119,7 @@ function startLoginAttempt(
   challengeId: string,
   client: BarsClient,
   credentials: { login: string; password: string },
+  consents: LegalDocId[],
 ): { awaitOutcome: () => Promise<LoginOutcome> } {
   let resolveCode: (code: string) => void = () => {};
   const codePromise = new Promise<string>((resolve) => {
@@ -133,6 +136,7 @@ function startLoginAttempt(
     login: credentials.login,
     password: credentials.password,
     barsLoginHash: computeBarsLoginHash(credentials.login),
+    consents,
     owner: clientKey(request),
     createdAt: Date.now(),
     needs2fa: false,
@@ -230,7 +234,10 @@ function logTimeout(): LoginOutcome {
 async function performLogin(
   request: FastifyRequest,
   credentials: { login: string; password: string },
+  consents: LegalDocId[],
 ): Promise<{ user: StoredUser } | { need2fa: true; challengeId: string }> {
+  assertLoginConsents(consents);
+
   const { login, password } = credentials;
   const barsLoginHash = computeBarsLoginHash(login);
   const owner = clientKey(request);
@@ -265,7 +272,7 @@ async function performLogin(
     `[Auth] вход начат: ${existing ? 'существующий' : 'новый'} аккаунт`,
   );
 
-  const outcome = await startLoginAttempt(request, challengeId, client, credentials).awaitOutcome();
+  const outcome = await startLoginAttempt(request, challengeId, client, credentials, consents).awaitOutcome();
 
   console.log(`[Auth] исход входа: ${outcome.kind} за ${Date.now() - startedAt}мс`);
 
@@ -317,7 +324,9 @@ async function performLogin(
 
   await cleanupSessionFile(challengeId);
 
-  return { user };
+  const withConsents = acceptConsents(user, consents, { ip: owner, method: 'pwa' });
+
+  return { user: withConsents };
 }
 
 /**
@@ -367,7 +376,7 @@ async function finishTwoFactorLogin(challengeId: string, code: string, platform:
   // сброс по хэшу логина обнулял бы чужую ветку ограничителя.
   registerLoginSuccess(entry.owner, entry.login);
 
-  return completeRegistration({
+  const user = await completeRegistration({
     existing: userStore.getByBarsLoginHash(entry.barsLoginHash) ?? null,
     barsLoginHash: entry.barsLoginHash,
     login: entry.login,
@@ -376,6 +385,8 @@ async function finishTwoFactorLogin(challengeId: string, code: string, platform:
     sessionData: result.sessionData,
     platform,
   });
+
+  return acceptConsents(user, entry.consents, { ip: entry.owner, method: 'pwa' });
 }
 
 /** Удаляет временный файл сессии попытки. */
@@ -533,7 +544,7 @@ export function registerLoginRoutes(app: FastifyInstance): void {
    * кто уже пользуется приложением, не имея паролей.
    */
   app.post('/api/auth/login', async (request, reply) => {
-    const result = await performLogin(request, readCredentials(request));
+    const result = await performLogin(request, readCredentials(request), readConsents(request));
 
     if ('need2fa' in result) {
       return reply.code(401).send({
@@ -555,7 +566,7 @@ export function registerLoginRoutes(app: FastifyInstance): void {
    * человека ещё лежит в кэше Service Worker.
    */
   app.post('/api/auth/register', async (request, reply) => {
-    const result = await performLogin(request, readCredentials(request));
+    const result = await performLogin(request, readCredentials(request), readConsents(request));
 
     if ('need2fa' in result) {
       return reply.code(401).send({

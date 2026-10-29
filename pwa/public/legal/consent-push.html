@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Согласие на push-уведомления — Mood</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body { margin: 0; padding: 24px 18px 64px; font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #fff; color: #1b1b1f; }
+    main { max-width: 720px; margin: 0 auto; }
+    h1 { font-size: 24px; line-height: 1.25; margin: 0 0 8px; }
+    h2 { font-size: 17px; margin: 28px 0 8px; }
+    p, li { margin: 8px 0; }
+    ul { padding-left: 22px; }
+    .muted { color: #666; font-size: 14px; }
+    .box { border: 1px solid #ddd; border-radius: 12px; padding: 14px 16px; margin: 16px 0; background: #fafafa; }
+    @media (prefers-color-scheme: dark) {
+      body { background: #15131e; color: #eee; }
+      .muted { color: #aaa; }
+      .box { border-color: #333; background: #1d1a29; }
+    }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Согласие на уведомления в приложении (Web Push)</h1>
+  <p class="muted">Версия 1.0. Документ действует с момента акцепта в приложении Mood.</p>
+
+  <div class="box">
+    <p><strong>Оператор:</strong> Лысенко Николай Романович, физическое лицо.</p>
+    <p><strong>Адрес:</strong> г. Москва, ул. Малая Черкизовская, д. 7, общежитие.</p>
+    <p><strong>E-mail:</strong> mood.mpei.sup@gmail.com</p>
+  </div>
+
+  <h2>1. Получатели</h2>
+  <p>Push-уведомления доставляются через push-сервис браузера: Google/FCM (Chrome и производные), Apple (Safari/iOS), Mozilla (Firefox). Это иностранные сервисы.</p>
+
+  <h2>2. Что передаётся</h2>
+  <ul>
+    <li>push-подписка устройства: endpoint и публичные ключи p256dh/auth;</li>
+    <li>тип события: новые оценки, новые приказы, изменение стипендии, новое письмо;</li>
+    <li>ссылка на вкладку приложения;</li>
+    <li>User-Agent устройства (для диагностики доставки).</li>
+  </ul>
+
+  <h2>3. Что не передаётся</h2>
+  <ul>
+    <li>значения баллов, названия дисциплин и контрольных точек;</li>
+    <li>номера, даты и заголовки приказов;</li>
+    <li>статус и сумма стипендии;</li>
+    <li>отправитель, тема, текст письма и вложения.</li>
+  </ul>
+
+  <h2>4. Правовое основание</h2>
+  <p>Настоящее отдельное согласие, а также уведомление Роскомнадзора о намерении осуществлять трансграничную передачу, поданное до начала передачи.</p>
+
+  <h2>5. Срок и отзыв</h2>
+  <p>Согласие действует до отзыва. Отзыв — отключением push-уведомлений в настройках приложения или удалением подписки в браузере. После отзыва передача прекращается. Отказ от push не лишает доступа к приложению.</p>
+
+  <h2>6. Акцепт</h2>
+  <p>Согласие оформляется отдельно от иных документов и подтверждается отдельной галочкой. Фиксируются версия, дата и время акцепта, IP-адрес и способ.</p>
+</main>
+</body>
+</html>

@@ -12,8 +12,8 @@
 - 🤖 **Telegram-бот** — только поддержка: ссылки на PWA, установку, канал и
   `@mood_mpei_sup`. Привязки аккаунта и уведомлений в Telegram больше нет.
 
-Проект — **один процесс Node.js**: бот, REST API для PWA и фоновый нотификатор
-живут вместе и делят одни сервисы и одну базу.
+Проект — **два независимых процесса Node.js**: приложение (API + уведомления) и
+тонкий Telegram-бот поддержки. Они не делят память и не импортируют друг друга.
 
 ## 🔗 Ссылки
 
@@ -138,31 +138,42 @@ Push-уведомления»; если push не включён, приложе
 
 ## 🏗 Архитектура
 
-Проект — **один процесс Node.js**. Внутри него одновременно крутится всё:
+Проект — **два процесса Node.js**, и граница между ними проходит по данным.
 
 ```text
-             ┌───────────────────── один процесс node dist/bot.js ─────────────────────┐
-             │                                                                         │
- Telegram ───► grammY long polling ──► botEngine ──► pwaView (HTML) ──► reply/edit    │
- (polling)          │                                                                   │
-                    ├──► barsNotifier (таймер 20 мин) ──► БАРС + OWA ──► уведомления   │
-                    │                                                                   │
- PWA ────► nginx/Vite ──► Fastify /api/* ─────────────┐                                │
-           (X-PWA-Token)   │                          │                                │
-                           ├──► db/storage (данные)    │                                │
-                           ├──► scheduleCache ──► mpeiApi ──► ts.mpei.ru                │
-                           ├──► BarsService ──► bars.mpei.ru                             │
-                           ├──► OwaMailClient ──► mail.mpei.ru/owa                       │
-                           └──► barsSnapshotCache (20 мин, stale-while-revalidate)      │
-             └─────────────────────────────────────────────────────────────────────────┘
+        ┌──────────────── бот: node dist/bot.js ─────────────────┐
+        │                                                        │
+Telegram ─► grammY long polling ─► botEngine ─► pwaView ─► ответ │
+        │                                     APK из tg/apk/     │
+        └────────────────────────────────────────────────────────┘
+         ни базы, ни API, ни БАРС/OWA, ни ключей шифрования
+
+        ┌──────────── приложение: node dist/app.js ──────────────┐
+        │                                                        │
+PWA ──► nginx/Vite ──► Fastify /api/* ──┬─► db/storage (SQLite)  │
+        (X-PWA-Token)                   ├─► scheduleCache ──► ts.mpei.ru
+                                        ├─► BarsService ──► bars.mpei.ru
+                                        ├─► OwaMailClient ──► mail.mpei.ru/owa
+                                        └─► barsSnapshotCache (20 мин)
+        │                                                        │
+        │  barsNotifier (20 мин) ─► БАРС+OWA ─► Web Push ─► браузер │
+        │  ночной отчёт, уборка диска                             │
+        └────────────────────────────────────────────────────────┘
 ```
 
 Ключевые решения:
 
-- **API и бот — один процесс и одни сервисы.** `backend/server/` обращается к тем
-  же `userStore`, `scheduleCache`, `BarsService`, `OwaMailClient`, что и
-  нотификатор. API поднимается только если задан `API_PORT` (ленивый `await
-  import` в `tg/telegramService.ts`); ошибка старта API не роняет бота.
+- **Бот и приложение — разные процессы и разные systemd-юниты.** Бот собирается
+  в один самодостаточный файл `dist/bot.js` (зависимости внутри бандла) и не
+  импортирует ни `backend/`, ни `db/`. Приложение — `dist/app.js`.
+- **У бота нет доступа к персональным данным.** Он не открывает базу, не знает
+  ключей шифрования и не поднимает API; ему нужны только `TELEGRAM_BOT_TOKEN` и
+  `PWA_URL`. `npm run check:bot` проверяет, что в бандл не просочился серверный
+  код. Поэтому бота можно держать на другом сервере.
+- **API и нотификатор — один процесс и одни сервисы.** `backend/server/`
+  обращается к тем же `userStore`, `scheduleCache`, `BarsService`,
+  `OwaMailClient`, что и нотификатор. API поднимается только если задан
+  `API_PORT` (см. `backend/server/main.ts`).
 - **Статику раздаёт не сервер.** В `backend/server` нет `@fastify/static`:
   фронтенд живёт на nginx, в dev — на Vite; API отдаёт только `/api` и `/health`.
 - **Авторизация PWA — собственный токен** в заголовке `X-PWA-Token`
@@ -181,7 +192,7 @@ Push-уведомления»; если push не включён, приложе
 |---|---|
 | Рантайм | Node.js 20+ (target esbuild `node20`) |
 | Язык | TypeScript ^5.6, `strict: true`, ESM |
-| Прод-сборка | esbuild (`dist/bot.js`) |
+| Прод-сборка | esbuild (`dist/app.js` + самодостаточный `dist/bot.js`) |
 | Запуск в dev | tsx |
 | Telegram | grammY |
 | HTTP | axios + axios-cookiejar-support + tough-cookie |
@@ -219,7 +230,7 @@ Push-уведомления»; если push не включён, приложе
 
 | Папка | Роль |
 |---|---|
-| 🖥 `tg/` | **Telegram-бот**: только бот и его экраны |
+| 🖥 `tg/` | **Telegram-бот**: самостоятельный процесс, только ссылки и APK |
 | ⚙️ `backend/` | **Вычисления, парсеры, API**: REST-сервер, сервисы МЭИ, кэши |
 | 🗄 `db/` | **Данные**: хранилища, движок JSON-записей и рантайм-данные |
 | 📱 `pwa/` | **Сайт**: React-приложение (PWA) |
@@ -229,20 +240,21 @@ Mood/
 ├── package.json, tsconfig.json # зависимости и строгая конфигурация TS
 ├── package-lock.json           # замок зависимостей
 ├── README.md                   # этот документ
-├── run.sh                      # локальный запуск (vite + туннель + бот)
-├── .env                        # секреты (в git не попадает)
+├── run.sh                      # локальный запуск (vite + туннель + приложение)
+├── .env                        # секреты приложения (в git не попадает)
 │
-├── tg/                         # 🤖 Telegram-бот поддержки
-│   ├── bot.ts                  #   точка входа: dotenv + запуск бота, API, нотификатора
-│   ├── telegramService.ts      #   запуск grammY, API, нотификатор
+├── tg/                         # 🤖 Telegram-бот поддержки (отдельный процесс)
+│   ├── bot.ts                  #   точка входа: только токен и PWA_URL, без базы/API
+│   ├── telegramService.ts      #   запуск grammY long polling и отправка экранов
 │   ├── botEngine.ts            #   /start, callbacks: только установка и ссылки
 │   ├── pwaView.ts              #   экраны: приветствие, iOS, Android
-│   ├── apk.ts                  #   поиск последнего APK для выдачи
+│   ├── apk.ts                  #   поиск свежего APK в tg/apk/ (и старом apk/)
 │   ├── format.ts               #   HTML-разметка, esc/b/i/link, RULE, safeErrorMessage
-│   └── telegramFileDownload.ts #   file_id → буфер (для fileStore)
+│   └── apk/                    #   APK для выдачи (бинарники в git не попадают)
 │
 ├── backend/                    # ⚙️ Вычисления, парсеры, API
 │   ├── server/                 #   REST API (Fastify) для PWA
+│   │   ├── main.ts             #     точка входа приложения: API + нотификатор + отчёты
 │   │   ├── index.ts            #     сборка, CORS, multipart, авторизация, /health
 │   │   ├── types.ts            #     контракты API (источник правды)
 │   │   ├── devStats.ts         #     сбор метрик статистики
@@ -576,31 +588,25 @@ Telegram, приложение, оба или ни одного. Подписк�
 
 ## 🔧 Переменные окружения
 
+Секретов два набора, и они не должны пересекаться: приложению нужны ключи и
+API, боту — только токен и адрес.
+
 ```env
-# Токен бота от @BotFather
-TELEGRAM_BOT_TOKEN=
-
-# Ключ AES-256-GCM для кредов БАРС: 64 hex-символа
-ENCRYPTION_SECRET_KEY=
-
-# Секрет для PWA-токенов: 64 hex-символа (npm run pwa:setup). Отдельный ключ.
-PWA_AUTH_SECRET=
-
-# Публичный HTTPS-адрес PWA: кнопка «Открыть приложение», CORS, deep link
-PWA_URL=
-
-# REST API включается только при заданном порту
-API_PORT=3000
+# --- Приложение (dist/app.js): /opt/mood/.env ---
+ENCRYPTION_SECRET_KEY=      # AES-256-GCM для кредов БАРС, 64 hex
+PWA_AUTH_SECRET=            # секрет PWA-токенов, 64 hex (npm run pwa:setup)
+PWA_URL=                    # публичный HTTPS-адрес
+API_PORT=3000               # без него REST API не поднимается
 API_HOST=127.0.0.1
-
-# Логины БАРС админов PWA (через запятую). Хэшируются при старте.
-ADMIN_BARS_LOGINS=
-
-# --- Web Push (VAPID) ---
-# npx web-push generate-vapid-keys
-VAPID_PUBLIC_KEY=
+ADMIN_BARS_LOGINS=          # логины БАРС админов через запятую
+VAPID_PUBLIC_KEY=           # Web Push (npx web-push generate-vapid-keys)
 VAPID_PRIVATE_KEY=
 VAPID_SUBJECT=mailto:noreply@mood.local
+
+# --- Бот (dist/bot.js): /opt/mood-bot/bot.env ---
+TELEGRAM_BOT_TOKEN=         # от @BotFather
+PWA_URL=                    # кнопка «Открыть Mood»
+# MOOD_APK_DIR=/opt/mood-bot/tg/apk
 ```
 
 **Отладка:** `API_PERF_LOG=1` (все запросы API), `?perf=1`/`mood_perf`
@@ -610,14 +616,18 @@ VAPID_SUBJECT=mailto:noreply@mood.local
 `NOTIFIER_POLL_MS=30000` (временно ускорить цикл нотификатора и интервалы
 источников без пересборки; по умолчанию 20 мин).
 
-| Нет переменной | Что будет |
-|---|---|
-| `TELEGRAM_BOT_TOKEN` | бот не стартует (без исключения), процесс живёт ради API |
-| `ENCRYPTION_SECRET_KEY` | бот стартует, но не сохранит креды БАРС |
-| `PWA_AUTH_SECRET` | вход в приложение невозможен |
-| `API_PORT` | API не поднимается |
-| `PWA_URL` | кнопки «Открыть приложение» нет, CORS без него |
-| `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` | push-канал выключен, Telegram работает |
+| Процесс | Нет переменной | Что будет |
+|---|---|---|
+| приложение | `ENCRYPTION_SECRET_KEY` | предупреждение; креды БАРС не сохранятся |
+| приложение | `PWA_AUTH_SECRET` | предупреждение; вход в приложение невозможен |
+| приложение | `API_PORT` | API не поднимается, живёт только нотификатор |
+| приложение | `PWA_URL` | CORS без origin, ссылки на приложение скрыты |
+| приложение | `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` | push-канал выключен |
+| бот | `TELEGRAM_BOT_TOKEN` | процесс завершается с ошибкой |
+| бот | `PWA_URL` | кнопки «Открыть Mood» нет |
+
+Неверный **формат** ключа (не 64 hex) останавливает процесс приложения на
+старте: лучше не подняться, чем молча ломаться на первом шифровании.
 
 ---
 
@@ -630,18 +640,26 @@ npm install
 # Секрет PWA, зависимости фронтенда, иконки, сборка — одной командой
 npm run pwa:setup
 
-# Терминал 1: бот + API (dev)
+# Терминал 1: приложение — API + нотификатор (dist/app.js)
 npm run dev
+
+# Терминал 1a: бот отдельным процессом (нужны только TELEGRAM_BOT_TOKEN и PWA_URL)
+npm run dev:bot
 
 # Терминал 2: фронтенд
 npm run pwa:dev
 
 # Типы и сборка
 npm run lint          # tsc --noEmit
-npm run build         # esbuild → dist/bot.js
-npm run start         # node dist/bot.js (прод)
+npm run build         # esbuild → dist/app.js + dist/bot.js
+npm run start         # node dist/app.js (прод)
+npm run start:bot     # node dist/bot.js (прод)
+npm run check:bot     # в бандле бота нет серверного кода и ключей
 
-# Только API, без бота
+# APK для бота: копия из apk/ в tg/apk/
+npm run apk:bot
+
+# Только API, без нотификатора
 npm run api
 ```
 
@@ -675,7 +693,7 @@ bash pwa/scripts/dev-tunnel.sh   # vite + cloudflared + бот одним про
 | `test:schedule-cache` | состояние кэша, нормализация группы, латиница→кириллица |
 | `test:maintenance` | уборка диска: превью/сироты/tmp/отчёты/бэкапы, пороги, свободное место |
 | `test:grades-calc` | калькулятор среднего, конверсия пропусков |
-| `test:html` | баланс HTML-тегов в экранах бота |
+| `test:html` | экраны бота: только ссылки, установка, никаких данных студента |
 | `test:files` | загрузка/скачивание файлов |
 | `test:notifications` | включение/выключение уведомлений |
 | `test:push` | подписки Web Push, payload, снимок при двух каналах |
@@ -687,6 +705,7 @@ bash pwa/scripts/dev-tunnel.sh   # vite + cloudflared + бот одним про
 | `test:owa:user` | живой OWA по сохранённым кредам пользователя (`--user <userId>`), без записи в базу |
 | `test:owa:verbose` | то же с `OWA_DEBUG=1` и маскированным логином: пошаговый разбор отказа |
 | `check:files` | целостность файлов (наличие, размер, `sha256`) |
+| `check:bot` | в `dist/bot.js` нет базы, ключей шифрования и серверного кода (нужна сборка) |
 | `check:layout` | вёрстка в настоящем браузере (Playwright, ставится отдельно) |
 
 Служебные: `reset:db`, `reset:users`, `test:auth`, `test:client`, `test:grades`,
@@ -713,24 +732,43 @@ bash pwa/scripts/dev-tunnel.sh   # vite + cloudflared + бот одним про
 
 ### systemd (рекомендуется)
 
-Готовые файлы: `backend/deploy/mood.service`, `backend/deploy/journald.conf`.
+Готовые файлы: `backend/deploy/mood.service` (приложение),
+`backend/deploy/mood-bot.service` (бот) и `backend/deploy/journald.conf`.
 
 ```bash
-npm ci && npm run build
+npm ci && npm run build && npm run apk:bot
+
+# --- приложение: API + нотификатор ---
 useradd --system --home /opt/mood --shell /usr/sbin/nologin mood
 chown -R mood:mood /opt/mood && chmod 700 /opt/mood/db/data && chmod 600 /opt/mood/.env
 cp backend/deploy/mood.service /etc/systemd/system/mood.service
+
+# --- бот: только ссылки, отдельный пользователь и каталог ---
+useradd --system --home /opt/mood-bot --shell /usr/sbin/nologin mood-bot
+install -d -m 700 -o mood-bot -g mood-bot /opt/mood-bot/dist /opt/mood-bot/tg/apk
+install -m 600 -o mood-bot -g mood-bot /dev/null /opt/mood-bot/bot.env
+#   в bot.env: TELEGRAM_BOT_TOKEN, PWA_URL, при необходимости MOOD_APK_DIR
+cp dist/bot.js /opt/mood-bot/dist/
+cp tg/apk/*.apk /opt/mood-bot/tg/apk/     # если APK собран
+cp backend/deploy/mood-bot.service /etc/systemd/system/mood-bot.service
+
 mkdir -p /etc/systemd/journald.conf.d && cp backend/deploy/journald.conf /etc/systemd/journald.conf.d/mood.conf
-systemctl daemon-reload && systemctl enable --now mood
+systemctl daemon-reload && systemctl enable --now mood mood-bot
 ```
+
+`dist/bot.js` — самодостаточный бандл: на сервере с ботом не нужны ни
+`npm ci`, ни `node_modules`, ни база. Достаточно Node 20 и двух переменных в
+`bot.env`. Юнит бота работает от отдельного пользователя, с `ProtectSystem=strict`
+и без доступа к домашнему каталогу — компрометация бота не даёт ключей
+шифрования и персональных данных.
 
 При переезде со старых JSON (один раз): остановить сервис, выполнить
 `npm run migrate:sqlite`, затем запустить сервис. Старые `db/data/*.json`
 остаются на месте до проверки — их удаление отдельное решение.
 
-Для VPS с 512 МБ RAM юнит заранее ограничивает память
-(`--max-old-space-size=256`, `MemoryMax=400M`), чтобы падение от OOM было видно в
-`journalctl`, а не приходило молчаливым `SIGKILL`.
+Лимиты памяти выставлены в юнитах: приложение — `--max-old-space-size=768`,
+`MemoryMax=1536M`; бот — 96 и 160 МБ. Падение от OOM тогда видно в
+`journalctl`, а не приходит молчаливым `SIGKILL`.
 
 ### Статика PWA
 
@@ -762,17 +800,19 @@ sudo find /var/www/mood-pwa/assets -type f -mtime +30 -delete   # чистим �
 
 ```bash
 # на сервере, перед заливкой новой версии
-cp ~/mood/dist/bot.js ~/mood/dist/bot.js.bak-$(date +%s)
+cp ~/mood/dist/app.js ~/mood/dist/app.js.bak-$(date +%s)
+cp /opt/mood-bot/dist/bot.js /opt/mood-bot/dist/bot.js.bak-$(date +%s)
 sudo rsync -a /var/www/mood-pwa/ /var/www/mood-pwa.bak-$(date +%s)/
 
 # откат
-cp ~/mood/dist/bot.js.bak-<метка> ~/mood/dist/bot.js
+cp ~/mood/dist/app.js.bak-<метка> ~/mood/dist/app.js
+sudo cp /opt/mood-bot/dist/bot.js.bak-<метка> /opt/mood-bot/dist/bot.js
 sudo rsync -a --delete /var/www/mood-pwa.bak-<метка>/ /var/www/mood-pwa/
-sudo systemctl restart mood
+sudo systemctl restart mood mood-bot
 ```
 
-Секреты при откате не затрагиваются: `.env` и `mood.keystore` живут отдельно и
-в артефакты сборки не попадают.
+Секреты при откате не затрагиваются: `.env`, `bot.env` и `mood.keystore` живут
+отдельно и в артефакты сборки не попадают.
 Шаблоны nginx — `pwa/nginx.conf.example` и `backend/deploy/mood-user-nginx.conf`.
 Подробный runbook прямого деплоя — `backend/deploy/README-direct.md`.
 
@@ -873,6 +913,16 @@ APK (~1–2 МБ) отправляется файлом в канал/бот. М
 устанавливает.
 Обновление — тем же путём: новый APK с той же подписью ставится поверх.
 
+Бот берёт файл из `tg/apk/` (не из общего `apk/`), поэтому после сборки APK
+скопируйте его:
+
+```bash
+npm run apk:bot     # apk/*.apk → tg/apk/, старые версии удаляются
+```
+
+В git бинарник не попадает: `tg/apk/*.apk` в `.gitignore`, `deploy.sh` копирует
+файл на сервер бота. Если файла нет, бот показывает инструкцию установки PWA.
+
 Черновик сообщения:
 
 > **Mood для Android**
@@ -922,8 +972,8 @@ APK (~1–2 МБ) отправляется файлом в канал/бот. М
 
 ## ⚡ Производительность и лимиты
 
-Целевая машина: **1 vCPU, 4 ГБ RAM, 10 ГБ NVMe**, один процесс Node.js,
-~500 DAU, пиковый онлайн 20–40.
+Целевая машина: **1 vCPU, 4 ГБ RAM, 10 ГБ NVMe**, два процесса (приложение и
+бот), ~500 DAU, пиковый онлайн 20–40.
 
 ### Замеры (на сервере, 20 параллельных, loopback)
 
@@ -1013,9 +1063,13 @@ APK (~1–2 МБ) отправляется файлом в канал/бот. М
 15. Лимиты памяти (`--max-old-space-size`, `MemoryMax`) при OOM дают рестарт
     сервиса: это защита от тихого SIGKILL, но кэши и реестры в памяти теряются.
 16. Brotli не включён: модуля `ngx_brotli` в системном nginx нет, работает gzip.
-17. Redis/Postgres не вводились осознанно: один процесс, `db/data` — десятки
-    мегабайт, кэши в памяти укладываются в 1 vCPU/4 ГБ. При переходе к
-    нескольким процессам/репликам понадобится общий стор — это отдельная задача.
-18. Нагрузочный замер идёт с той же 1 vCPU (клиент и сервер делят ядро),
+17. Redis/Postgres не вводились осознанно: приложение — один процесс, `db/data`
+    — десятки мегабайт, кэши в памяти укладываются в 1 vCPU/4 ГБ. При переходе
+    к нескольким процессам/репликам приложения понадобится общий стор — это
+    отдельная задача.
+18. Два процесса делят только код репозитория: бот (`dist/bot.js`) и приложение
+    (`dist/app.js`) собираются и деплоятся отдельно. Общей базы у бота нет —
+    это осознанная граница приватности, а не недоделка.
+19. Нагрузочный замер идёт с той же 1 vCPU (клиент и сервер делят ядро),
     поэтому абсолютные p95 консервативны; для «чистых» цифр нужен внешний
     генератор нагрузки.

@@ -5,7 +5,8 @@
 # Что поднимает:
 #   1. vite (папка pwa/) — порт 5173
 #   2. cloudflared      — HTTPS-адрес, который откроет Safari на телефоне
-#   3. бот + API        — порт 3000, в режиме разработки
+#   3. приложение    — API + нотификатор на порту 3000
+#      (бот для проверки PWA не нужен; отдельно: npm run dev:bot)
 #
 # Сценарий A (по умолчанию): ОДИН туннель на vite, vite проксирует /api на
 # :3000. Проще всего, CORS не участвует, PWA_URL совпадает с адресом туннеля —
@@ -23,11 +24,6 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 VITE_PORT=5173
 API_PORT=3000
-
-# Telegram ID тестового пользователя: он уже есть в базе, и через него бот
-# отдаёт приветственный экран без входа в БАРС. В PWA это ни на что не влияет —
-# вход в приложение логином и паролем БАРС, а не через Telegram.
-MOCK_ID="${MOCK_TELEGRAM_USER_ID:-100000001}"
 
 command -v cloudflared >/dev/null 2>&1 || {
   echo "Не найден cloudflared. Установите:"
@@ -62,6 +58,7 @@ PIDS=()
 echo "▸ Убираю возможные остатки прошлого запуска..."
 pkill -f "cloudflared tunnel --url http://localhost:$VITE_PORT" 2>/dev/null || true
 pkill -f "vite --port $VITE_PORT" 2>/dev/null || true
+pkill -f "tsx backend/server/main.ts" 2>/dev/null || true
 pkill -f "tsx tg/bot.ts" 2>/dev/null || true
 sleep 1
 
@@ -138,18 +135,18 @@ if [ -z "$TUNNEL_URL" ]; then
   exit 1
 fi
 
-# ── 3. Бот + API ───────────────────────────────────────────────────────────
-# Секреты (TELEGRAM_BOT_TOKEN и пр.) подхватываются из корневого .env через
-# dotron — ниже только то, что нужно локально для проверки PWA.
-echo "▸ Запускаю бота и API на порту $API_PORT..."
+# ── 3. Приложение (API + нотификатор) ──────────────────────────────────────
+# Секреты (ENCRYPTION_SECRET_KEY, PWA_AUTH_SECRET и пр.) подхватываются из
+# корневого .env через dotenv — ниже только то, что нужно локально для проверки
+# PWA. Бот в этот процесс больше не входит: для него отдельный `npm run dev:bot`.
+echo "▸ Запускаю API на порту $API_PORT..."
 API_PORT="$API_PORT" \
 API_HOST=127.0.0.1 \
-MOCK_TELEGRAM_USER_ID="$MOCK_ID" \
 PWA_URL="$TUNNEL_URL" \
-  npx tsx tg/bot.ts > "$(make_log mood-pwa-bot)" 2>&1 &
+  npx tsx backend/server/main.ts > "$(make_log mood-pwa-app)" 2>&1 &
 PIDS+=($!)
 
-# Ждём живости API: пока бот поднимает БАРС и IMAP, /health может не отвечать
+# Ждём живости API: пока приложение поднимает кэши, /health может не отвечать
 # сразу. Пользователь между «всё готово» и «не работает» никуда не уйдёт.
 echo "  жду API..."
 API_READY=0

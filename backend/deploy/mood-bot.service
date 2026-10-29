@@ -1,0 +1,68 @@
+# /etc/systemd/system/mood-bot.service
+# Telegram-бот поддержки Mood: только ссылки и APK.
+#
+# Это самостоятельный процесс. Он НЕ открывает базу, не ходит в БАРС/OWA и не
+# поднимает API — поэтому его можно держать на другом сервере и с отдельным
+# набором секретов.
+#
+# Установка:
+#   sudo mkdir -p /opt/mood-bot/dist /opt/mood-bot/tg/apk
+#   # bot.env — только две переменные, без ключей приложения:
+#   sudo install -m 600 -o mood -g mood /dev/null /opt/mood-bot/bot.env
+#   #   TELEGRAM_BOT_TOKEN=...
+#   #   PWA_URL=https://...
+#   #   MOOD_APK_DIR=/opt/mood-bot/tg/apk   (необязательно)
+#   sudo cp dist/bot.js /opt/mood-bot/dist/
+#   sudo cp tg/apk/*.apk /opt/mood-bot/tg/apk/
+#   sudo cp backend/deploy/mood-bot.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now mood-bot
+
+[Unit]
+Description=Mood Telegram support bot (links only)
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=10
+
+[Service]
+Type=simple
+
+# Отдельный пользователь и отдельный каталог: у бота нет доступа ни к базе
+# приложения, ни к его .env. Даже полная компрометация бота не даёт ключей
+# шифрования и персональных данных.
+User=mood-bot
+Group=mood-bot
+WorkingDirectory=/opt/mood-bot
+
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+
+# Бот только читает свой каталог и ходит в api.telegram.org. Писать ему некуда.
+ProtectSystem=strict
+ProtectHome=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+LockPersonality=true
+
+# Бандл самодостаточный: grammy и остальные зависимости уже внутри dist/bot.js.
+ExecStart=/usr/bin/node --max-old-space-size=96 dist/bot.js
+
+MemoryMax=160M
+
+Restart=always
+RestartSec=10
+
+EnvironmentFile=/opt/mood-bot/bot.env
+Environment=NODE_ENV=production
+Environment=MOOD_APK_DIR=/opt/mood-bot/tg/apk
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=mood-bot
+
+[Install]
+WantedBy=multi-user.target

@@ -1,40 +1,34 @@
-import dotenv from 'dotenv';
-import { initTelegramBot } from './telegramService.ts';
-import { startMaintenance } from '../backend/services/maintenance/run.ts';
-import { validateSecrets } from '../backend/utils/secretsCheck.ts';
-import { safeErrorMessage } from './format.ts';
-
-dotenv.config();
-
-// Ежедневная уборка диска не зависит от бота: запускаем до него, чтобы работала
-// и в режиме «только API».
-startMaintenance();
-
-/*
- * Секреты проверяются ДО запуска бота и API. Неверный формат ключа раньше
- * всплывал только на первой операции шифрования — то есть сервис поднимался,
- * отвечал на /health и молча ломался на входе пользователя. Теперь ошибка
- * формата останавливает процесс сразу, а предупреждения видны в журнале.
+/**
+ * Точка входа Telegram-бота.
+ *
+ * Это ОТДЕЛЬНЫЙ процесс, и это важно: бот — только распространитель ссылок.
+ * Он не открывает базу, не ходит в БАРС и OWA, не поднимает REST API и не
+ * запускает нотификатор. Ему нужны ровно две переменные окружения:
+ *
+ *   TELEGRAM_BOT_TOKEN — токен от @BotFather;
+ *   PWA_URL            — публичный адрес приложения для кнопки «Открыть Mood».
+ *
+ * Необязательная MOOD_APK_DIR указывает, где искать APK (по умолчанию —
+ * `tg/apk/` рядом с процессом). Если файла нет, бот просто показывает
+ * инструкцию установки через Chrome.
+ *
+ * Приложение (API + нотификатор + Web Push + отчёты) живёт в соседнем процессе
+ * `backend/server/main.ts` (`dist/app.js`) и запускается своим systemd-юнитом.
+ * Общих модулей у процессов нет, поэтому падение или компрометация бота не
+ * даёт доступа к персональным данным студентов.
  */
-{
-  const { errors, warnings } = validateSecrets();
-  for (const warning of warnings) console.warn(`[secrets] ${warning}`);
-  if (errors.length > 0) {
-    for (const error of errors) console.error(`[secrets] ${error}`);
-    console.error('[secrets] Исправьте .env и перезапустите сервис.');
-    process.exit(1);
-  }
-}
+
+import 'dotenv/config';
+
+import { safeErrorMessage } from './format.ts';
+import { initTelegramBot } from './telegramService.ts';
 
 /*
  * Последний предохранитель процесса.
  *
- * В Node 15+ необработанный rejected промис по умолчанию ОБРЫВАЕТ процесс. У нас
- * в одном процессе и бот, и API, и фоновый нотификатор: любой потерянный reject
- * (например, EPIPE при обрыве скачивания файла, который клиент закрыл) ронял бы
- * всё сразу — пропадал API, и приложение «перезагружалось». Логируем и
- * продолжаем вместо падения; по-настоящему фатальные вещи по-прежнему видит
- * systemd.
+ * В Node 15+ необработанный rejected промис по умолчанию обрывает процесс.
+ * У бота нет ничего, что стоило бы ронять целиком из-за одного потерянного
+ * reject: long polling сам восстановится. Логируем и продолжаем.
  */
 process.on('unhandledRejection', (reason) => {
   console.error(
@@ -51,8 +45,20 @@ process.on('uncaughtException', (err) => {
 });
 
 console.log('==============================================');
-console.log('🤖 Запуск Telegram-бота расписания НИУ МЭИ...');
+console.log('🤖 Запуск Telegram-бота поддержки Mood...');
 console.log('==============================================');
+
+const token = process.env.TELEGRAM_BOT_TOKEN?.trim() ?? '';
+
+if (!token || token === 'MY_TELEGRAM_BOT_TOKEN') {
+  console.error('[Telegram Bot] TELEGRAM_BOT_TOKEN не задан — бот не запустится.');
+  process.exit(1);
+}
+
+if (!/^\d+:[A-Za-z0-9_-]{20,}$/.test(token)) {
+  console.error('[Telegram Bot] TELEGRAM_BOT_TOKEN не похож на токен BotFather.');
+  process.exit(1);
+}
 
 initTelegramBot().catch((err) => {
   console.error('❌ Критическая ошибка при запуске бота:', safeErrorMessage(err));

@@ -7,6 +7,7 @@
  */
 
 import type { SavedSessionData, StudentInfo } from '../../../services/bars/barsClient.ts';
+import type { LegalDocId } from '../../../legal/types.ts';
 
 /**
  * Незавершённый вход с двухфакторной аутентификацией. Хранится в памяти
@@ -18,6 +19,8 @@ export interface PendingLogin {
   login: string;
   password: string;
   barsLoginHash: string;
+  /** Согласия, принятые на первом шаге входа. Записываются после успеха. */
+  consents: LegalDocId[];
   /** Ключ ограничителя: адрес клиента, начавшего вход. */
   owner: string;
   createdAt: number;

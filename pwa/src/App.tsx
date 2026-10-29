@@ -6,7 +6,9 @@ import { InstallPrompt, shouldShowInstallPrompt } from '@/components/InstallProm
 import { IosInstallGuide, useShouldShowIosInstallGuide } from '@/components/IosInstallGuide';
 import { DiagnosticsScreen } from '@/DiagnosticsScreen';
 import { api } from '@/lib/api';
-import { haptic, isIOS } from '@/lib/env';
+import { haptic, isIOS, openLink } from '@/lib/env';
+import { LOGIN_DOCUMENTS, POLICY_LINK } from './legal';
+import type { LegalDocId } from './types/api';
 import {
   AuthError,
   confirmTwoFactor,
@@ -284,6 +286,10 @@ function LoginScreen({
   const [codeDeadline, setCodeDeadline] = useState(0);
   /** Что показать рядом с полем кода: сколько осталось ждать. */
   const [secondsLeft, setSecondsLeft] = useState(0);
+  /** Принятые на этом экране документы. Ни одна галочка не стоит по умолчанию. */
+  const [accepted, setAccepted] = useState<Partial<Record<LegalDocId, boolean>>>({});
+
+  const allAccepted = LOGIN_DOCUMENTS.every((document) => accepted[document.id]);
 
   /**
    * Сообщаем наверх, что идёт ввод кода 2FA: в этот момент iOS-гайд не должен
@@ -330,11 +336,19 @@ function LoginScreen({
       return;
     }
 
+    if (!allAccepted) {
+      setError('Отметьте все документы, чтобы продолжить.');
+      return;
+    }
+
     setBusy(true);
     setError(null);
 
     try {
-      const result = await loginWithPassword(trimmed, password);
+      const consents = LOGIN_DOCUMENTS.filter((document) => accepted[document.id]).map(
+        (document) => document.id,
+      );
+      const result = await loginWithPassword(trimmed, password, consents);
 
       if (isTwoFactorRequired(result)) {
         setChallengeId(result.challengeId);
@@ -395,6 +409,52 @@ function LoginScreen({
       </div>
 
       {step === 'credentials' ? (
+        <div className="space-y-3 rounded-[16px] border border-[var(--separator-soft)] bg-[var(--surface)] p-4">
+          <p className="text-[13px] leading-snug text-[var(--text-secondary)]">
+            Перед входом примите документы. Каждый пункт — отдельно, галочки не
+            проставлены заранее.
+          </p>
+
+          {LOGIN_DOCUMENTS.map((document) => (
+            <label key={document.id} className="flex items-start gap-3">
+              <input
+                type="checkbox"
+                checked={!!accepted[document.id]}
+                onChange={(event) =>
+                  setAccepted((prev) => ({ ...prev, [document.id]: event.target.checked }))
+                }
+                className="mt-0.5 h-5 w-5 shrink-0 accent-[var(--accent)]"
+              />
+              <span className="text-[13px] leading-snug">
+                Я принимаю{' '}
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    openLink(document.url);
+                  }}
+                  className="text-left font-medium underline decoration-[var(--accent)] underline-offset-2"
+                  style={{ color: 'var(--accent)' }}
+                >
+                  {document.title}
+                </button>
+              </span>
+            </label>
+          ))}
+
+          <button
+            type="button"
+            onClick={() => openLink(POLICY_LINK.url)}
+            className="text-left text-[12px] leading-snug underline decoration-[var(--separator-soft)] underline-offset-2"
+            style={{ color: 'var(--text-tertiary)' }}
+          >
+            {POLICY_LINK.title}
+          </button>
+        </div>
+      ) : null}
+
+      {step === 'credentials' ? (
         <form
           className="space-y-3"
           onSubmit={(event) => {
@@ -431,7 +491,7 @@ function LoginScreen({
 
           <button
             type="submit"
-            disabled={busy}
+            disabled={busy || !allAccepted}
             className="pressable pressable-active w-full rounded-[14px] bg-[var(--accent)] px-4 py-3.5 text-[16px] font-semibold text-white disabled:opacity-40"
           >
             {busy ? 'Проверяем…' : 'Войти'}

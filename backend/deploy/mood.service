@@ -1,13 +1,16 @@
 # /etc/systemd/system/mood.service
+# Приложение Mood: REST API + фоновый нотификатор + Web Push + отчёты.
+# Telegram-бот сюда НЕ входит — он живёт отдельным юнитом mood-bot.service.
+#
 # Установка:
 #   npm ci && npm run build
 #   useradd --system --home /opt/mood --shell /usr/sbin/nologin mood
-#   chown -R mood:mood /opt/mood && chmod 700 /opt/mood/data && chmod 600 /opt/mood/.env
+#   chown -R mood:mood /opt/mood && chmod 700 /opt/mood/db/data && chmod 600 /opt/mood/.env
 #   cp backend/deploy/mood.service /etc/systemd/system/mood.service
 #   systemctl daemon-reload && systemctl enable --now mood
 
 [Unit]
-Description=Mood Telegram Schedule Service
+Description=Mood PWA Service (API + notifications)
 After=network-online.target
 Wants=network-online.target
 StartLimitIntervalSec=300
@@ -16,31 +19,26 @@ StartLimitBurst=5
 [Service]
 Type=simple
 
-# Бот не нуждается в root: он только пишет в /opt/mood/data и ходит по сети.
+# Сервис не нуждается в root: он пишет только в db/data и ходит по сети.
 # Под root кража любой уязвимости давала сразу полный контроль над VPS.
 User=mood
 Group=mood
 WorkingDirectory=/opt/mood
 
-# Все создаваемые файлы — только для владельца. Без этого data/users.json с
-# зашифрованными паролями и живыми сессиями читает любой локальный пользователь.
+# Все создаваемые файлы — только для владельца. Без этого база с зашифрованными
+# паролями и живыми сессиями читается любым локальным пользователем.
 UMask=0077
 
-# --max-old-space-size=256: потолок для кучи V8. Без него Node подбирает лимит
-# по объёму RAM, и на VPS с 512 МБ ядро доведёт процесс до SIGKILL от
-# OOM-killer'а — в журнале будет только «Killed», без причины.
-# С флагом V8 сам останавливает процесс раньше, на RSS ~300 МБ, печатая
-# «FATAL ERROR: ... JavaScript heap out of memory». Это даёт две вещи:
-#   1. причина падения видна в journalctl;
-#   2. у MemoryMax=400M остаётся запас, и OOM-killer не нужен.
-ExecStart=/usr/bin/node --max-old-space-size=256 dist/bot.js
+# --max-old-space-size: потолок для кучи V8. Без него Node подбирает лимит по
+# объёму RAM, и на VPS ядро доводит процесс до SIGKILL от OOM-killer'а — в
+# журнале будет только «Killed», без причины. С флагом V8 сам останавливает
+# процесс раньше, печатая «FATAL ERROR: ... JavaScript heap out of memory».
+ExecStart=/usr/bin/node --max-old-space-size=768 dist/app.js
 
 # Мягкий лимит памяти cgroup. Если превышен — SIGKILL и рестарт.
-# Держим выше пикового RSS бота (~300 МБ), но ниже 512 МБ физической памяти:
-# запас нужен самому systemd и sshd.
-MemoryMax=400M
+MemoryMax=1536M
 
-# Долгий опрос Telegram: перезапуск при любом выходе, а не только при ошибке.
+# Перезапуск при любом выходе, а не только при ошибке.
 Restart=always
 RestartSec=10
 

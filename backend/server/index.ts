@@ -1,11 +1,12 @@
 /**
  * REST API для PWA.
  *
- * Сервер живёт в одном процессе с ботом и переиспользует его сервисы
- * (userStore, кэш расписания, скрапер БАРС, IMAP). Отдельная копия этих
- * сервисов разошлась бы с ботом по данным, поэтому здесь только транспорт:
- * проверка PWA-токена, выбор пользователя, вызов существующих функций и
- * сериализация.
+ * Сервер живёт в одном процессе с фоновым нотификатором и переиспользует
+ * сервисы приложения (userStore, кэш расписания, скрапер БАРС, OWA). Отдельная
+ * копия этих сервисов разошлась бы с нотификатором по данным, поэтому здесь
+ * только транспорт: проверка PWA-токена, выбор пользователя, вызов готовых
+ * функций и сериализация. Telegram-бота в этом процессе нет — см.
+ * `backend/server/main.ts` и `tg/bot.ts`.
  *
  * Запуск: npm run api (порт API_PORT, по умолчанию 3000)
  */
@@ -16,6 +17,7 @@ import multipart from '@fastify/multipart';
 
 import { AuthError, authHook } from './middleware/auth.ts';
 import { registerAuthRoutes } from './routes/auth.ts';
+import { registerLegalRoutes } from './routes/legal.ts';
 import { registerGuestRoutes } from './routes/guest.ts';
 import { registerAccountRoutes } from './routes/account.ts';
 import { registerScheduleRoutes } from './routes/schedule.ts';
@@ -179,6 +181,9 @@ function isPublicApiPath(request: { url: string; method: string }): boolean {
   // экрану входа до появления токена, секретов не содержит.
   if (request.method === 'GET' && route === '/api/auth/config') return true;
 
+  // Тексты документов нужны до входа: экран логина показывает ссылки.
+  if (request.method === 'GET' && route === '/api/legal/documents') return true;
+
   // Гостю токен ещё не выдан: поиск группы и создание сессии открыты.
   if (request.method === 'GET' && route === '/api/guest/groups') return true;
   if (request.method === 'POST' && route === '/api/guest/session') return true;
@@ -276,6 +281,7 @@ export async function buildServer(): Promise<FastifyInstance> {
   app.get('/health', async () => ({ status: 'ok', uptime: Math.floor(process.uptime()) }));
 
   await registerAuthRoutes(app);
+  await registerLegalRoutes(app);
   await registerGuestRoutes(app);
   registerAccountRoutes(app);
   await registerScheduleRoutes(app);

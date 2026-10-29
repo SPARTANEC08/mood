@@ -20,6 +20,7 @@ import { usePullToRefresh } from '@/components/PullToRefresh';
 import { DeleteAccountCard } from '@/components/profile/DeleteAccountCard';
 import { HiddenMenuScreen } from '@/components/profile/HiddenMenuScreen';
 import { SettingsCard } from '@/components/profile/SettingsCard';
+import { ConsentsCard } from '@/components/profile/ConsentsCard';
 import { StudyLine, StudySection } from '@/components/profile/StudySection';
 import { useAppData } from '@/lib/dataContext';
 import { plural } from '@/lib/dates';
@@ -461,7 +462,11 @@ export function ProfilePage({ profile }: { profile: BootstrapResponse }) {
           <h2 className="px-1 pt-2 text-[12px] font-semibold uppercase tracking-[0.09em] text-[var(--text-secondary)]">
             Настройки приложения
           </h2>
-          <SettingsCard profile={p} />
+          <SettingsCard
+            profile={p}
+            pushConsentAccepted={!!profile.legal?.accepted.some((item) => item.id === 'push')}
+          />
+          <ConsentsCard legal={profile.legal} isGuest={profile.profile.isGuest} />
 
           <h2 className="px-1 pt-2 text-[12px] font-semibold uppercase tracking-[0.09em] text-[var(--text-secondary)]">
             Контакты и код

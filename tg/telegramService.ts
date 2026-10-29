@@ -1,19 +1,17 @@
 /**
  * Подключение Telegram-бота поддержки.
  *
- * Бот больше не платформа приложения: он показывает ссылки на PWA, канал,
- * GitHub и поддержку, плюс инструкции установки. Ни привязки аккаунта, ни
- * уведомлений, ни админки здесь нет.
+ * Бот — самостоятельный процесс и НЕ импортирует ничего из `backend/` или
+ * `db/`: ему не нужны ни база, ни БАРС, ни почта, ни ключи шифрования. Он умеет
+ * только одно — раздавать ссылки: на PWA, канал, GitHub, поддержку и APK.
  *
- * `getBotInstance()` остаётся: его использует `telegramFileDownload` →
- * `fileStore.saveTelegramFile` (мёртвая ветка, но трогать её нельзя, пока
- * `db/storage/**` живёт отдельно).
+ * Поэтому здесь нет ни запуска REST API, ни фонового нотификатора, ни ночного
+ * отчёта. Всё это живёт в отдельном процессе `backend/server/main.ts`
+ * (`dist/app.js`), а бот запускается из `tg/bot.ts` (`dist/bot.js`).
  */
 
 import { Bot, InputFile } from 'grammy';
 
-import { flushSnapshots, startNotifier } from '../backend/services/notifications/barsNotifier.ts';
-import { startDailyReport } from '../backend/services/notifications/dailyReport.ts';
 import { processTelegramCallback, processTelegramMessage } from './botEngine.ts';
 import { classifyEditError } from './editErrors.ts';
 import { safeErrorMessage } from './format.ts';
@@ -21,12 +19,6 @@ import { type BotViewResult, type InlineButton } from './pwaView.ts';
 
 const HTML_PARSE_MODE = 'HTML' as const;
 const POLL_RESTART_DELAY_MS = 5_000;
-
-let botInstance: Bot | null = null;
-
-export function getBotInstance(): Bot | null {
-  return botInstance;
-}
 
 function markupFor(keyboard: InlineButton[][] | undefined) {
   if (!keyboard || keyboard.length === 0) return undefined;
@@ -92,7 +84,6 @@ export async function initTelegramBot(): Promise<void> {
 
   try {
     const bot = new Bot(token.trim());
-    botInstance = bot;
 
     bot.catch((err) => {
       console.error('[Telegram Bot Error]:', safeErrorMessage(err));
@@ -173,27 +164,14 @@ export async function initTelegramBot(): Promise<void> {
       }
     });
 
-    // REST API для PWA живёт в том же процессе и переиспользует сервисы.
-    if (process.env.API_PORT) {
-      try {
-        const { startServer } = await import('../backend/server/index.ts');
-        await startServer();
-      } catch (err: unknown) {
-        console.error('[API] Не удалось запустить сервер PWA:', safeErrorMessage(err));
-      }
-    }
-
     const botInfo = await bot.api.getMe();
     console.log(`[Telegram Bot] Успешно запущен бот @${botInfo.username || 'unknown'}!`);
 
-    // Нотификатор и ночной срез не зависят от Telegram: бот просто живёт в том
-    // же процессе, что и API.
-    startNotifier();
-    startDailyReport();
-
+    // Останавливаем long polling по SIGTERM/SIGINT, чтобы systemd-рестарт не
+    // оставлял два инстанса, дерущихся за один токен.
     for (const signal of ['SIGTERM', 'SIGINT'] as const) {
       process.once(signal, () => {
-        flushSnapshots();
+        void bot.stop();
         process.exit(0);
       });
     }

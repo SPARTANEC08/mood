@@ -424,28 +424,6 @@ export async function deleteAllFiles(userId: string): Promise<void> {
 }
 
 /**
- * Переносит файл из Telegram в файловое хранилище.
- *
- * Вызывается из бота: раньше он копировал сообщение в канал-хранилище, теперь
- * вместо копирования получает содержимое через Bot API и кладёт на диск. Имя
- * и тип берутся из file_id-префикса Telegram, потому что сам файл приходит без
- * них.
+ * Корневой каталог хранилища — нужен скрипту сброса базы.
  */
-export async function saveTelegramFile(
-  userId: string,
-  fileId: string,
-  originalName: string,
-  mimeType: string,
-  uploadedBy: string = userId,
-): Promise<ServerFileRef> {
-  // Импорт внутри функции: telegramService тянет сюда fileStore, и наоборот.
-  // Статический импорт дал бы цикл, который Node раскручивает, но Vite-скрипты
-  // и esbuild — уже нет.
-  const { downloadTelegramFile } = await import('../../tg/telegramFileDownload.ts');
-  const buffer = await downloadTelegramFile(fileId);
-
-  return saveFile(userId, buffer, originalName, mimeType, uploadedBy);
-}
-
-/** Корневой каталог хранилища — нужен скрипту сброса базы. */
 export const FILES_ROOT = FILES_DIR;

@@ -10,6 +10,7 @@ import { BellOff, BellRing, Monitor } from 'lucide-react';
 
 import { Card } from '@/components/ui';
 import { PushHelpSheet } from '@/components/profile/PushHelpSheet';
+import { PushConsentSheet } from '@/components/legal/PushConsentSheet';
 import { api } from '@/lib/api';
 import { haptic } from '@/lib/env';
 import { enablePush, pushPermission, pushSupport, syncPush } from '@/lib/push';
@@ -22,12 +23,20 @@ const THEME_OPTIONS: Array<{ mode: ThemeMode; label: string }> = [
   { mode: 'dark', label: 'Тёмная' },
 ];
 
-export function SettingsCard({ profile }: { profile: BootstrapProfile }) {
+export function SettingsCard({
+  profile,
+  pushConsentAccepted = false,
+}: {
+  profile: BootstrapProfile;
+  pushConsentAccepted?: boolean;
+}) {
   const [mode, setMode] = useTheme();
 
   const [pushEnabled, setPushEnabled] = useState<boolean>(profile.pushEnabled !== false);
   const [pushDevices, setPushDevices] = useState<number>(profile.pushDevices ?? 0);
   const [pushBusy, setPushBusy] = useState(false);
+  const [consentOpen, setConsentOpen] = useState(false);
+  const [consentOk, setConsentOk] = useState(pushConsentAccepted);
   const [helpKind, setHelpKind] = useState<'denied' | 'ios' | null>(null);
   const pushSupportState = pushSupport();
   const [permission, setPermission] = useState<NotificationPermission | 'unsupported'>(() =>
@@ -38,6 +47,10 @@ export function SettingsCard({ profile }: { profile: BootstrapProfile }) {
     setPushEnabled(profile.pushEnabled !== false);
     setPushDevices(profile.pushDevices ?? 0);
   }, [profile.pushEnabled, profile.pushDevices]);
+
+  useEffect(() => {
+    setConsentOk(pushConsentAccepted);
+  }, [pushConsentAccepted]);
 
   const reload = useCallback(async () => {
     try {
@@ -78,7 +91,7 @@ export function SettingsCard({ profile }: { profile: BootstrapProfile }) {
     return () => document.removeEventListener('visibilitychange', onVisible);
   }, [reload]);
 
-  async function togglePush(): Promise<void> {
+  async function togglePush(force = false): Promise<void> {
     if (pushBusy) return;
 
     setPushBusy(true);
@@ -91,6 +104,12 @@ export function SettingsCard({ profile }: { profile: BootstrapProfile }) {
         await api.toggleNotifications(false);
         setPushEnabled(false);
       } else {
+        if (!force && !consentOk) {
+          setConsentOpen(true);
+          setPushBusy(false);
+          return;
+        }
+
         const granted = await enablePush();
         setPermission(pushPermission());
 
@@ -137,6 +156,7 @@ export function SettingsCard({ profile }: { profile: BootstrapProfile }) {
   const themeLabel = THEME_OPTIONS.find((option) => option.mode === mode)?.label ?? 'Системная';
 
   return (
+    <>
     <Card className="overflow-hidden p-0">
       <div className="flex items-center gap-3 px-4 py-3.5">
         <span
@@ -251,5 +271,16 @@ export function SettingsCard({ profile }: { profile: BootstrapProfile }) {
 
       {helpKind ? <PushHelpSheet kind={helpKind} onClose={() => setHelpKind(null)} /> : null}
     </Card>
+
+    <PushConsentSheet
+      open={consentOpen}
+      onClose={() => setConsentOpen(false)}
+      onAccepted={() => {
+        setConsentOpen(false);
+        setConsentOk(true);
+        void togglePush(true);
+      }}
+    />
+    </>
   );
 }

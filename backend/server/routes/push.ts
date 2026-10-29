@@ -17,6 +17,7 @@ import {
   MAX_PUSH_SUBSCRIPTIONS,
   getVapidPublicKey,
 } from '../../services/notifications/webPush.ts';
+import { LEGAL_DOCUMENTS, isConsentCurrent } from '../../legal/registry.ts';
 import { requireUser } from '../middleware/auth.ts';
 
 /** Разумные пределы: endpoint и ключи — короткие base64url-строки. */
@@ -104,6 +105,14 @@ export function registerPushRoutes(app: FastifyInstance): void {
    */
   app.post('/api/push/subscribe', async (request, reply) => {
     const user = requireUser(request);
+
+    if (!isConsentCurrent(user.consents?.push, LEGAL_DOCUMENTS.push)) {
+      return reply.code(403).send({
+        error: 'consent_required',
+        message: 'Сначала примите согласие на push-уведомления.',
+      });
+    }
+
     const parsed = readSubscription(request.body);
 
     if (!parsed) {

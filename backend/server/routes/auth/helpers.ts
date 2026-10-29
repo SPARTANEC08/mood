@@ -12,6 +12,8 @@ import type { FastifyRequest } from 'fastify';
 import type { StoredUser } from '../../../../db/storage/userStore.ts';
 import { isPwaAdmin } from '../../../utils/adminAuth.ts';
 import { AuthError } from '../../middleware/auth.ts';
+import { LOGIN_CONSENTS } from '../../../legal/registry.ts';
+import type { LegalDocId } from '../../../legal/types.ts';
 import type { BootstrapResponse } from '../../types.ts';
 
 /** Максимальная длина логина и пароля: БАРС столько не принимает. */
@@ -52,8 +54,35 @@ export function readCredentials(request: FastifyRequest): { login: string; passw
   return { login, password };
 }
 
-/**
- * Профиль для шапки приложения.
+/** Типы документов, которые клиент прислал вместе с логином. */
+export function readConsents(request: FastifyRequest): LegalDocId[] {
+  const body = (request.body ?? {}) as { consents?: unknown };
+  if (!Array.isArray(body.consents)) return [];
+
+  const allowed = new Set<string>(LOGIN_CONSENTS);
+  const seen = new Set<LegalDocId>();
+
+  for (const value of body.consents) {
+    if (typeof value !== 'string' || !allowed.has(value)) continue;
+    seen.add(value as LegalDocId);
+  }
+
+  return [...seen];
+}
+
+/** Проверяет обязательные согласия до похода в БАРС. */
+export function assertLoginConsents(consents: LegalDocId[]): void {
+  const missing = LOGIN_CONSENTS.filter((id) => !consents.includes(id));
+  if (missing.length === 0) return;
+
+  throw new AuthError(
+    'Перед входом нужно принять условия обработки данных, пользовательское соглашение и подтвердить возраст 18+.',
+    400,
+    'consent_required',
+  );
+}
+
+/** Профиль для шапки приложения.
  *
  * ФИО берётся из БАРС — это достовернее имени в Telegram, которое человек мог
  * задать любой строкой.

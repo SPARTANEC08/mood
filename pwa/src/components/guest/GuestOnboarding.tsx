@@ -10,9 +10,10 @@ import { ArrowLeft, CalendarDays } from 'lucide-react';
 
 import { GuestGroupField } from './GuestGroupField';
 import { ApiError, api } from '@/lib/api';
-import { haptic } from '@/lib/env';
+import { haptic, openLink } from '@/lib/env';
+import { GUEST_DOCUMENTS, POLICY_LINK } from '@/legal';
 import type { PwaTokenResponse } from '@/auth';
-import type { GuestGroup } from '@/types/api';
+import type { GuestGroup, LegalDocId } from '@/types/api';
 
 export function GuestOnboarding({
   onDone,
@@ -28,8 +29,10 @@ export function GuestOnboarding({
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [accepted, setAccepted] = useState<Partial<Record<LegalDocId, boolean>>>({});
 
-  const canSubmit = group !== null && name.trim().length > 0 && !busy;
+  const allAccepted = GUEST_DOCUMENTS.every((document) => accepted[document.id]);
+  const canSubmit = group !== null && name.trim().length > 0 && allAccepted && !busy;
 
   async function submit(): Promise<void> {
     if (!canSubmit || !group) return;
@@ -43,6 +46,9 @@ export function GuestOnboarding({
         groupName: group.label,
         faculty: group.description,
         displayName: name.trim(),
+        consents: GUEST_DOCUMENTS.filter((document) => accepted[document.id]).map(
+          (document) => document.id,
+        ),
       });
       haptic('medium');
       onDone(issued);
@@ -107,6 +113,49 @@ export function GuestOnboarding({
               placeholder="Имя или псевдоним"
               className="w-full rounded-[12px] border border-[var(--separator-soft)] bg-[var(--surface)] px-3 py-2.5 text-[15px] text-[var(--text-primary)] outline-none focus:border-[var(--accent)] disabled:opacity-50"
             />
+          </div>
+
+          <div className="space-y-3 rounded-[16px] border border-[var(--separator-soft)] bg-[var(--surface)] p-4">
+            <p className="text-[13px] leading-snug text-[var(--text-secondary)]">
+              Для гостевого режима примите документы. Галочки не проставлены заранее.
+            </p>
+
+            {GUEST_DOCUMENTS.map((document) => (
+              <label key={document.id} className="flex items-start gap-3">
+                <input
+                  type="checkbox"
+                  checked={!!accepted[document.id]}
+                  onChange={(event) =>
+                    setAccepted((prev) => ({ ...prev, [document.id]: event.target.checked }))
+                  }
+                  className="mt-0.5 h-5 w-5 shrink-0 accent-[var(--accent)]"
+                />
+                <span className="text-[13px] leading-snug">
+                  Я принимаю{' '}
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      openLink(document.url);
+                    }}
+                    className="text-left font-medium underline decoration-[var(--accent)] underline-offset-2"
+                    style={{ color: 'var(--accent)' }}
+                  >
+                    {document.title}
+                  </button>
+                </span>
+              </label>
+            ))}
+
+            <button
+              type="button"
+              onClick={() => openLink(POLICY_LINK.url)}
+              className="text-left text-[12px] leading-snug underline decoration-[var(--separator-soft)] underline-offset-2"
+              style={{ color: 'var(--text-tertiary)' }}
+            >
+              {POLICY_LINK.title}
+            </button>
           </div>
 
           {error ? (

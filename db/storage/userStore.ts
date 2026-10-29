@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { JsonDocument } from '../jsonStore.ts';
 import { computeBarsLoginHash } from '../../backend/utils/barsLoginHash.ts';
 import type { UserPlatform } from '../../backend/utils/platform.ts';
+import type { ConsentSnapshot, LegalDocId } from '../../backend/legal/types.ts';
 import {
   emptyDocument,
   nowIso,
@@ -180,6 +181,13 @@ export interface StoredUser {
    * в браузере, и молчаливого канала из ниоткуда не возникает.
    */
   pushEnabled?: boolean;
+  /**
+   * Актуальные акцепты юридических документов: тип → версия и метаданные.
+   *
+   * Здесь только текущее состояние. Полная история (включая отзывы) — в
+   * consents.json, см. db/storage/consentStore.ts.
+   */
+  consents?: Partial<Record<LegalDocId, ConsentSnapshot>>;
   /**
    * Платформа последнего клиента (iOS / Android / Web / unknown).
    *

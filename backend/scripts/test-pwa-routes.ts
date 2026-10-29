@@ -34,6 +34,7 @@ process.env.ENCRYPTION_SECRET_KEY = 'd'.repeat(64);
 const { buildServer } = await import('../server/index.ts');
 const { issuePwaToken, hashToken } = await import('../utils/pwaAuth.ts');
 const { userStore } = await import('../../db/storage/userStore.ts');
+const { acceptConsents } = await import('../legal/consentService.ts');
 const { computeBarsLoginHash } = await import('../utils/barsLoginHash.ts');
 const { BarsClient } = await import('../services/bars/barsClient.ts');
 
@@ -58,6 +59,15 @@ function auth(token: string): Record<string, string> {
   return { 'x-pwa-token': token };
 }
 
+const LOGIN_CONSENTS = ['processing', 'dissemination', 'terms', 'age'] as const;
+
+/** Отмечает согласия напрямую: тестовые пользователи создаются в обход логина. */
+function grantConsents(userId: string): void {
+  const user = userStore.getByUserId(userId);
+  if (!user) return;
+  acceptConsents(user, [...LOGIN_CONSENTS], { method: 'pwa' });
+}
+
 console.log('\n=== PWA API: маршруты и авторизация ===\n');
 
 // ── тестовый пользователь ─────────────────────────────────────────────────────
@@ -65,6 +75,7 @@ console.log('\n=== PWA API: маршруты и авторизация ===\n');
 // только после этого хук пропускает запрос.
 const created = userStore.create({ barsLoginHash: computeBarsLoginHash('st000001') });
 const userId = created.userId;
+grantConsents(userId);
 
 const { token } = issuePwaToken(userId);
 userStore.addToken(userId, hashToken(token), new Date(Date.now() + 86_400_000));
@@ -200,6 +211,7 @@ console.log('\n— Повторный вход в существующий ак�
   const linked = userStore.create({
     barsLoginHash: computeBarsLoginHash('linked-student'),
   });
+  grantConsents(linked.userId);
   const originalLogin = BarsClient.prototype.login;
 
   BarsClient.prototype.login = async () => ({
@@ -217,7 +229,7 @@ console.log('\n— Повторный вход в существующий ак�
     const response = await app.inject({
       method: 'POST',
       url: '/api/auth/login',
-      payload: { login: 'linked-student', password: 'test-password' },
+      payload: { login: 'linked-student', password: 'test-password', consents: LOGIN_CONSENTS },
     });
     const body = response.json<{ userId?: string; token?: string }>();
 
@@ -292,6 +304,7 @@ console.log('\n— Изоляция групп: чужой id в PATCH/DELETE �
       barsAuth,
       studentProfile: { fullName, groupName },
     });
+    grantConsents(user.userId);
     const { token: userToken } = issuePwaToken(user.userId);
     userStore.addToken(user.userId, hashToken(userToken), new Date(Date.now() + 86_400_000));
     return userToken;
@@ -394,6 +407,7 @@ console.log('\n— Уведомления в приложении —');
 
   // Отдельный пользователь с входом в БАРС: объявления только для таких.
   const barred = userStore.create({ barsLoginHash: computeBarsLoginHash('announce-test') });
+  grantConsents(barred.userId);
   userStore.patch(barred.userId, {
     barsAuth: {
       encryptedLogin: 'x', encryptedPass: 'x', iv: 'x', tag: 'x',
@@ -577,13 +591,21 @@ console.log('\n— Гостевой режим —');
   // Кладём готовое расписание в постоянный кэш: гость должен получить его
   // без похода в МЭИ, а тест — работать без сети.
   clearScheduleCache();
+  const cacheDay = new Date();
+  const cacheFormat = (date: Date): string =>
+    `${date.getFullYear()}.${String(date.getMonth() + 1).padStart(2, '0')}.${String(date.getDate()).padStart(2, '0')}`;
+  const cacheStart = new Date(cacheDay);
+  cacheStart.setDate(cacheDay.getDate() - 1);
+  const cacheFinish = new Date(cacheDay);
+  cacheFinish.setDate(cacheDay.getDate() + 7);
+
   scheduleCacheStore.put(21985, {
     groupName: 'ИЭ-11-26',
     groupId: 21985,
     facultyName: 'Институт электроэнергетики',
     parentScheduleName: 'ИЭ-11-26',
     totalLessons: 0,
-    dateRange: { start: '2026.10.20', finish: '2026.10.27' },
+    dateRange: { start: cacheFormat(cacheStart), finish: cacheFormat(cacheFinish) },
     days: [],
   }, Date.now());
 
@@ -626,6 +648,7 @@ console.log('\n— Гостевой режим —');
       groupName: 'ИЭ-11-26',
       faculty: 'Институт электроэнергетики',
       displayName: 'Тестовый Гость',
+      consents: ['processing', 'terms', 'age', 'guest'],
     },
   });
   const sessionBody = session.json<{
@@ -656,7 +679,7 @@ console.log('\n— Гостевой режим —');
     headers: auth(guestToken),
   });
   check('гость получает расписание → 200', schedule.statusCode === 200, `${schedule.statusCode} ${schedule.body}`);
-  check('расписание взято из постоянного кэша', schedule.json<{ days?: unknown[] }>().days?.length === 0);
+  check('расписание отдано массивом дней', Array.isArray(schedule.json<{ days?: unknown[] }>().days));
 
   const forbidden = await Promise.all([
     app.inject({ method: 'GET', url: '/api/homework', headers: auth(guestToken) }),
@@ -688,7 +711,12 @@ console.log('\n— Гостевой режим —');
   const closed = await app.inject({
     method: 'POST',
     url: '/api/guest/session',
-    payload: { groupId: 21985, groupName: 'ИЭ-11-26', displayName: 'Закрытый Гость' },
+    payload: {
+      groupId: 21985,
+      groupName: 'ИЭ-11-26',
+      displayName: 'Закрытый Гость',
+      consents: ['processing', 'terms', 'age', 'guest'],
+    },
   });
   check('при закрытой регистрации гость не создаётся', closed.statusCode === 403, String(closed.statusCode));
   check('код registration_closed', closed.json<{ error?: string }>().error === 'registration_closed');

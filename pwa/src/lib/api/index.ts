@@ -14,6 +14,9 @@ import type {
   BootstrapProfile,
   BootstrapResponse,
   AuthConfigResponse,
+  LegalStatus,
+  LegalDocId,
+  LegalDocumentMeta,
   CreateHomeworkBody,
   CreateImportantBody,
   GradesResponse,
@@ -64,6 +67,19 @@ export const api = {
   // ── профиль и расписание ─────────────────────────────────────────────────
   bootstrap: () => request<BootstrapResponse>('/bootstrap'),
 
+  // ── юридические документы и согласия ─────────────────────────────────────
+  legalDocuments: () =>
+    request<{
+      documents: LegalDocumentMeta[];
+      policy: LegalStatus['policy'];
+      required: LegalDocId[];
+    }>('/legal/documents'),
+
+  legalStatus: () => request<LegalStatus>('/legal/status'),
+
+  acceptConsents: (types: LegalDocId[]) =>
+    request<LegalStatus>('/consents', { method: 'POST', body: { types } }),
+
   /** Публичная конфигурация входа: TTL токена и рубильник регистрации. */
   authConfig: () => request<AuthConfigResponse>('/auth/config'),
 
@@ -73,7 +89,13 @@ export const api = {
     request<GuestGroupsResponse>(`/guest/groups?query=${encodeURIComponent(query)}`),
 
   /** Создать гостевую сессию и получить обычный PWA-токен. */
-  guestSession: (body: { groupId: number; groupName: string; faculty?: string; displayName: string }) =>
+  guestSession: (body: {
+    groupId: number;
+    groupName: string;
+    faculty?: string;
+    displayName: string;
+    consents: LegalDocId[];
+  }) =>
     request<{ token: string; expiresAt: number; userId: string; profile: BootstrapProfile }>(
       '/guest/session',
       { method: 'POST', body },

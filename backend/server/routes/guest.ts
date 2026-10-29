@@ -17,6 +17,9 @@ import type { FastifyInstance } from 'fastify';
 
 import { registrationStore } from '../../../db/storage/registrationStore.ts';
 import { userStore, type StoredUser } from '../../../db/storage/userStore.ts';
+import { acceptConsents } from '../../legal/consentService.ts';
+import { GUEST_CONSENTS } from '../../legal/registry.ts';
+import type { LegalDocId } from '../../legal/types.ts';
 import { searchGroupOnMpei } from '../../parser/mpeiApi.ts';
 import type { MpeiSearchResult } from '../../parser/types.ts';
 import { detectPlatform } from '../../utils/platform.ts';
@@ -111,6 +114,30 @@ function isGuestUser(user: StoredUser): boolean {
   return user.isGuest === true;
 }
 
+/** Гость обязан принять обработку, соглашение, 18+ и гостевой режим. */
+function readGuestConsents(body: unknown): LegalDocId[] {
+  const raw = body && typeof body === 'object' ? (body as { consents?: unknown }).consents : undefined;
+  const values = Array.isArray(raw) ? raw : [];
+  const allowed = new Set<string>(GUEST_CONSENTS);
+  const seen = new Set<LegalDocId>();
+
+  for (const value of values) {
+    if (typeof value !== 'string' || !allowed.has(value)) continue;
+    seen.add(value as LegalDocId);
+  }
+
+  const missing = GUEST_CONSENTS.filter((id) => !seen.has(id));
+  if (missing.length > 0) {
+    throw new AuthError(
+      'Перед гостевым входом примите условия обработки данных, соглашение и подтвердите возраст 18+.',
+      400,
+      'consent_required',
+    );
+  }
+
+  return [...seen];
+}
+
 function groupResult(item: MpeiSearchResult): { id: number; label: string; description: string } {
   return { id: item.id, label: item.label, description: item.description };
 }
@@ -172,6 +199,7 @@ export async function registerGuestRoutes(app: FastifyInstance): Promise<void> {
     }
 
     const body = request.body;
+    const consents = readGuestConsents(body);
     const displayName = readDisplayName(body);
     const group = readGroup(body);
 
@@ -194,7 +222,12 @@ export async function registerGuestRoutes(app: FastifyInstance): Promise<void> {
       throw new AuthError('Не удалось создать гостевой профиль.', 500, 'guest_create_failed');
     }
 
-    return reply.send(issueToken(user));
+    const withConsents = acceptConsents(user, consents, {
+      ip: clientKey(request),
+      method: 'pwa',
+    });
+
+    return reply.send(issueToken(withConsents));
   });
 
   /** PATCH /api/guest/profile — сменить имя и/или группу. */

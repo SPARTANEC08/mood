@@ -23,7 +23,13 @@ export class ApiError extends Error {
     /** true = приложению нужно предложить вход в БАРС через бота. */
     readonly needBarsLogin = false,
     /** Что делать на фронтенде: показать вход, повторить или показать ошибку. */
-    readonly kind: 'unauthorized' | 'cooldown' | 'conflict' | 'server' | 'network' = 'server',
+    readonly kind:
+      | 'unauthorized'
+      | 'cooldown'
+      | 'conflict'
+      | 'consent_required'
+      | 'server'
+      | 'network' = 'server',
   ) {
     super(message);
     this.name = 'ApiError';
@@ -111,7 +117,12 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
   perfLog(`${method} ${path} ${response.status}`, Date.now() - startedAt);
 
   if (!response.ok) {
-    const data = (payload ?? {}) as { message?: string; needBarsLogin?: boolean; retryAfterMs?: number };
+    const data = (payload ?? {}) as {
+      message?: string;
+      error?: string;
+      needBarsLogin?: boolean;
+      retryAfterMs?: number;
+    };
     const kind =
       response.status === 401
         ? 'unauthorized'
@@ -119,7 +130,9 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
           ? 'cooldown'
           : response.status === 409
             ? 'conflict'
-            : 'server';
+            : response.status === 403 && data.error === 'consent_required'
+              ? 'consent_required'
+              : 'server';
 
     throw new ApiError(
       data.message ?? `Ошибка ${response.status}`,

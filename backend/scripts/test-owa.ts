@@ -302,11 +302,10 @@ async function run(): Promise<void> {
     check('session-cookie сохранён', client.serializeCookies().includes('sessionid'));
     check('canary отправлен в service.svc', mock.serviceCanaries[0] === 'canary-1');
 
-    const briefs = await client.fetchMessageBriefs({ limit: 10, onlyUnread: false });
-    check('FindItem вернул письмо, а не обёртку', briefs.length === 1, String(briefs.length));
-    check('тема письма разобрана', briefs[0]?.subject === 'Новое письмо', String(briefs[0]?.subject));
-    check('отправитель разобран', briefs[0]?.from === 'СДО Прометей', String(briefs[0]?.from));
-    check('IsRead → isSeen', briefs[0]?.isSeen === false);
+    const ids = await client.fetchMessageIds({ limit: 10 });
+    check('FindItem вернул письмо, а не обёртку', ids.length === 1, String(ids.length));
+    check('UID письма — время получения', typeof ids[0]?.uid === 'number' && ids[0].uid > 0, String(ids[0]?.uid));
+    check('дата письма разобрана', ids[0]?.date instanceof Date);
   }
 
   console.log('\n▶ OWA-клиент: 401 → перелогин → успех');
@@ -391,10 +390,12 @@ async function run(): Promise<void> {
   console.log('\n▶ /api/mail: 409 + reason вместо 401');
   const { buildServer } = await import('../server/index.ts');
   const { userStore } = await import('../../db/storage/userStore.ts');
+  const { acceptConsents } = await import('../legal/consentService.ts');
   const { issuePwaToken, hashToken } = await import('../utils/pwaAuth.ts');
   const { computeBarsLoginHash } = await import('../utils/barsLoginHash.ts');
   const { encrypt } = await import('../utils/crypto.ts');
-  const { clearMailPreview } = await import('../services/mail/mailPreviewCache.ts');
+  const { clearMailStatus } = await import('../services/mail/mailStatusCache.ts');
+  const { LEGAL_DOCUMENTS } = await import('../legal/registry.ts');
   const { forgetOwaClient } = await import('../services/mail/owaClientRegistry.ts');
 
   const app = await buildServer();
@@ -418,6 +419,15 @@ async function run(): Promise<void> {
     studentProfile: { fullName: 'Тестовый Студент' },
   });
 
+  // Согласия: маршрут /api/mail закрыт requireBars, а тот проверяет актуальные
+  // акцепты. Версии берём из реестра, чтобы тест не отставал от документов.
+  const consentUser = userStore.getByUserId(userId);
+  if (consentUser) {
+    acceptConsents(consentUser, ['processing', 'dissemination', 'terms', 'age'], {
+      method: 'pwa',
+    });
+  }
+
   const token = issuePwaToken(userId).token;
   userStore.addToken(userId, hashToken(token), new Date(Date.now() + 86_400_000));
 
@@ -425,7 +435,7 @@ async function run(): Promise<void> {
 
   async function resetUserState(scenario: Scenario): Promise<void> {
     resetMock(scenario);
-    clearMailPreview(userId);
+    clearMailStatus(userId);
     forgetOwaClient(userId);
     userStore.clearOwaAuth(userId);
   }

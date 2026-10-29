@@ -62,6 +62,32 @@ export interface AuthConfigResponse {
   registrationOpen?: boolean;
 }
 
+/** Типы юридических документов, по которым даётся акцепт. */
+export type LegalDocId =
+  | 'processing'
+  | 'dissemination'
+  | 'push'
+  | 'terms'
+  | 'guest'
+  | 'age';
+
+export interface LegalDocumentMeta {
+  id: LegalDocId;
+  version: string;
+  title: string;
+  shortTitle: string;
+  url: string;
+  required: boolean;
+}
+
+export interface LegalStatus {
+  consentRequired: boolean;
+  missing: LegalDocId[];
+  accepted: Array<{ id: LegalDocId; version: string; acceptedAt: string }>;
+  documents: LegalDocumentMeta[];
+  policy: { id: string; version: string; title: string; url: string };
+}
+
 /** Ответ GET /api/bootstrap. */
 export interface BootstrapResponse {
   profile: BootstrapProfile;
@@ -77,6 +103,8 @@ export interface BootstrapResponse {
   scheduleRange: { start: string; finish: string } | null;
   /** Непрочитанные письма ОСЭП, если удалось посчитать. */
   mailUnread: number | null;
+  /** Согласия на юридические документы. */
+  legal?: LegalStatus;
 }
 
 /**

@@ -23,7 +23,8 @@ import { NotificationsProvider } from '@/components/notifications/NotificationsP
 import { PushSetupGate } from '@/components/profile/PushSetupGate';
 import { GuestScheduleApp } from './GuestScheduleApp';
 import { ErrorState, SkeletonList } from '@/components/ui';
-import { clearPwaToken, SIGNED_OUT_EVENT } from '@/auth';
+import { clearPwaToken, logout, SIGNED_OUT_EVENT } from '@/auth';
+import { ConsentGate } from '@/components/legal/ConsentGate';
 import { ApiError, api } from '@/lib/api';
 import { DataProvider } from '@/lib/dataContext';
 import { syncColorScheme } from '@/lib/env';
@@ -187,6 +188,16 @@ export function ScheduleApp({
     );
   }
 
+  if (bootstrap.legal?.consentRequired) {
+    return (
+      <ConsentGate
+        legal={bootstrap.legal}
+        onAccepted={() => void loadBootstrap()}
+        onLogout={() => void logout()}
+      />
+    );
+  }
+
   if (bootstrap.profile.isGuest) {
     return <GuestScheduleApp bootstrap={bootstrap} />;
   }
@@ -211,7 +222,10 @@ export function ScheduleApp({
           onCloseAddSheet={() => setAddSheetOpen(false)}
         />
 
-        <PushSetupGate profile={bootstrap.profile} />
+        <PushSetupGate
+          profile={bootstrap.profile}
+          pushConsentAccepted={!!bootstrap.legal?.accepted.some((item) => item.id === 'push')}
+        />
 
         {/* Объявления админа: только для авторизованных в БАРС. */}
         <AnnouncementGate />

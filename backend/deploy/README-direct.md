@@ -2,11 +2,14 @@
 
 Схема: пользователь идёт **напрямую на IP VPS**, системный nginx держит HTTPS и
 отдаёт статику PWA, `/api/` проксируется на Fastify (`127.0.0.1:3000`), который
-живёт в том же процессе, что и бот. Cloudflared quick-туннель не используется.
+живёт в отдельном процессе от Telegram-бота. Cloudflared quick-туннель не
+используется.
 
 ```
 Браузер → nginx :443 (TLS, статика /var/www/mood-pwa, /api/ → 127.0.0.1:3000)
-                    └── node dist/bot.js (Fastify API + grammY long polling)
+                    └── node dist/app.js (API + нотификатор + Web Push)
+
+Telegram → api.telegram.org ← long polling ← node dist/bot.js (только ссылки)
 ```
 
 Почему не туннель: при прямом подключении ТСПУ видит IP VPS, а не IP CDN, и
@@ -81,12 +84,12 @@ sudo certbot renew --dry-run   # проверка
 
 ## 4. Сервис приложения (`/etc/systemd/system/mood.service`)
 
-Бэкенд — один процесс (Fastify API + бот + нотификатор). Пример юнита под деплой
-в домашнем каталоге пользователя:
+Приложение — отдельный процесс (Fastify API + нотификатор + Web Push). Пример
+юнита под деплой в домашнем каталоге пользователя:
 
 ```ini
 [Unit]
-Description=Mood - PWA API + Telegram bot (direct nginx)
+Description=Mood - PWA API + notifications (direct nginx)
 After=network-online.target
 Wants=network-online.target
 StartLimitIntervalSec=300
@@ -100,7 +103,7 @@ WorkingDirectory=/home/mood/mood
 UMask=0077
 EnvironmentFile=/home/mood/mood/.env
 Environment=NODE_ENV=production
-ExecStart=/usr/bin/node --max-old-space-size=768 dist/bot.js
+ExecStart=/usr/bin/node --max-old-space-size=768 dist/app.js
 MemoryMax=1536M
 Restart=always
 RestartSec=10
@@ -116,10 +119,10 @@ WantedBy=multi-user.target
 Универсальный вариант под `/opt/mood` и отдельного пользователя `mood` — в
 `backend/deploy/mood.service` (см. README.md).
 
-В `.env`:
+В `.env` приложения:
 
 ```env
-PWA_URL=https://<домен>     # кнопка «Открыть приложение» в боте + CORS-источник
+PWA_URL=https://<домен>     # CORS-источник и ссылки
 API_PORT=3000               # без него API не поднимается
 API_HOST=127.0.0.1          # наружу отдаёт nginx
 ```
@@ -128,6 +131,25 @@ API_HOST=127.0.0.1          # наружу отдаёт nginx
 sudo systemctl daemon-reload
 sudo systemctl enable --now mood
 ```
+
+## 4a. Сервис бота (`/etc/systemd/system/mood-bot.service`)
+
+Бот — самостоятельный процесс и в приложение не входит. Ему нужен только
+`dist/bot.js` (самодостаточный бандл) и `tg/apk/` с APK. Готовый юнит —
+`backend/deploy/mood-bot.service`; переменные — в отдельном `bot.env`:
+
+```env
+TELEGRAM_BOT_TOKEN=...
+PWA_URL=https://<домен>
+MOOD_APK_DIR=/opt/mood-bot/tg/apk
+```
+
+```bash
+sudo systemctl enable --now mood-bot
+```
+
+Бота можно держать и на другом сервере: `node` + `dist/bot.js` + `tg/apk/` +
+`bot.env`, без node_modules и без базы.
 
 ## 5. Важно при миграции с туннеля
 
@@ -139,9 +161,10 @@ systemctl --user disable --now mood.service   # если старая схема
 pkill -f cloudflared; pkill -f mood-user-stack.sh
 ```
 
-Проверка, что остался один процесс:
+Проверка, что остался один процесс каждого сервиса:
 
 ```bash
+pgrep -af 'dist/app.js'          # ровно одна строка
 pgrep -af 'dist/bot.js'          # ровно одна строка
 ss -tlnp | grep -E ':(80|443|3000)\b'
 ```
@@ -161,10 +184,11 @@ sudo journalctl -u mood -n 20 --no-pager
 ## 7. Обновление
 
 ```bash
-# код: собрать бот и статику, затем на сервере
+# код: собрать оба бандла и статику, затем на сервере
 npm ci && npm run build
+npm run apk:bot
 sudo rsync -a --delete pwa/dist/ /var/www/mood-pwa/
-sudo systemctl restart mood
+sudo systemctl restart mood mood-bot
 ```
 
 ## Смена домена

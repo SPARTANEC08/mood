@@ -17,6 +17,7 @@ import { BellRing } from 'lucide-react';
 
 import { api } from '@/lib/api';
 import { PushHelpSheet } from '@/components/profile/PushHelpSheet';
+import { PushConsentSheet } from '@/components/legal/PushConsentSheet';
 import { haptic } from '@/lib/env';
 import { enablePush, pushPermission, pushSupport, syncPush } from '@/lib/push';
 import type { BootstrapProfile } from '@/types/api';
@@ -48,10 +49,22 @@ function writeStorage(key: string, value: string): void {
 
 type GateMode = 'ready' | 'ios' | 'denied';
 
-export function PushSetupGate({ profile }: { profile: BootstrapProfile }) {
+export function PushSetupGate({
+  profile,
+  pushConsentAccepted = false,
+}: {
+  profile: BootstrapProfile;
+  pushConsentAccepted?: boolean;
+}) {
   const [open, setOpen] = useState(false);
+  const [consentOpen, setConsentOpen] = useState(false);
+  const [consentOk, setConsentOk] = useState(pushConsentAccepted);
   const [mode, setMode] = useState<GateMode>('ready');
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    setConsentOk(pushConsentAccepted);
+  }, [pushConsentAccepted]);
 
   useEffect(() => {
     if (profile.isGuest) return;
@@ -65,6 +78,11 @@ export function PushSetupGate({ profile }: { profile: BootstrapProfile }) {
 
     // Разрешение уже есть — просто восстанавливаем подписку, без плашки.
     if (permission === 'granted') {
+      if (!consentOk) {
+        setMode('ready');
+        setOpen(true);
+        return;
+      }
       void syncPush();
       return;
     }
@@ -85,7 +103,7 @@ export function PushSetupGate({ profile }: { profile: BootstrapProfile }) {
     writeStorage(SHOWN_KEY, today);
     setMode(support === 'ios-not-installed' ? 'ios' : 'ready');
     setOpen(true);
-  }, [profile]);
+  }, [profile, consentOk]);
 
   if (!open) return null;
 
@@ -95,8 +113,13 @@ export function PushSetupGate({ profile }: { profile: BootstrapProfile }) {
     return <PushHelpSheet kind={mode} onClose={() => setOpen(false)} />;
   }
 
-  async function turnOn(): Promise<void> {
+  async function turnOn(force = false): Promise<void> {
     if (busy) return;
+
+    if (!force && !consentOk) {
+      setConsentOpen(true);
+      return;
+    }
 
     setBusy(true);
     haptic('medium');
@@ -122,7 +145,8 @@ export function PushSetupGate({ profile }: { profile: BootstrapProfile }) {
   }
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 px-5">
+    <>
+      <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 px-5">
       <div className="surface w-full max-w-[380px] rounded-[20px] px-5 py-5">
         <span
           className="flex h-11 w-11 items-center justify-center rounded-full"
@@ -163,6 +187,16 @@ export function PushSetupGate({ profile }: { profile: BootstrapProfile }) {
           </button>
         </div>
       </div>
-    </div>
+      </div>
+      <PushConsentSheet
+        open={consentOpen}
+        onClose={() => setConsentOpen(false)}
+        onAccepted={() => {
+          setConsentOpen(false);
+          setConsentOk(true);
+          void turnOn(true);
+        }}
+      />
+    </>
   );
 }

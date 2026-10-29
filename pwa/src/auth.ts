@@ -271,8 +271,9 @@ async function postAuth(
 export async function loginWithPassword(
   login: string,
   password: string,
+  consents: string[] = [],
 ): Promise<PwaTokenResponse | { challengeId: string }> {
-  return postAuth('/api/auth/login', { login, password });
+  return postAuth('/api/auth/login', { login, password, consents });
 }
 
 /** Продолжение входа кодом из БАРС. */

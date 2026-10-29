@@ -18,6 +18,7 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
 import { type StoredUser, userStore } from '../../../db/storage/userStore.ts';
+import { missingConsents } from '../../legal/registry.ts';
 import { detectPlatform } from '../../utils/platform.ts';
 import { hashToken, verifyPwaToken } from '../../utils/pwaAuth.ts';
 
@@ -160,6 +161,14 @@ export function requireBars(request: FastifyRequest): StoredUser {
     throw new AuthError('Запрос не авторизован.', 401, 'unauthorized');
   }
 
+  if (missingConsents(user).length > 0) {
+    throw new AuthError(
+      'Чтобы продолжить, примите обновлённые условия обработки данных.',
+      403,
+      'consent_required',
+    );
+  }
+
   if (!user.barsAuth || !user.studentProfile?.fullName) {
     throw new AuthError(
       'Требуется вход в личный кабинет БАРС МЭИ. Войдите логином и паролем.',
@@ -180,6 +189,14 @@ export function requireBars(request: FastifyRequest): StoredUser {
  */
 export function requireScheduleAccess(request: FastifyRequest): StoredUser {
   const user = requireUser(request);
+
+  if (missingConsents(user).length > 0) {
+    throw new AuthError(
+      'Чтобы продолжить, примите обновлённые условия обработки данных.',
+      403,
+      'consent_required',
+    );
+  }
 
   if (user.isGuest) {
     if (typeof user.groupId !== 'number' || !user.groupName) {

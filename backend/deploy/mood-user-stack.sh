@@ -21,14 +21,14 @@ NGINX_PID=$!
 
 "${CLOUDFLARED}" tunnel --no-autoupdate --loglevel info --url http://127.0.0.1:8080 >"${TUNNEL_LOG}" 2>&1 &
 TUNNEL_PID=$!
-BOT_PID=""
+APP_PID=""
 
 cleanup() {
   trap - EXIT INT TERM
-  for pid in ${BOT_PID:-} "${TUNNEL_PID:-}" "${NGINX_PID:-}"; do
+  for pid in ${APP_PID:-} "${TUNNEL_PID:-}" "${NGINX_PID:-}"; do
     [[ -n "${pid}" ]] && kill "${pid}" 2>/dev/null || true
   done
-  for pid in ${BOT_PID:-} "${TUNNEL_PID:-}" "${NGINX_PID:-}"; do
+  for pid in ${APP_PID:-} "${TUNNEL_PID:-}" "${NGINX_PID:-}"; do
     [[ -n "${pid}" ]] && wait "${pid}" 2>/dev/null || true
   done
 }
@@ -48,15 +48,15 @@ if [[ -z "${PUBLIC_URL}" ]]; then
   exit 1
 fi
 
-# PWA_URL переопределяется только для процесса; .env копируется без правок.
+# PWA_URL переопределяется только для процесса; .env читается приложением без правок.
 export PWA_URL="${PUBLIC_URL}"
 echo "[Mood] Публичный HTTPS-адрес: ${PWA_URL}"
 
-node "${APP_DIR}/dist/bot.js" &
-BOT_PID=$!
+node "${APP_DIR}/dist/app.js" &
+APP_PID=$!
 
 set +e
-wait -n "${NGINX_PID}" "${TUNNEL_PID}" "${BOT_PID}"
+wait -n "${NGINX_PID}" "${TUNNEL_PID}" "${APP_PID}"
 STATUS=$?
 set -e
 exit "${STATUS}"

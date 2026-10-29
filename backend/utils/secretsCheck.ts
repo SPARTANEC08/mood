@@ -40,15 +40,8 @@ export function validateSecrets(env: NodeJS.ProcessEnv = process.env): SecretsCh
     errors.push('PWA_AUTH_SECRET неверной длины: нужно 64 hex-символа или ровно 32 символа.');
   }
 
-  const botToken = (env.TELEGRAM_BOT_TOKEN ?? '').trim();
-  if (!botToken || botToken === 'MY_TELEGRAM_BOT_TOKEN') {
-    warnings.push('TELEGRAM_BOT_TOKEN не задан — бот не запустится (останется только API).');
-  } else if (!/^\d+:[A-Za-z0-9_-]{20,}$/.test(botToken)) {
-    errors.push('TELEGRAM_BOT_TOKEN не похож на токен BotFather.');
-  }
-
   /*
-   * VAPID-ключи. Отсутствие обоих — штатный режим «только Telegram», поэтому
+   * VAPID-ключи. Отсутствие обоих — штатный режим «без push», поэтому
    * предупреждение, а не ошибка. А вот один ключ без второго или мусор вместо
    * base64url — ошибка: push-канал молча не заработает, и искать причину
    * придётся по логам каждой отправки.
