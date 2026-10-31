@@ -4,6 +4,7 @@ import { JsonDocument } from '../jsonStore.ts';
 import { computeBarsLoginHash } from '../../backend/utils/barsLoginHash.ts';
 import type { UserPlatform } from '../../backend/utils/platform.ts';
 import type { ConsentSnapshot, LegalDocId } from '../../backend/legal/types.ts';
+import { decodeUserSecrets, encodeUserSecrets } from './userSecrets.ts';
 import {
   emptyDocument,
   nowIso,
@@ -200,8 +201,14 @@ export interface StoredUser {
 
 /**
  * Файл users.json: записи и индексы (см. userStore/indexes.ts).
+ *
+ * Cookie-сессии БАРС и OWA шифруются на границе хранилища: приложение читает
+ * и пишет обычный JSON, а в SQLite попадает шифр (см. userSecrets.ts).
  */
-const document = new JsonDocument<UsersDocument>('users.json');
+const document = new JsonDocument<UsersDocument>('users.json', {
+  decodeUser: decodeUserSecrets,
+  encodeUser: encodeUserSecrets,
+});
 
 function read(): UsersDocument {
   const doc = document.read();

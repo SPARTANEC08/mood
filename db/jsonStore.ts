@@ -127,12 +127,24 @@ export class JsonStore<T> {
  */
 export class JsonDocument<T extends object> {
   private readonly name: string;
+  private readonly decodeUser?: (user: Record<string, unknown>) => Record<string, unknown>;
+  private readonly encodeUser?: (user: Record<string, unknown>) => Record<string, unknown>;
   private cache: T | null = null;
   /** Последнее сохранённое состояние пользователей: userId → JSON. */
   private persistedUsers: Map<string, string> | null = null;
 
-  constructor(fileName: string) {
+  constructor(
+    fileName: string,
+    options: {
+      /** Преобразование записи при чтении (например, расшифровка cookie). */
+      decodeUser?: (user: Record<string, unknown>) => Record<string, unknown>;
+      /** Преобразование записи при записи (шифрование cookie). */
+      encodeUser?: (user: Record<string, unknown>) => Record<string, unknown>;
+    } = {},
+  ) {
     this.name = fileName;
+    this.decodeUser = options.decodeUser;
+    this.encodeUser = options.encodeUser;
   }
 
   read(): T {
@@ -220,10 +232,15 @@ export class JsonDocument<T extends object> {
     const persisted = new Map<string, string>();
 
     for (const row of rows) {
-      persisted.set(row.user_id, row.data);
       try {
-        const user = JSON.parse(row.data) as Record<string, unknown>;
+        const parsed = JSON.parse(row.data) as Record<string, unknown>;
+        // Расшифровка cookie происходит здесь, один раз на процесс: дальше
+        // приложение работает с обычным плейнтекстом, как раньше.
+        const user = this.decodeUser ? this.decodeUser(parsed) : parsed;
         users[row.user_id] = user;
+        // Сравнение изменений при записи идёт по плейнтексту, иначе новый
+        // случайный IV делал бы каждую запись «изменившейся» при каждом save.
+        persisted.set(row.user_id, JSON.stringify(user));
         if (typeof user.telegramId === 'number') {
           byTelegramId[String(user.telegramId)] = row.user_id;
         }
@@ -267,10 +284,14 @@ export class JsonDocument<T extends object> {
 
     try {
       db.transaction(() => {
-        for (const [userId, json] of next) {
-          if (previous.get(userId) === json) continue;
+        for (const [userId, plainJson] of next) {
+          if (previous.get(userId) === plainJson) continue;
 
-          const user = JSON.parse(json) as Record<string, unknown>;
+          const user = JSON.parse(plainJson) as Record<string, unknown>;
+          // В строку кладём зашифрованную копию (cookie), а сравнение
+          // «изменилось ли» выше идёт по плейнтексту.
+          const stored = this.encodeUser ? this.encodeUser(user) : user;
+          const json = this.encodeUser ? JSON.stringify(stored) : plainJson;
           const now = new Date().toISOString();
           const telegramId = typeof user.telegramId === 'number' ? user.telegramId : null;
           const hash = typeof user.barsLoginHash === 'string' ? user.barsLoginHash : '';

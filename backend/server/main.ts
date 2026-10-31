@@ -22,9 +22,31 @@ import 'dotenv/config';
 import { startMaintenance } from '../services/maintenance/run.ts';
 import { startDailyReport } from '../services/notifications/dailyReport.ts';
 import { flushSnapshots, startNotifier } from '../services/notifications/barsNotifier.ts';
+import { migrateCookieEncryption } from '../../db/storage/userSecrets.ts';
 import { safeErrorMessage } from '../../tg/format.ts';
 import { validateSecrets } from '../utils/secretsCheck.ts';
 import { startServer } from './index.ts';
+
+/*
+ * Разовая миграция старых записей: cookie БАРС/OWA из плейнтекста в шифр.
+ *
+ * Запускается при остановленном сервисе:
+ *   node dist/app.js --migrate-cookies
+ * Иначе кэш пользователей в работающем процессе перезапишет строки старым
+ * содержимым. После миграции сервис стартует обычным образом.
+ */
+if (process.argv.includes('--migrate-cookies')) {
+  try {
+    const result = migrateCookieEncryption();
+    console.log(
+      `[migrate] cookie: проверено ${result.scanned}, зашифровано ${result.updated}, пропущено ${result.skipped}.`,
+    );
+    process.exit(0);
+  } catch (err: unknown) {
+    console.error('[migrate] не удалось зашифровать cookie:', safeErrorMessage(err));
+    process.exit(1);
+  }
+}
 
 // Ежедневная уборка диска не зависит от API: запускаем до него, чтобы работала
 // и в режиме «только нотификатор».
