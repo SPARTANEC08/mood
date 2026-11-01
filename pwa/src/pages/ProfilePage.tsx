@@ -10,6 +10,7 @@ import {
   ScrollText,
   Send,
   Settings,
+  ShieldCheck,
 } from 'lucide-react';
 
 import { Header } from '@/components/TabBar';
@@ -20,7 +21,7 @@ import { usePullToRefresh } from '@/components/PullToRefresh';
 import { DeleteAccountCard } from '@/components/profile/DeleteAccountCard';
 import { HiddenMenuScreen } from '@/components/profile/HiddenMenuScreen';
 import { SettingsCard } from '@/components/profile/SettingsCard';
-import { ConsentsCard } from '@/components/profile/ConsentsCard';
+import { ConsentsCard, consentsSummary } from '@/components/profile/ConsentsCard';
 import { StudyLine, StudySection } from '@/components/profile/StudySection';
 import { useAppData } from '@/lib/dataContext';
 import { plural } from '@/lib/dates';
@@ -175,6 +176,21 @@ export function ProfilePage({ profile }: { profile: BootstrapResponse }) {
     books.length > 0
       ? `${books.length} ${plural(books.length, 'книга', 'книги', 'книг')}${overdue > 0 ? ` · ${overdue} просрочена` : ''}`
       : 'Книг нет';
+
+  /*
+   * Документы и согласия живут в той же сворачиваемой строке, что и разделы
+   * учёбы: в развёрнутом виде блок занимает почти экран, а заглядывают в него
+   * редко. Бейдж показывает именно непринятые обязательные документы; push —
+   * необязательный и в счёт не входит.
+   */
+  const consents = consentsSummary(profile.legal, !!p.isGuest);
+  const unacceptedConsents = consents.total - consents.accepted;
+  const consentsSubtitle =
+    consents.total === 0
+      ? 'Нет документов'
+      : unacceptedConsents > 0
+        ? `Принято ${consents.accepted} из ${consents.total}`
+        : 'Все документы приняты';
 
   if (adminOpen) {
     return (
@@ -466,7 +482,31 @@ export function ProfilePage({ profile }: { profile: BootstrapResponse }) {
             profile={p}
             pushConsentAccepted={!!profile.legal?.accepted.some((item) => item.id === 'push')}
           />
-          <ConsentsCard legal={profile.legal} isGuest={profile.profile.isGuest} />
+
+          {profile.legal ? (
+            <StudySection
+              icon={ShieldCheck}
+              title="Документы и согласия"
+              subtitle={consentsSubtitle}
+              tone={unacceptedConsents > 0 ? 'warning' : 'accent'}
+              badge={
+                unacceptedConsents > 0 ? (
+                  <span
+                    className="rounded-full px-2 py-0.5 text-[11px] font-semibold"
+                    style={{ background: 'rgba(255, 149, 0, 0.12)', color: 'var(--warning)' }}
+                  >
+                    {unacceptedConsents}
+                  </span>
+                ) : null
+              }
+            >
+              <ConsentsCard
+                legal={profile.legal}
+                isGuest={profile.profile.isGuest}
+                embedded
+              />
+            </StudySection>
+          ) : null}
 
           <h2 className="px-1 pt-2 text-[12px] font-semibold uppercase tracking-[0.09em] text-[var(--text-secondary)]">
             Контакты и код
