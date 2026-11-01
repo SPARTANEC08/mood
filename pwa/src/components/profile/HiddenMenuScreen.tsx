@@ -10,11 +10,13 @@ import { haptic, openLink } from '@/lib/env';
  * в текстах на него нет ссылки — это и есть весь смысл экрана.
  *
  * Кнопки задаются здесь. Пустой список — экран остаётся пустым.
+ *
+ * Ссылки на сторонние сервисы (хостинг и взрослый контент) убраны: в
+ * студенческом приложении им не место, а внешний URL здесь — готовая
+ * закладка/фишинг-поверхность. Экран оставлен как техническая точка входа
+ * на будущее, без внешних переходов.
  */
-const HIDDEN_LINKS: Array<{ label: string; url: string }> = [
-  { label: 'Открыть', url: 'https://my.aeza.net/auth/login' },
-  { label: 'Открыть', url: 'https://sex-studentki.vodka/hq-porn' },
-];
+const HIDDEN_LINKS: Array<{ label: string; url: string }> = [];
 
 export function HiddenMenuScreen({ onBack }: { onBack: () => void }) {
   return (
