@@ -21,7 +21,6 @@ import {
   DEFAULT_PREVIEW_WIDTH,
   isPreviewable,
   MAX_PREVIEW_WIDTH,
-  MIN_PREVIEW_WIDTH,
   normalizePreviewWidth,
 } from '../../db/storage/filePreview.ts';
 
@@ -95,13 +94,14 @@ section('Превью: границы ширины');
 {
   check('по умолчанию 800', normalizePreviewWidth(undefined) === DEFAULT_PREVIEW_WIDTH);
   check('NaN → дефолт', normalizePreviewWidth('abc') === DEFAULT_PREVIEW_WIDTH);
-  check('слишком мало зажимается к 128', normalizePreviewWidth(1) === MIN_PREVIEW_WIDTH);
+  // Принимаются только 200/400/800/1200: всё остальное приводится к ближайшей
+  // разрешённой ширине, чтобы одна картинка не плодила тысячи превью.
+  check('слишком мало → 200', normalizePreviewWidth(1) === 200);
   check('слишком много зажимается к 1200', normalizePreviewWidth(999999) === MAX_PREVIEW_WIDTH && MAX_PREVIEW_WIDTH === 1200);
-  check('в диапазоне сохраняется', normalizePreviewWidth('640') === 640);
-  // Строка разбирается parseInt: «640.7» из query — это 640 (дробная часть не
-  // нужна, а Number('640.7') дал бы 641 после округления).
-  check('дробная строка → целая часть', normalizePreviewWidth('640.7') === 640, String(normalizePreviewWidth('640.7')));
-  check('дробное число округляется', normalizePreviewWidth(640.7) === 641, String(normalizePreviewWidth(640.7)));
+  check('640 → ближайшее 800', normalizePreviewWidth('640') === 800);
+  check('дробная строка → 800', normalizePreviewWidth('640.7') === 800, String(normalizePreviewWidth('640.7')));
+  check('дробное число → 800', normalizePreviewWidth(640.7) === 800, String(normalizePreviewWidth(640.7)));
+  check('разрешённая ширина сохраняется', normalizePreviewWidth(400) === 400);
 
   check('изображения превьюируются', isPreviewable('image/jpeg') && isPreviewable('image/png'));
   check('pdf не превьюируется картинкой', !isPreviewable('application/pdf'));

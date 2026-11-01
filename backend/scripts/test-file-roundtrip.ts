@@ -51,6 +51,23 @@ console.log('\n=== Файлы: загрузка → привязка → ска�
 const created = userStore.create({ barsLoginHash: computeBarsLoginHash('st000042') });
 const userId = created.userId;
 
+/*
+ * Загрузка файлов идёт через requireBars, а он теперь требует актуальные
+ * согласия. Тест создаёт запись напрямую, минуя /api/auth/login, поэтому
+ * согласия нужно проставить явно — иначе проверка файлов упирается в 403,
+ * не дойдя до своей цели.
+ */
+const { LEGAL_DOCUMENTS, requiredDocIds } = await import('../legal/registry.ts');
+const acceptedAt = new Date().toISOString();
+userStore.patch(userId, {
+  consents: Object.fromEntries(
+    requiredDocIds({}).map((id) => [
+      id,
+      { version: LEGAL_DOCUMENTS[id].version, acceptedAt, method: 'pwa' as const },
+    ]),
+  ),
+});
+
 // Загрузка файлов идёт через requireBars, поэтому креды БАРС в тесте нужны с
 // самого начала. Ниже (шаг 5) они будут сняты намеренно — и вот там уже
 // проверяется, что чтение файла от сессии БАРС не зависит.
