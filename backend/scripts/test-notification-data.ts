@@ -170,5 +170,61 @@ section('Обратная совместимость');
   check('data не обязательна для старых клиентов', event?.data?.type === 'mail');
 }
 
+section('Хранилище');
+{
+  const fs = await import('node:fs');
+  const os = await import('node:os');
+  const path = await import('node:path');
+
+  const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mood-notif-data-'));
+  fs.mkdirSync(path.join(workDir, 'db', 'data'), { recursive: true, mode: 0o700 });
+  const previous = process.cwd();
+  process.chdir(workDir);
+
+  try {
+    const { userEventStore } = await import('../../db/storage/userEventStore.ts');
+
+    userEventStore.add({
+      userId: 'test-user',
+      key: 'grade:test',
+      kind: 'grade',
+      label: 'Новые оценки',
+      details: ['Математический анализ · КМ1: 5 (+2)'],
+      data: {
+        type: 'grade',
+        items: [
+          {
+            discipline: 'Математический анализ',
+            point: 1,
+            title: 'Пределы',
+            weight: 25,
+            score: 5,
+            delta: 2,
+          },
+        ],
+      },
+      createdAt: new Date().toISOString(),
+    });
+
+    const stored = userEventStore.nextFor('test-user');
+    check('событие сохранилось', stored !== null);
+    check(
+      'структура пережила JSON-сериализацию',
+      stored?.data?.type === 'grade' && stored.data.items[0]?.point === 1,
+      JSON.stringify(stored?.data),
+    );
+    check(
+      'текстовые details тоже на месте',
+      stored?.details[0]?.includes('КМ1') === true,
+      JSON.stringify(stored?.details),
+    );
+
+    userEventStore.clearForUser('test-user');
+  } finally {
+    process.chdir(previous);
+    fs.rmSync(workDir, { recursive: true, force: true });
+  }
+}
+
 console.log(`\nПройдено: ${passed}, провалено: ${failed}`);
 if (failed > 0) process.exit(1);
