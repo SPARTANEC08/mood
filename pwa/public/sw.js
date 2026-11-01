@@ -135,11 +135,19 @@ async function precacheBuildAssets(cache) {
     const urls = new Set();
 
     for (const entry of Object.values(manifest)) {
-      // Тестовая страница и её чанки не входят в оболочку приложения: она
-      // служебная, нигде не слинкована и не должна занимать место в офлайн-кэше.
+      // Тестовая и демо-страницы и их чанки не входят в оболочку приложения:
+      // они служебные, нигде не слинкованы и не должны занимать место в
+      // офлайн-кэше.
       const source = typeof entry.src === 'string' ? entry.src : '';
       const file = typeof entry.file === 'string' ? entry.file : '';
-      if (source.startsWith('test/') || file.startsWith('test/')) continue;
+      if (
+        source.startsWith('test/') ||
+        source.startsWith('preview/') ||
+        file.startsWith('test/') ||
+        file.startsWith('preview/')
+      ) {
+        continue;
+      }
 
       if (entry.file) urls.add(`/${entry.file}`);
       for (const css of entry.css ?? []) urls.add(`/${css}`);

@@ -15,11 +15,13 @@ import type {
   ApiLessonSlot,
   ApiLessonVariant,
   ApiScheduleDay,
+  AppNotification,
   AttendanceResponse,
   BarsMoreResponse,
   BarsSnapshotResponse,
   BootstrapResponse,
   GradesResponse,
+  LegalStatus,
   MailResponse,
   ScheduleResponse,
 } from '@/types/api';
@@ -256,60 +258,60 @@ const important: ApiImportant[] = [
 
 const grades: GradesResponse = {
   semesterName: 'Осенний семестр 2026/2027',
-  overallAverage: 4.62,
+  overallAverage: 4.38,
   subjects: [
     {
       discipline: 'Математический анализ',
       controlType: 'экзамен',
       attestation: 'экзамен',
-      currentAverage: 4.7,
-      barsAverage: 4.7,
-      gradedWeight: 0.7,
-      totalWeight: 1,
+      currentAverage: 4,
+      barsAverage: 4,
+      gradedWeight: 90,
+      totalWeight: 100,
       totalCount: 4,
       gradedCount: 3,
       pendingCount: 1,
       controlPoints: [
-        { number: 1, title: 'КМ №1', weight: 0.3, score: 5, date: '15.09' },
-        { number: 2, title: 'КМ №2', weight: 0.3, score: 4, date: '06.10' },
-        { number: 3, title: 'КМ №3', weight: 0.3, score: 5, date: '20.10' },
-        { number: 4, title: 'КМ №4', weight: 0.1, score: null, date: '10.11' },
+        { number: 1, title: 'КМ №1', weight: 30, score: 5, date: '15.09' },
+        { number: 2, title: 'КМ №2', weight: 30, score: 2, date: '06.10' },
+        { number: 3, title: 'КМ №3', weight: 30, score: 5, date: '20.10' },
+        { number: 4, title: 'КМ №4', weight: 10, score: null, date: '10.11' },
       ],
     },
     {
       discipline: 'Физика',
       controlType: 'зачёт с оценкой',
       attestation: 'зачёт с оценкой',
-      currentAverage: 4.3,
+      currentAverage: 4.43,
       barsAverage: 4.5,
-      gradedWeight: 0.6,
-      totalWeight: 1,
+      gradedWeight: 70,
+      totalWeight: 100,
       totalCount: 3,
       gradedCount: 2,
       pendingCount: 1,
       controlPoints: [
-        { number: 1, title: 'КМ №1', weight: 0.4, score: 4, date: '22.09' },
-        { number: 2, title: 'КМ №2', weight: 0.3, score: 5, date: '13.10' },
-        { number: 3, title: 'КМ №3', weight: 0.3, score: null, date: '17.11' },
+        { number: 1, title: 'КМ №1', weight: 40, score: 4, date: '22.09' },
+        { number: 2, title: 'КМ №2', weight: 30, score: 5, date: '13.10' },
+        { number: 3, title: 'КМ №3', weight: 30, score: null, date: '17.11' },
       ],
     },
     {
       discipline: 'Информатика',
       controlType: 'зачёт',
       attestation: 'зачёт',
-      currentAverage: 4.9,
+      currentAverage: 4.75,
       barsAverage: 5,
-      gradedWeight: 0.8,
-      totalWeight: 1,
+      gradedWeight: 80,
+      totalWeight: 100,
       totalCount: 5,
       gradedCount: 4,
       pendingCount: 1,
       controlPoints: [
-        { number: 1, title: 'КМ №1', weight: 0.2, score: 5, date: '11.09' },
-        { number: 2, title: 'КМ №2', weight: 0.2, score: 5, date: '02.10' },
-        { number: 3, title: 'КМ №3', weight: 0.2, score: 5, date: '16.10' },
-        { number: 4, title: 'КМ №4', weight: 0.2, score: 4, date: '23.10' },
-        { number: 5, title: 'КМ №5', weight: 0.2, score: null, date: '20.11' },
+        { number: 1, title: 'КМ №1', weight: 20, score: 5, date: '11.09' },
+        { number: 2, title: 'КМ №2', weight: 20, score: 5, date: '02.10' },
+        { number: 3, title: 'КМ №3', weight: 20, score: 5, date: '16.10' },
+        { number: 4, title: 'КМ №4', weight: 20, score: 4, date: '23.10' },
+        { number: 5, title: 'КМ №5', weight: 20, score: null, date: '20.11' },
       ],
     },
   ],
@@ -360,10 +362,10 @@ const more: BarsMoreResponse = {
     overall: 120,
   },
   academic: {
-    debts: 0,
-    closed: 12,
+    debts: 1,
+    closed: 9,
     total: 12,
-    distribution: { fives: 8, fours: 3, threes: 1, twos: 0, total: 12 },
+    distribution: { fives: 6, fours: 2, threes: 0, twos: 1, total: 9 },
   },
 };
 
@@ -371,6 +373,151 @@ const mail: MailResponse = {
   total: 42,
   unseen: 2,
 };
+
+/**
+ * Юридический статус для тестовой страницы.
+ *
+ * Dissemination намеренно не принят: в «Кабинете» видно свёрнутый блок
+ * «Документы и согласия» с бейджем «1». ConsentGate при этом не показывается —
+ * missing пуст, иначе демо-стенд упёрся бы в экран согласий.
+ */
+const legal: LegalStatus = {
+  consentRequired: false,
+  missing: [],
+  accepted: [
+    { id: 'processing', version: '1.0', acceptedAt: new Date(nowMs - 10 * DAY).toISOString() },
+    { id: 'terms', version: '1.0', acceptedAt: new Date(nowMs - 10 * DAY).toISOString() },
+    { id: 'age', version: '1.0', acceptedAt: new Date(nowMs - 10 * DAY).toISOString() },
+  ],
+  documents: [
+    {
+      id: 'processing',
+      version: '1.0',
+      title: 'Согласие на обработку персональных данных',
+      shortTitle: 'Обработка персональных данных',
+      url: '/legal/consent-processing.html',
+      required: true,
+    },
+    {
+      id: 'dissemination',
+      version: '1.0',
+      title: 'Согласие на предоставление данных одногруппникам',
+      shortTitle: 'Данные в материалах группы',
+      url: '/legal/consent-dissemination.html',
+      required: true,
+    },
+    {
+      id: 'push',
+      version: '1.0',
+      title: 'Согласие на уведомления в приложении (Web Push)',
+      shortTitle: 'Push-уведомления',
+      url: '/legal/consent-push.html',
+      required: false,
+    },
+    {
+      id: 'terms',
+      version: '1.0',
+      title: 'Пользовательское соглашение',
+      shortTitle: 'Пользовательское соглашение',
+      url: '/legal/terms.html',
+      required: true,
+    },
+    {
+      id: 'age',
+      version: '1.0',
+      title: 'Подтверждение возраста 18+',
+      shortTitle: 'Подтверждение 18+',
+      url: '/legal/age-18.html',
+      required: true,
+    },
+  ],
+  policy: {
+    id: 'privacy',
+    version: '1.0',
+    title: 'Политика обработки персональных данных',
+    url: '/legal/privacy-policy.html',
+  },
+};
+
+/** Четыре события в новых форматах для модалки и центра уведомлений. */
+const notifications: AppNotification[] = [
+  {
+    id: 'test-notif-grade',
+    kind: 'grade',
+    createdAt: new Date(nowMs - 60_000).toISOString(),
+    read: false,
+    label: 'Новые оценки',
+    details: ['Математический анализ · КМ2: 4,6 (+0,6)', 'Физика · КМ1: 5 (+2)'],
+    data: {
+      type: 'grade',
+      items: [
+        {
+          discipline: 'Математический анализ',
+          point: 2,
+          title: 'Интегралы',
+          weight: 30,
+          score: 4.6,
+          delta: 0.6,
+        },
+        {
+          discipline: 'Физика',
+          point: 1,
+          title: 'Механика',
+          weight: 40,
+          score: 5,
+          delta: 2,
+        },
+      ],
+    },
+  },
+  {
+    id: 'test-notif-mail',
+    kind: 'mail',
+    createdAt: new Date(nowMs - 120_000).toISOString(),
+    read: false,
+    label: 'Новое письмо',
+    details: ['Новых писем: 3'],
+    data: { type: 'mail', count: 3 },
+  },
+  {
+    id: 'test-notif-order',
+    kind: 'order',
+    createdAt: new Date(nowMs - 180_000).toISOString(),
+    read: false,
+    label: 'Новый приказ',
+    details: ['Новых приказов: 1'],
+    data: {
+      type: 'order',
+      items: [
+        {
+          number: '123-С',
+          date: '01.11.2026',
+          title: 'О назначении государственной академической стипендии',
+        },
+      ],
+    },
+  },
+  {
+    id: 'test-notif-scholarship',
+    kind: 'scholarship',
+    createdAt: new Date(nowMs - 240_000).toISOString(),
+    read: false,
+    label: 'Назначена стипендия',
+    details: ['Назначена: Академическая, 2026/2027'],
+    data: {
+      type: 'scholarship',
+      appointed: true,
+      scholarshipType: 'Академическая',
+      period: '2026/2027',
+      amount: '3 000 ₽',
+    },
+  },
+];
+
+const readNotifications = new Set<string>();
+/** Показывать ли уведомления: по умолчанию нет, чтобы не закрывать экраны. */
+const showNotifications =
+  new URLSearchParams(window.location.search).get('notif') === '1';
 
 const bootstrap: BootstrapResponse = {
   profile: {
@@ -389,6 +536,7 @@ const bootstrap: BootstrapResponse = {
   weekNumber: 8,
   scheduleRange: { start: rawAt(nowMs - 14 * DAY), finish: rawAt(nowMs + 90 * DAY) },
   mailUnread: 2,
+  legal,
 };
 
 const snapshot: BarsSnapshotResponse = {
@@ -531,6 +679,32 @@ window.fetch = (async (input: RequestInfo | URL, init?: RequestInit): Promise<Re
   }
   if (path === '/api/notifications/toggle') {
     return json({ ok: true, enabled: true, pushEnabled: true, pushDevices: 1 });
+  }
+
+  if (path === '/api/notifications') {
+    const items = notifications
+      .map((item) => ({ ...item, read: readNotifications.has(item.id) }))
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    return json({ items, unread: items.filter((item) => !item.read).length });
+  }
+  if (path === '/api/notifications/next') {
+    if (!showNotifications) return json({ item: null });
+    const item = [...notifications]
+      .filter((entry) => !readNotifications.has(entry.id))
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt))[0];
+    return json({ item: item ?? null });
+  }
+  if (path.startsWith('/api/notifications/') && path.endsWith('/read') && method === 'POST') {
+    const id = decodeURIComponent(path.split('/')[3] ?? '');
+    readNotifications.add(id);
+    return json({ ok: true });
+  }
+  if (path === '/api/notifications/unread-count') {
+    return json({
+      unread: notifications.filter((item) => !readNotifications.has(item.id)).length,
+      events: notifications.filter((item) => !readNotifications.has(item.id)).length,
+      broadcasts: 0,
+    });
   }
 
   if (path === '/api/announcements/next') return json({ item: loadAnnouncement() });
