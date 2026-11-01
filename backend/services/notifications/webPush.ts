@@ -46,6 +46,39 @@ const PUSH_URLS: Record<NotificationEvent['kind'], string> = {
 let configured: boolean | null = null;
 
 /** Публичный VAPID-ключ для браузера. Пустая строка — канал не настроен. */
+/**
+ * Куда можно отправлять Web Push.
+ *
+ * Endpoint — это URL, который присылает браузер. Без проверки хоста сервер
+ * превращался в blind SSRF: любой авторизованный пользователь мог сохранить
+ * https://внутренний-хост/... и заставить нас делать туда POST. Поэтому пускаем
+ * только реальные push-сервисы: Chrome/FCM, Firefox/Mozilla, Safari/Apple,
+ * Edge/Windows.
+ */
+const ALLOWED_PUSH_HOSTS = [
+  'fcm.googleapis.com',
+  'push.services.mozilla.com',
+  'push.apple.com',
+  'notify.windows.com',
+];
+
+export function isAllowedPushEndpoint(endpoint: string): boolean {
+  try {
+    const url = new URL(endpoint);
+    if (url.protocol !== 'https:') return false;
+    const host = url.hostname.toLowerCase();
+    return ALLOWED_PUSH_HOSTS.some((allowed) => host === allowed || host.endsWith(`.${allowed}`));
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Таймаут одной отправки. Без него зависший endpoint держал бы
+ * `sendPushPayload`, цикл нотификатора и админскую рассылку бесконечно.
+ */
+const PUSH_SEND_TIMEOUT_MS = 8_000;
+
 export function getVapidPublicKey(env: NodeJS.ProcessEnv = process.env): string {
   return (env.VAPID_PUBLIC_KEY ?? '').trim();
 }
@@ -153,15 +186,25 @@ export async function sendBroadcastPush(
 export async function sendPushPayload(user: StoredUser, payload: string): Promise<boolean> {
   if (!configureWebPush()) return false;
 
-  const subscriptions = user.pushSubscriptions ?? [];
-  if (subscriptions.length === 0) return false;
+  const all = user.pushSubscriptions ?? [];
+  // Не отправляем на хосты вне allowlist: даже если такая подписка уже лежит
+  // в базе (старая версия кода), это не должно становиться SSRF-запросом.
+  const subscriptions = all.filter((subscription) => isAllowedPushEndpoint(subscription.endpoint));
+  const blocked = all
+    .filter((subscription) => !isAllowedPushEndpoint(subscription.endpoint))
+    .map((subscription) => subscription.endpoint);
+
+  if (subscriptions.length === 0) {
+    if (blocked.length > 0) dropSubscriptions(user.userId, blocked);
+    return false;
+  }
 
   const results = await Promise.allSettled(
     subscriptions.map((subscription) =>
       webpush.sendNotification(
         { endpoint: subscription.endpoint, keys: subscription.keys },
         payload,
-        { TTL: PUSH_TTL_SECONDS, urgency: 'normal' },
+        { TTL: PUSH_TTL_SECONDS, urgency: 'normal', timeout: PUSH_SEND_TIMEOUT_MS },
       ),
     ),
   );
@@ -191,9 +234,9 @@ export async function sendPushPayload(user: StoredUser, payload: string): Promis
     );
   });
 
-  if (dead.length > 0 || alive.length > 0) {
+  if (dead.length > 0 || alive.length > 0 || blocked.length > 0) {
     updateSubscriptions(user.userId, (current) => {
-      const deadSet = new Set(dead);
+      const deadSet = new Set([...dead, ...blocked]);
       const aliveSet = new Set(alive);
       const now = new Date().toISOString();
 
@@ -208,6 +251,14 @@ export async function sendPushPayload(user: StoredUser, payload: string): Promis
   }
 
   return alive.length > 0;
+}
+
+/** Убирает подписки, которые не проходят allowlist. */
+function dropSubscriptions(userId: string, endpoints: string[]): void {
+  const remove = new Set(endpoints);
+  updateSubscriptions(userId, (current) =>
+    current.filter((subscription) => !remove.has(subscription.endpoint)),
+  );
 }
 
 /**

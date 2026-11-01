@@ -50,7 +50,7 @@ function check(name: string, ok: boolean, detail = ''): void {
 }
 
 function subscription(index: number, keys = { p256dh: 'p'.repeat(40), auth: 'a'.repeat(16) }) {
-  return { endpoint: `https://push.example.com/sub/${index}`, keys };
+  return { endpoint: `https://fcm.googleapis.com/fcm/send/${index}`, keys };
 }
 
 console.log('\n=== Web Push: подписки и payload ===\n');
@@ -103,9 +103,17 @@ const insecure = await app.inject({
   method: 'POST',
   url: '/api/push/subscribe',
   headers: auth,
-  payload: { ...subscription(2), endpoint: 'http://push.example.com/sub/2' },
+  payload: { ...subscription(2), endpoint: 'http://fcm.googleapis.com/fcm/send/2' },
 });
 check('http endpoint → 400', insecure.statusCode === 400, String(insecure.statusCode));
+
+const foreign = await app.inject({
+  method: 'POST',
+  url: '/api/push/subscribe',
+  headers: auth,
+  payload: { ...subscription(99), endpoint: 'https://evil.example/push/99' },
+});
+check('чужой хост (SSRF) → 400', foreign.statusCode === 400, String(foreign.statusCode));
 
 const first = await app.inject({
   method: 'POST',

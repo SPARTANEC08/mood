@@ -65,11 +65,24 @@ export function isPreviewable(mimeType: string | undefined): boolean {
 }
 
 /** Приводит запрошенную ширину к допустимой. Мусор и отсутствие → умолчание. */
+/**
+ * Разрешённые ширины превью.
+ *
+ * Раньше принималось любое целое 128…1200 — это до 1073 файлов превью на одну
+ * картинку, вне квоты, при сериализованном sharp. Теперь только четыре
+ * варианта: всё остальное приводится к ближайшему.
+ */
+const ALLOWED_PREVIEW_WIDTHS = [200, 400, 800, 1200] as const;
+
 export function normalizePreviewWidth(raw: unknown): number {
   const value = typeof raw === 'string' ? Number.parseInt(raw, 10) : Number(raw);
   if (!Number.isFinite(value)) return DEFAULT_PREVIEW_WIDTH;
 
-  return Math.min(MAX_PREVIEW_WIDTH, Math.max(MIN_PREVIEW_WIDTH, Math.round(value)));
+  const clamped = Math.min(MAX_PREVIEW_WIDTH, Math.max(MIN_PREVIEW_WIDTH, Math.round(value)));
+
+  return ALLOWED_PREVIEW_WIDTHS.reduce((best, width) =>
+    Math.abs(width - clamped) < Math.abs(best - clamped) ? width : best,
+  );
 }
 
 function userDir(userId: string): string {

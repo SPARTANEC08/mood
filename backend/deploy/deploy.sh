@@ -52,6 +52,12 @@ rsync -az --delete -e "ssh -o StrictHostKeyChecking=accept-new" \
   --exclude .env \
   --exclude pwa/node_modules \
   --exclude image_d \
+  --exclude apk \
+  --exclude android \
+  --exclude mood.keystore \
+  --exclude '*.keystore' \
+  --exclude '*.jks' \
+  --exclude '.env.*' \
   --exclude '*.log' \
   --exclude '.DS_Store' \
   ./ "${HOST}:${APP_DIR}/"

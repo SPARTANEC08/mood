@@ -35,8 +35,23 @@ import { GroupNotReadyError } from './routes/studentContext.ts';
 import { MAX_FILE_SIZE_BYTES } from '../../db/storage/fileStore.ts';
 
 function requestPathForLog(url: string): string {
-  const pathname = url.split('?')[0] ?? '/';
-  return pathname.replace(/^\/api\/files\/share\/[^/]+/, '/api/files/share/[redacted]');
+  return apiPathname(url).replace(/^\/api\/files\/share\/[^/]+/, '/api/files/share/[redacted]');
+}
+
+/**
+ * Путь запроса без query.
+ *
+ * Нельзя сравнивать сырой `request.url` с '/api': Fastify матчит и
+ * `/%61pi/admin/stats`, и absolute-form `http://host/api/...`, а проверка по
+ * префиксу строки их пропускает. Приводим к pathname через URL — тогда защита
+ * не зависит от кодирования.
+ */
+function apiPathname(url: string): string {
+  try {
+    return new URL(url, 'http://localhost').pathname;
+  } catch {
+    return url.split('?')[0] || '/';
+  }
 }
 
 /** Публичные адреса фронтендов: только они идут в CORS. */
@@ -64,8 +79,11 @@ function allowedOrigins(): string[] {
     }
   }
 
-  // Локальная разработка фронтенда.
-  list.push('http://localhost:5173', 'http://127.0.0.1:5173');
+  // Локальная разработка фронтенда. В проде этих origin быть не должно:
+  // они не дают токен, но расширяют поверхность без пользы.
+  if (process.env.NODE_ENV !== 'production') {
+    list.push('http://localhost:5173', 'http://127.0.0.1:5173');
+  }
 
   return [...new Set(list)];
 }
@@ -171,7 +189,7 @@ function setupRequestTiming(app: FastifyInstance): void {
  * запрос без проверки прав.
  */
 function isPublicApiPath(request: { url: string; method: string }): boolean {
-  const route = request.url.split('?')[0];
+  const route = apiPathname(request.url);
 
   // Короткоживущая share-ссылка на файл: открывается в Safari без заголовка,
   // авторизация — сам одноразовый токен в пути (см. routes/files.ts).
@@ -237,7 +255,7 @@ export async function buildServer(): Promise<FastifyInstance> {
   // по токену, иначе на общем устройстве можно получить кэш другой учётной
   // записи. Публичные login/2FA/share-ответы никогда не кэшируются.
   app.addHook('onSend', async (request, reply, payload) => {
-    if (!request.url.startsWith('/api/')) return payload;
+    if (!apiPathname(request.url).startsWith('/api/')) return payload;
 
     if (isPublicApiPath(request)) {
       reply.header('Cache-Control', 'no-store');
@@ -264,7 +282,8 @@ export async function buildServer(): Promise<FastifyInstance> {
   // Проверка PWA-токена на всём /api — ни один обработчик не должен работать
   // без сессии. Исключения перечислены явно: см. isPublicApiPath.
   app.addHook('onRequest', async (request, reply) => {
-    if (!request.url.startsWith('/api')) return;
+    const path = apiPathname(request.url);
+    if (path !== '/api' && !path.startsWith('/api/')) return;
     if (isPublicApiPath(request)) return;
 
     await authHook(request, reply);

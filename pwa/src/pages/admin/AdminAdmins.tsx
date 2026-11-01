@@ -99,7 +99,7 @@ export function AdminAdmins({ onBack }: { onBack: () => void }) {
               Env-админы
             </p>
             <p className="mt-1 text-[12px] leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
-              Логины БАРС: {data?.env.barsLogins.length ? data.env.barsLogins.join(', ') : '—'}
+              Логинов БАРС: {data?.env.barsHashes ?? 0} (сами логины не показываются)
             </p>
             <p className="mt-1 text-[11px]" style={{ color: 'var(--text-tertiary)' }}>
               Снять из приложения нельзя — меняется только в .env.

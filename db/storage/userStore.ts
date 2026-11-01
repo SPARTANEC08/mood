@@ -76,6 +76,13 @@ export interface TempAuthData {
 }
 
 /**
+ * Сколько токенов храним на пользователя. Каждый вход/refresh добавляет новый
+ * хэш; без потолка один человек мог накопить тысячи 90-дневных сессий и
+ * раздуть строку пользователя. Старые вытесняются.
+ */
+const MAX_PWA_TOKENS = 10;
+
+/**
  * Активный PWA-токен.
  *
  * Хранится только хэш: сам токен живёт в localStorage телефона, и в базе он
@@ -536,7 +543,13 @@ export const userStore = {
       expiresAt: expiresAt.toISOString(),
     });
 
-    return this.patch(userId, { pwaTokens: tokens });
+    // Новые сессии — в конце списка; лишние старые отбрасываем.
+    const kept = tokens
+      .slice()
+      .sort((a, z) => Date.parse(a.createdAt) - Date.parse(z.createdAt))
+      .slice(-MAX_PWA_TOKENS);
+
+    return this.patch(userId, { pwaTokens: kept });
   },
 
   revokeToken(key: number | string, tokenHash: string): void {
@@ -573,17 +586,33 @@ export const userStore = {
     });
   },
 
-  /** Убирает просроченные токены — вызывается при выдаче нового. */
+  /** Убирает просроченные токены и держит не больше MAX_PWA_TOKENS. */
   pruneTokens(key: number | string, now: Date = new Date()): void {
     const user = lookup(key);
     if (!user) return;
     const userId = user.userId;
 
-    const tokens = (user.pwaTokens ?? []);
-    const alive = tokens.filter((t) => Date.parse(t.expiresAt) > now.getTime());
-    if (alive.length === tokens.length) return;
+    const tokens = user.pwaTokens ?? [];
+    const alive = tokens
+      .filter((t) => Date.parse(t.expiresAt) > now.getTime())
+      .sort((a, z) => Date.parse(a.createdAt) - Date.parse(z.createdAt))
+      .slice(-MAX_PWA_TOKENS);
+
+    const unchanged =
+      alive.length === tokens.length &&
+      alive.every((token, index) => token.tokenHash === tokens[index]?.tokenHash);
+    if (unchanged) return;
 
     this.patch(userId, { pwaTokens: alive });
+  },
+
+  /** Полный выход со всех устройств: отзывает все PWA-токены. */
+  revokeAllTokens(key: number | string): void {
+    const user = lookup(key);
+    if (!user) return;
+    if ((user.pwaTokens ?? []).length === 0) return;
+
+    this.patch(user.userId, { pwaTokens: [] });
   },
 
   /** Сбрасывает базу целиком. Используется только скриптом сброса и тестами. */

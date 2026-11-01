@@ -233,6 +233,9 @@ export function registerAdminRoutes(app: FastifyInstance): void {
     const user = findUser(request);
 
     userStore.clearAuth(user.userId);
+    // «Сброс сессий» обязан выкинуть и PWA-устройства: иначе украденный токен
+    // продолжал бы работать все 90 дней.
+    userStore.revokeAllTokens(user.userId);
     forgetBarsClient(user.userId);
     forgetBarsSessionValid(user.userId);
     forgetOwaClient(user.userId);
@@ -488,12 +491,10 @@ export function registerAdminRoutes(app: FastifyInstance): void {
       };
     });
 
+    // Открытые логины env-админов наружу не отдаём: их хэширование иначе
+    // теряло бы смысл. Только количество.
     return reply.send({
       env: {
-        barsLogins: (process.env.ADMIN_BARS_LOGINS ?? '')
-          .split(',')
-          .map((value) => value.trim())
-          .filter(Boolean),
         barsHashes: envBarsLoginHashes().length,
       },
       assigned,

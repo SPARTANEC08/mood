@@ -575,6 +575,6 @@ export interface AdminDiagnostics {
 }
 
 export interface AdminAdminsResponse {
-  env: { barsLogins: string[]; barsHashes: number };
+  env: { barsHashes: number };
   assigned: Array<{ userId: string; name: string; group: string; addedAt: string }>;
 }

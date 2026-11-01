@@ -59,28 +59,6 @@ const LOGIN_ATTEMPT_TIMEOUT_MS = 45_000;
 const pendingLogins = new Map<string, PendingLogin>();
 const PENDING_TTL_MS = 10 * 60 * 1000;
 
-/**
- * Сколько времени повторный вход переиспользует уже начатую 2FA-попытку.
- *
- * Каждый новый логин — это новая сессия БАРС и новое СМС. Если человек жмёт
- * «Войти» ещё раз (или приложение повторяет запрос), новая СМС инвалидирует
- * предыдущий код, и вход выглядит как «код не подошёл». Поэтому в этом окне
- * возвращаем ту же попытку, а не открываем новую сессию.
- */
-const PENDING_REUSE_MS = 2 * 60 * 1000;
-
-/** Незавершённая 2FA-попытка того же человека, которую можно продолжить. */
-function findReusableAttempt(owner: string, barsLoginHash: string): PendingLogin | undefined {
-  const now = Date.now();
-  for (const entry of pendingLogins.values()) {
-    if (entry.owner !== owner || entry.barsLoginHash !== barsLoginHash) continue;
-    if (entry.settled || !entry.needs2fa) continue;
-    if (now - entry.createdAt > PENDING_REUSE_MS) continue;
-    return entry;
-  }
-  return undefined;
-}
-
 /** Убирает протукшие попытки: иначе память растёт с каждым неудачным входом. */
 function sweepPending(): void {
   const now = Date.now();
@@ -257,14 +235,6 @@ async function performLogin(
 
   const existing = userStore.getByBarsLoginHash(barsLoginHash);
 
-  // Повторный вход, пока предыдущая попытка ждёт код: продолжаем её, иначе
-  // новая СМС инвалидирует уже отправленный код (см. PENDING_REUSE_MS).
-  const reusable = findReusableAttempt(owner, barsLoginHash);
-  if (reusable) {
-    console.log('[Auth] повторный вход: продолжаем уже начатую 2FA-попытку');
-    return { need2fa: true, challengeId: reusable.challengeId };
-  }
-
   const challengeId = crypto.randomUUID();
   const client = new BarsClient();
 
@@ -335,12 +305,27 @@ async function performLogin(
  * Код отдаётся уже начатому входу, поэтому второй поход в БАРС не нужен и
  * сессия получается ровно той же, что была начата первым запросом.
  */
-async function finishTwoFactorLogin(challengeId: string, code: string, platform: UserPlatform): Promise<StoredUser> {
+async function finishTwoFactorLogin(
+  challengeId: string,
+  code: string,
+  platform: UserPlatform,
+  owner: string,
+): Promise<StoredUser> {
   sweepPending();
 
   const entry = pendingLogins.get(challengeId);
 
   if (!entry) {
+    throw new AuthError('Попытка входа истекла. Начните заново.', 401, 'invalid_credentials');
+  }
+
+  /*
+   * Попытка принадлежит тому же клиенту, который начинал вход. Без этой
+   * проверки challengeId, утёкший в общий NAT/браузер, позволял бы завершить
+   * чужой вход. Чужой запрос не удаляет попытку: иначе им можно было бы
+   * намеренно сорвать вход владельцу.
+   */
+  if (entry.owner !== owner) {
     throw new AuthError('Попытка входа истекла. Начните заново.', 401, 'invalid_credentials');
   }
 
@@ -359,6 +344,7 @@ async function finishTwoFactorLogin(challengeId: string, code: string, platform:
     // Не называем любую ошибку «код не подошёл»: сетевой сбой или отказ БАРС
     // человеку нужно видеть как есть, иначе он вводит заведомо верный код снова.
     const wrongCode = /неверный код/i.test(reason);
+    if (wrongCode) registerLoginFailure(entry.owner, entry.login);
     throw new AuthError(
       wrongCode ? 'Код не подошёл. Попробуйте ещё раз.' : reason,
       401,
@@ -369,6 +355,7 @@ async function finishTwoFactorLogin(challengeId: string, code: string, platform:
   }
 
   if (!result.success) {
+    registerLoginFailure(entry.owner, entry.login);
     throw new AuthError('Код не подошёл.', 401, 'invalid_credentials');
   }
 
@@ -594,6 +581,15 @@ export function registerLoginRoutes(app: FastifyInstance): void {
       return reply.code(400).send({ error: 'bad_request', message: 'Нужен код подтверждения.' });
     }
 
-    return reply.send(issueToken(await finishTwoFactorLogin(challengeId, code, detectPlatform(request.headers))));
+    return reply.send(
+      issueToken(
+        await finishTwoFactorLogin(
+          challengeId,
+          code,
+          detectPlatform(request.headers),
+          clientKey(request),
+        ),
+      ),
+    );
   });
 }

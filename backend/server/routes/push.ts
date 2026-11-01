@@ -16,6 +16,7 @@ import { userStore } from '../../../db/storage/userStore.ts';
 import {
   MAX_PUSH_SUBSCRIPTIONS,
   getVapidPublicKey,
+  isAllowedPushEndpoint,
 } from '../../services/notifications/webPush.ts';
 import { LEGAL_DOCUMENTS, isConsentCurrent } from '../../legal/registry.ts';
 import { requireUser } from '../middleware/auth.ts';
@@ -49,11 +50,7 @@ export function readSubscription(body: unknown): SubscriptionInput | null {
   const endpoint = raw.endpoint.trim();
   if (!endpoint || endpoint.length > MAX_ENDPOINT_LENGTH) return null;
 
-  try {
-    if (new URL(endpoint).protocol !== 'https:') return null;
-  } catch {
-    return null;
-  }
+  if (!isAllowedPushEndpoint(endpoint)) return null;
 
   if (!raw.keys || typeof raw.keys !== 'object') return null;
 

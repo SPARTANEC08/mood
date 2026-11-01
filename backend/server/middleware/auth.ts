@@ -114,13 +114,15 @@ export async function authHook(request: FastifyRequest, reply: FastifyReply): Pr
   req.userId = user.userId;
   req.student = user;
 
-  // Платформа обновляется только при реальном изменении: иначе users.json
-  // переписывался бы на каждый запрос. Смена устройства или заголовка — редкое
-  // событие, и запись здесь стоит ровно один раз на изменение.
+  // Платформа обновляется только при реальном изменении и не чаще раза в час:
+  // X-PWA-Platform — клиентский заголовок, и его чередование иначе вызывало бы
+  // запись всей строки пользователя на каждый запрос (write-amplification).
   const platform = detectPlatform(request.headers);
   if (user.platform !== platform) {
-    userStore.patch(user.userId, { platform });
     req.student = { ...user, platform };
+    if (platformUpdateAllowed(user.userId)) {
+      userStore.patch(user.userId, { platform });
+    }
   }
 
   // Отметка об использовании: один patch на каждый запрос писал бы весь
@@ -132,6 +134,24 @@ export async function authHook(request: FastifyRequest, reply: FastifyReply): Pr
 
 const TOUCH_INTERVAL_MS = 60 * 60 * 1000;
 const lastTouch = new Map<string, number>();
+
+/** Платформу пишем не чаще раза в час на пользователя. */
+const PLATFORM_UPDATE_INTERVAL_MS = 60 * 60 * 1000;
+const lastPlatformUpdate = new Map<string, number>();
+
+function platformUpdateAllowed(userId: string): boolean {
+  const now = Date.now();
+  const last = lastPlatformUpdate.get(userId) ?? 0;
+  if (now - last < PLATFORM_UPDATE_INTERVAL_MS) return false;
+
+  lastPlatformUpdate.set(userId, now);
+  if (lastPlatformUpdate.size > 5000) {
+    for (const [key, at] of lastPlatformUpdate) {
+      if (now - at >= PLATFORM_UPDATE_INTERVAL_MS) lastPlatformUpdate.delete(key);
+    }
+  }
+  return true;
+}
 
 function shouldTouch(user: StoredUser): boolean {
   const now = Date.now();
