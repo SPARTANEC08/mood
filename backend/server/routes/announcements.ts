@@ -32,6 +32,7 @@ function buildFeed(userId: string, since?: string): NotificationsFeedResponse {
     read: event.readAt !== null && event.readAt !== undefined,
     label: event.label,
     details: event.details,
+    data: event.data ?? undefined,
   }));
 
   const broadcasts: AppNotificationItem[] = announcementStore
@@ -140,6 +141,7 @@ export function registerAnnouncementRoutes(app: FastifyInstance): void {
             id: event.id,
             label: event.label,
             details: event.details,
+            data: event.data ?? undefined,
             createdAt: event.createdAt,
           }
         : null,

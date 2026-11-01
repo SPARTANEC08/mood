@@ -10,6 +10,7 @@ import { createHash } from 'node:crypto';
 
 import { b, fmtNum } from '../../../../tg/format.js';
 import { isBaselineSnapshot, type UserSnapshot } from '../../../../db/storage/snapshotStore.js';
+import type { UserEventData, UserEventGradeItem } from '../../../../db/storage/userEventStore.ts';
 import type { SemesterGrades } from '../../bars/parsers/gradesParser.js';
 import type { OrderItem, ScholarshipInfo } from '../../bars/parsers/studentInfoParser.js';
 
@@ -67,6 +68,8 @@ export interface NotificationEvent {
   title: string;
   label: string;
   details: string[];
+  /** Структура для нового интерфейса; текст остаётся для старых записей. */
+  data?: UserEventData;
   key: string;
 }
 
@@ -93,7 +96,14 @@ export function orderKey(order: OrderItem): string {
 export function diffSnapshots(
   prev: UserSnapshot | undefined,
   next: UserSnapshot,
-  context: { orders?: OrderItem[]; newMailCount?: number } = {},
+  context: {
+    orders?: OrderItem[];
+    newMailCount?: number;
+    /** Для названий и весов КМ в структурированном уведомлении. */
+    grades?: SemesterGrades | null;
+    /** Для типа/периода/суммы в уведомлении о стипендии. */
+    scholarship?: ScholarshipInfo | null;
+  } = {},
 ): NotificationEvent[] {
   if (isBaselineSnapshot(prev) || !prev) return [];
 
@@ -112,6 +122,7 @@ export function diffSnapshots(
 
   if (changedGrades.length > 0) {
     const details: string[] = [];
+    const items: UserEventGradeItem[] = [];
     for (const [key, value] of changedGrades) {
       if (typeof value !== 'number') continue;
 
@@ -122,12 +133,29 @@ export function diffSnapshots(
       const discipline = idx > 0 ? key.slice(0, idx) : key;
       const pointRaw = idx > 0 ? key.slice(idx + 1) : '';
       const point = pointRaw.startsWith('КТ') ? `КМ${pointRaw.slice(2)}` : pointRaw;
+      const pointNumber = Number(pointRaw.startsWith('КТ') ? pointRaw.slice(2) : '');
       const before = prev.gradesHash[key];
       const delta = typeof before === 'number' ? value - before : null;
       const deltaStr = delta !== null && delta !== 0 ? ` (${delta > 0 ? '+' : ''}${fmtNum(delta)})` : '';
       const heading = [discipline, point].filter(Boolean).join(' · ');
 
       details.push(`${heading}: ${fmtNum(value)}${deltaStr}`.trim());
+
+      const subject = context.grades?.subjects.find(
+        (candidate) => candidate.discipline.trim() === discipline,
+      );
+      const controlPoint = subject?.controlPoints.find(
+        (candidate) => candidate.number === pointNumber,
+      );
+
+      items.push({
+        discipline,
+        point: Number.isFinite(pointNumber) ? pointNumber : 0,
+        title: controlPoint?.title,
+        weight: controlPoint?.weight,
+        score: value,
+        delta,
+      });
     }
 
     const key = createHash('sha1').update(details.join('|')).digest('hex').slice(0, 16);
@@ -136,6 +164,7 @@ export function diffSnapshots(
       title: `🎓 ${b('Новые оценки')}`,
       label: 'Новые оценки',
       details,
+      data: { type: 'grade', items },
       key: `grade:${key}`,
     });
   }
@@ -153,6 +182,7 @@ export function diffSnapshots(
       title: `📧 ${b('Новое письмо')}`,
       label: 'Новое письмо',
       details: newMailCount > 0 ? [`Новых писем: ${newMailCount}`] : [],
+      data: { type: 'mail', count: newMailCount },
       key: `mail:${next.lastSeenMailUid}`,
     });
   }
@@ -193,6 +223,14 @@ export function diffSnapshots(
         title: `📄 ${b('Новый приказ')}`,
         label: 'Новый приказ',
         details,
+        data: {
+          type: 'order',
+          items: newOrders.slice(0, 3).map((order) => ({
+            number: order.number,
+            date: order.date,
+            title: order.title,
+          })),
+        },
         key: `order:${key}`,
       });
     }
@@ -216,6 +254,13 @@ export function diffSnapshots(
       details: isAppointed
         ? [`Назначена: ${next.scholarshipStatus}`]
         : ['Выплата стипендии отменена'],
+      data: {
+        type: 'scholarship',
+        appointed: isAppointed,
+        scholarshipType: context.scholarship?.type,
+        period: context.scholarship?.period,
+        amount: context.scholarship?.amount,
+      },
       key: `scholarship:${isAppointed ? 'on' : 'off'}:${next.scholarshipStatus}`,
     });
   }

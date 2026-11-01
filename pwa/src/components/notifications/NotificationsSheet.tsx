@@ -17,7 +17,7 @@ import { api } from '@/lib/api';
 import { formatMoscowDayLabel, moscowRawDate } from '@/lib/dates';
 import { haptic } from '@/lib/env';
 import type { AppNotification, AppNotificationKind } from '@/types/api';
-import { NotificationActions, NotificationContent } from './NotificationContent';
+import { NotificationActions, NotificationContent, notificationAccent } from './NotificationContent';
 
 type Filter = 'all' | AppNotificationKind;
 
@@ -171,6 +171,7 @@ export function NotificationsSheet({
                     style={{
                       background: 'var(--surface-grouped)',
                       borderColor: 'var(--separator-soft)',
+                      borderLeft: `3px solid ${notificationAccent(item.kind)}`,
                     }}
                   >
                     <NotificationContent item={item} />

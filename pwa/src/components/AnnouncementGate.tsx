@@ -106,11 +106,13 @@ export function AnnouncementGate() {
       />
 
       <div
-        className="relative w-full max-w-[420px] rounded-[20px] p-5"
+        className="relative w-full max-w-[440px] rounded-[22px] p-5"
         style={{ background: 'var(--surface)', boxShadow: '0 12px 40px rgba(0,0,0,0.35)' }}
       >
-        <NotificationContent item={item} />
-        <NotificationActions item={item} />
+        <div className="max-h-[64vh] overflow-y-auto pr-0.5">
+          <NotificationContent item={item} />
+          <NotificationActions item={item} />
+        </div>
 
         <button
           type="button"

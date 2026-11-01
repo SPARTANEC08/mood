@@ -431,6 +431,34 @@ export interface NextAnnouncementResponse {
 /** Тип уведомления внутри приложения. */
 export type AppNotificationKind = 'broadcast' | 'grade' | 'mail' | 'order' | 'scholarship';
 
+/** Одна новая оценка в структурированном уведомлении. */
+export interface AppNotificationGradeItem {
+  discipline: string;
+  point: number;
+  title?: string;
+  weight?: number;
+  score: number;
+  delta: number | null;
+}
+
+/**
+ * Структурированные детали события.
+ *
+ * Сервер отдаёт их с новыми уведомлениями; у старых записей `data` нет, и
+ * интерфейс показывает текстовые `details`.
+ */
+export type AppNotificationData =
+  | { type: 'grade'; items: AppNotificationGradeItem[] }
+  | { type: 'mail'; count: number }
+  | { type: 'order'; items: Array<{ number?: string; date?: string; title: string }> }
+  | {
+      type: 'scholarship';
+      appointed: boolean;
+      scholarshipType?: string;
+      period?: string;
+      amount?: string;
+    };
+
 /** Уведомление для показа в PWA: рассылка или событие с деталями. */
 export interface AppNotification {
   kind: AppNotificationKind;
@@ -440,8 +468,10 @@ export interface AppNotification {
   text?: string;
   /** Тип события для приложения (только события). */
   label?: string;
-  /** Детали события: дисциплина/балл, приказ, статус стипендии. */
+  /** Детали события текстом — fallback для старых записей. */
   details?: string[];
+  /** Структурированные детали — используются, если пришли. */
+  data?: AppNotificationData;
   /** Прочитано. Приходит из ленты; у «следующего» всегда false. */
   read?: boolean;
 }

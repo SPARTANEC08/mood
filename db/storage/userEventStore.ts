@@ -14,12 +14,42 @@ import { getDb } from '../sqlite.ts';
 
 export type UserEventKind = 'grade' | 'mail' | 'order' | 'scholarship';
 
+/**
+ * Структурированные детали события для PWA.
+ *
+ * `details` остаются текстовыми строками ради старых записей и обратной
+ * совместимости, но новый интерфейс рисует карточки по этим полям: текстом
+ * нельзя показать чип «КМ2» или цвет дельты, не разбирая строку обратно.
+ */
+export interface UserEventGradeItem {
+  discipline: string;
+  point: number;
+  title?: string;
+  weight?: number;
+  score: number;
+  delta: number | null;
+}
+
+export type UserEventData =
+  | { type: 'grade'; items: UserEventGradeItem[] }
+  | { type: 'mail'; count: number }
+  | { type: 'order'; items: Array<{ number?: string; date?: string; title: string }> }
+  | {
+      type: 'scholarship';
+      appointed: boolean;
+      scholarshipType?: string;
+      period?: string;
+      amount?: string;
+    };
+
 export interface UserEvent {
   id: string;
   userId: string;
   kind: UserEventKind;
   label: string;
   details: string[];
+  /** Новые события приходят со структурой; старые — без неё. */
+  data?: UserEventData | null;
   createdAt: string;
   readAt?: string | null;
 }
@@ -30,6 +60,7 @@ export interface NewUserEvent {
   kind: UserEventKind;
   label: string;
   details: string[];
+  data?: UserEventData | null;
   createdAt: string;
 }
 
@@ -42,9 +73,11 @@ interface EventRow {
   kind: string;
   label: string;
   details: string;
+  data: string | null;
   created_at: string;
   read_at: string | null;
 }
+
 
 /**
  * Приводит старые детали к нынешнему виду.
@@ -80,9 +113,30 @@ function fromRow(row: EventRow): UserEvent {
     kind: row.kind as UserEventKind,
     label: row.label,
     details: normalizeDetails(details),
+    data: parseData(row.data),
     createdAt: row.created_at,
     readAt: row.read_at,
   };
+}
+
+/**
+ * Разбирает структурированные детали.
+ *
+ * Ошибка JSON или неожиданная форма — это просто «старое уведомление»:
+ * интерфейс откатится на текстовые `details`, а не упадёт на чтении истории.
+ */
+function parseData(raw: string | null): UserEventData | null {
+  if (!raw) return null;
+
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+    const type = (parsed as { type?: unknown }).type;
+    if (typeof type !== 'string') return null;
+    return parsed as UserEventData;
+  } catch {
+    return null;
+  }
 }
 
 export const userEventStore = {
@@ -92,14 +146,15 @@ export const userEventStore = {
     const id = `${event.userId}:${event.key}`;
 
     db.prepare(
-      'INSERT OR IGNORE INTO user_events(id, user_id, kind, label, details, created_at) ' +
-        'VALUES (?, ?, ?, ?, ?, ?)',
+      'INSERT OR IGNORE INTO user_events(id, user_id, kind, label, details, data, created_at) ' +
+        'VALUES (?, ?, ?, ?, ?, ?, ?)',
     ).run(
       id,
       event.userId,
       event.kind,
       event.label,
       JSON.stringify(event.details),
+      event.data ? JSON.stringify(event.data) : null,
       event.createdAt,
     );
 
@@ -119,7 +174,7 @@ export const userEventStore = {
   nextFor(userId: string, since?: string): UserEvent | null {
     const row = getDb()
       .prepare(
-        'SELECT id, user_id, kind, label, details, created_at, read_at ' +
+        'SELECT id, user_id, kind, label, details, data, created_at, read_at ' +
           'FROM user_events WHERE user_id = ? AND read_at IS NULL ' +
           'AND (? IS NULL OR created_at >= ?) ' +
           'ORDER BY created_at ASC LIMIT 1',
@@ -139,7 +194,7 @@ export const userEventStore = {
   listForUser(userId: string, since?: string): UserEvent[] {
     const rows = getDb()
       .prepare(
-        'SELECT id, user_id, kind, label, details, created_at, read_at ' +
+        'SELECT id, user_id, kind, label, details, data, created_at, read_at ' +
           'FROM user_events WHERE user_id = ? AND (? IS NULL OR created_at >= ?) ' +
           'ORDER BY created_at DESC, id DESC',
       )

@@ -201,6 +201,8 @@ export async function checkUser(
   const events = diffSnapshots(prev, next, {
     orders: state.orders ?? undefined,
     newMailCount,
+    grades: state.grades,
+    scholarship: state.scholarship,
   });
 
   // In-app уведомления: детали храним для PWA, Telegram получает только тип.
@@ -218,6 +220,7 @@ export async function checkUser(
         kind: event.kind,
         label: event.label,
         details: event.details,
+        data: event.data,
         createdAt,
       });
     }

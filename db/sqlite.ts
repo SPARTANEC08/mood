@@ -70,6 +70,7 @@ export function getDb(): Database.Database {
       kind       TEXT NOT NULL,
       label      TEXT NOT NULL,
       details    TEXT NOT NULL,
+      data       TEXT,
       created_at TEXT NOT NULL,
       read_at    TEXT
     );
@@ -95,6 +96,20 @@ export function getDb(): Database.Database {
       data       TEXT NOT NULL
     );
   `);
+
+  /*
+   * Миграция существующей базы.
+   *
+   * `CREATE TABLE IF NOT EXISTS` не добавляет колонку в уже созданную таблицу,
+   * а отдельного механизма версий пока нет. Одна идемпотентная проверка дешевле
+   * ручной миграции на проде и безопасна при каждом старте.
+   */
+  const eventColumns = instance
+    .prepare('PRAGMA table_info(user_events)')
+    .all() as Array<{ name?: string }>;
+  if (!eventColumns.some((column) => column.name === 'data')) {
+    instance.exec('ALTER TABLE user_events ADD COLUMN data TEXT');
+  }
 
   try {
     fs.chmodSync(DATA_DIR, 0o700);

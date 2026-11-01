@@ -10,6 +10,7 @@
  */
 
 import type { LessonKindType, ServerFileRef } from '../../db/storage/homeworkStore.ts';
+import type { UserEventData } from '../../db/storage/userEventStore.ts';
 import type { LegalStatus } from '../legal/types.ts';
 
 /** Профиль студента для шапки приложения. */
@@ -393,6 +394,14 @@ export interface LoginBody {
 export type AppNotificationKind = 'broadcast' | 'grade' | 'mail' | 'order' | 'scholarship';
 
 /**
+ * Структурированные детали события.
+ *
+ * Контракт один для сервера и клиента; старые записи приходят без `data`,
+ * и интерфейс откатывается на текстовые `details`.
+ */
+export type AppNotificationData = UserEventData;
+
+/**
  * Элемент ленты уведомлений.
  *
  * `text` есть только у объявлений администратора, `label`/`details` — у
@@ -407,6 +416,8 @@ export interface AppNotificationItem {
   label?: string;
   text?: string;
   details?: string[];
+  /** Новые события: структура для карточек. Может отсутствовать у старых. */
+  data?: AppNotificationData;
 }
 
 /** Ответ GET /api/notifications. */
