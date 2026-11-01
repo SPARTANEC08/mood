@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState, type CSSProperties } from 'react';
-import { ChevronRight, Clock, Hash } from 'lucide-react';
+import { Calculator, ChevronRight, Clock, Hash } from 'lucide-react';
 
 import { Header } from '@/components/TabBar';
 import { Page } from '@/components/Page';
@@ -10,6 +10,7 @@ import {
   GradeDetailsSheets,
   type GradeDetailSheet,
 } from '@/components/grades/GradeDetailsSheets';
+import { GradeCalculatorSheet } from '@/components/grades/GradeCalculatorSheet';
 import { useAppData } from '@/lib/dataContext';
 import { plural } from '@/lib/dates';
 import { gradeColor } from '@/lib/format';
@@ -43,6 +44,7 @@ export function GradesPage() {
   const [toast, setToast] = useState<string | null>(null);
   /** Какой нижний лист открыт: задолженности, рейтинг или пропуски. */
   const [detailSheet, setDetailSheet] = useState<GradeDetailSheet | null>(null);
+  const [calculatorOpen, setCalculatorOpen] = useState(false);
 
   /**
    * Обновление по жесту: принудительный запрос снимка БАРС мимо TTL.
@@ -173,6 +175,35 @@ export function GradesPage() {
         {/* Распределение оценок вместо полосы причин пропуска */}
         <DistributionBar distribution={distribution} />
 
+        {/* Калькулятор: отдельная карточка, потому что это действие, а не
+            ещё одна цифра в шапке. Лист открывается поверх вкладки. */}
+        <Card
+          onPress={() => setCalculatorOpen(true)}
+          className="flex items-center gap-3 px-4 py-3.5"
+        >
+          <span
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px]"
+            style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}
+            aria-hidden
+          >
+            <Calculator size={18} />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-[15px] font-semibold leading-snug">
+              Калькулятор оценок
+            </span>
+            <span className="mt-0.5 block text-[12px] leading-snug text-[var(--text-secondary)]">
+              Сколько нужно для цели — по весам КМ
+            </span>
+          </span>
+          <ChevronRight
+            size={16}
+            className="shrink-0"
+            style={{ color: 'var(--text-tertiary)' }}
+            aria-hidden
+          />
+        </Card>
+
         {/* Дисциплины */}
         <div className="pt-1">
           <h2 className="mb-2 px-1 text-[13px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
@@ -203,6 +234,12 @@ export function GradesPage() {
       grades={grades}
       more={more}
       attendance={attendance}
+    />
+
+    <GradeCalculatorSheet
+      open={calculatorOpen}
+      onClose={() => setCalculatorOpen(false)}
+      grades={grades}
     />
 
     {toast ? <Toast text={toast} onClose={() => setToast(null)} /> : null}
