@@ -221,12 +221,20 @@ export function predictGrade(
   thresholds: GradeThresholds,
 ): '5' | '4' | '3' | '2' | null {
   if (average === null) return null;
+  if (
+    thresholds.five === null ||
+    thresholds.four === null ||
+    thresholds.three === null
+  ) {
+    // Без всех трёх порогов прогноз был бы догадкой: пропущенный «4 от»
+    // превратил бы 4,2 в тройку.
+    return null;
+  }
 
-  if (thresholds.five !== null && average >= thresholds.five) return '5';
-  if (thresholds.four !== null && average >= thresholds.four) return '4';
-  if (thresholds.three !== null && average >= thresholds.three) return '3';
-  if (thresholds.three !== null) return '2';
-  return null;
+  if (average >= thresholds.five) return '5';
+  if (average >= thresholds.four) return '4';
+  if (average >= thresholds.three) return '3';
+  return '2';
 }
 
 /** «4+» для дробного требования, «4» для точного целого. */

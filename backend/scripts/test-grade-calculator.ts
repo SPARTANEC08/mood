@@ -180,6 +180,10 @@ section('Симуляция и прогноз оценки');
     'без порогов прогноза нет',
     predictGrade(4.2, { five: null, four: null, three: null }) === null,
   );
+  check(
+    'неполные пороги не дают ложный прогноз',
+    predictGrade(4.2, { five: 4.5, four: null, three: 2.5 }) === null,
+  );
 }
 
 console.log(`\nПройдено: ${passed}, провалено: ${failed}`);
