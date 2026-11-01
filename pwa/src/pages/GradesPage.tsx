@@ -6,6 +6,10 @@ import { Page } from '@/components/Page';
 import { Card, EmptyState, ListGroup, SkeletonCard, SkeletonLesson, Toast } from '@/components/ui';
 import { RefreshIndicator } from '@/components/RefreshIndicator';
 import { usePullToRefresh } from '@/components/PullToRefresh';
+import {
+  GradeDetailsSheets,
+  type GradeDetailSheet,
+} from '@/components/grades/GradeDetailsSheets';
 import { useAppData } from '@/lib/dataContext';
 import { plural } from '@/lib/dates';
 import { gradeColor } from '@/lib/format';
@@ -37,6 +41,8 @@ export function GradesPage() {
 
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [toast, setToast] = useState<string | null>(null);
+  /** Какой нижний лист открыт: задолженности, рейтинг или пропуски. */
+  const [detailSheet, setDetailSheet] = useState<GradeDetailSheet | null>(null);
 
   /**
    * Обновление по жесту: принудительный запрос снимка БАРС мимо TTL.
@@ -114,13 +120,15 @@ export function GradesPage() {
       pull={pull}
     >
       <div className="space-y-3">
-        {/* Два квадрата рядом: задолженности и рейтинг */}
+        {/* Два квадрата рядом: задолженности и рейтинг. Оба открывают
+            нижний лист с деталями, поэтому выглядят как кнопки. */}
         <div className="grid grid-cols-2 gap-2.5">
           <StatCard
             label="Задолженности"
             value={debts}
             hint={totalKm > 0 ? `КМ ${closed} из ${totalKm}` : 'нет КМ'}
             tone={debts > 0 ? 'danger' : 'accent'}
+            onPress={() => setDetailSheet('debts')}
           />
           <StatCard
             label="Рейтинг"
@@ -128,23 +136,36 @@ export function GradesPage() {
             hint={more?.rating?.period ?? 'за семестр'}
             tone="accent"
             decimal
+            onPress={() => setDetailSheet('rating')}
           />
         </div>
 
         {/* Пропуски отдельной строкой — он не влезает в пару с рейтингом,
             иначе подписи сжимаются в нечитаемую кашу. */}
         {attendance ? (
-          <Card className="flex items-center justify-between px-4 py-3.5">
+          <Card
+            className="flex items-center justify-between gap-3 px-4 py-3.5"
+            onPress={() => setDetailSheet('attendance')}
+          >
             <div>
               <p className="text-[13px] text-[var(--text-secondary)]">Пропущено пар</p>
               <p className="mt-0.5 text-[24px] font-semibold leading-none tabular-nums">
                 {attendance.totalMissedLessons}
               </p>
             </div>
-            <div className="text-right">
-              <p className="text-[12px] text-[var(--text-tertiary)]">
-                {attendance.totalMissedHours} ч · уважительных {attendance.totalExcusedLessons}
-              </p>
+            <div className="flex items-center gap-2">
+              <div className="text-right">
+                <p className="text-[12px] text-[var(--text-tertiary)]">
+                  {attendance.totalMissedHours} ч · уважительных{' '}
+                  {attendance.totalExcusedLessons}
+                </p>
+              </div>
+              <ChevronRight
+                size={16}
+                className="shrink-0"
+                style={{ color: 'var(--text-tertiary)' }}
+                aria-hidden
+              />
             </div>
           </Card>
         ) : null}
@@ -175,6 +196,14 @@ export function GradesPage() {
         </div>
       </div>
     </Page>
+
+    <GradeDetailsSheets
+      sheet={detailSheet}
+      onClose={() => setDetailSheet(null)}
+      grades={grades}
+      more={more}
+      attendance={attendance}
+    />
 
     {toast ? <Toast text={toast} onClose={() => setToast(null)} /> : null}
     </>
@@ -407,19 +436,21 @@ function SubjectRow({
   );
 }
 
-/** Квадрат со значением. */
+/** Квадрат со значением. С `onPress` ведёт себя как кнопка «Подробнее». */
 function StatCard({
   label,
   value,
   hint,
   tone = 'default',
   decimal,
+  onPress,
 }: {
   label: string;
   value: number | null;
   hint: string;
   tone?: 'default' | 'accent' | 'danger';
   decimal?: boolean;
+  onPress?: () => void;
 }) {
   const valueColor =
     tone === 'danger' && (value ?? 0) > 0
@@ -428,17 +459,42 @@ function StatCard({
         ? 'var(--accent)'
         : 'var(--text-primary)';
 
-  return (
-    <Card className="px-4 py-3.5">
-      <p className="truncate text-[12px] text-[var(--text-secondary)]">{label}</p>
-      <p className="mt-1 text-[26px] font-semibold leading-none tabular-nums" style={{ color: valueColor }}>
+  const content = (
+    <>
+      <div className="flex items-center justify-between gap-2">
+        <p className="truncate text-[12px] text-[var(--text-secondary)]">{label}</p>
+        {onPress ? (
+          <ChevronRight
+            size={14}
+            className="shrink-0"
+            style={{ color: 'var(--text-tertiary)' }}
+            aria-hidden
+          />
+        ) : null}
+      </div>
+      <p
+        className="mt-1 text-[26px] font-semibold leading-none tabular-nums"
+        style={{ color: valueColor }}
+      >
         {value === null
           ? '—'
           : decimal
             ? value.toFixed(1).replace('.', ',')
             : String(value)}
       </p>
-      <p className="mt-1 truncate text-[11px] text-[var(--text-tertiary)]">{hint}</p>
-    </Card>
+      <p className="mt-1 truncate text-[11px] text-[var(--text-tertiary)]">
+        {onPress ? `${hint} · Подробнее` : hint}
+      </p>
+    </>
   );
+
+  if (onPress) {
+    return (
+      <Card onPress={onPress} className="px-4 py-3.5">
+        {content}
+      </Card>
+    );
+  }
+
+  return <Card className="px-4 py-3.5">{content}</Card>;
 }
