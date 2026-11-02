@@ -1,4 +1,4 @@
-import axios, { type AxiosInstance, type AxiosRequestConfig } from 'axios';
+import axios, { type AxiosInstance, type AxiosRequestConfig, type AxiosResponse } from 'axios';
 import { wrapper } from 'axios-cookiejar-support';
 import { CookieJar } from 'tough-cookie';
 import * as cheerio from 'cheerio';
@@ -194,6 +194,61 @@ export class BarsClient {
   }
 
   /**
+   * Транспортные сбои, при которых имеет смысл повторить GET.
+   *
+   * После рестарта процесса БАРС иногда рвёт первые соединения (ECONNRESET)
+   * или не отвечает до таймаута, хотя через несколько секунд те же страницы
+   * отдаются нормально. Без повтора любой такой обрыв превращался в
+   * «Личный кабинет временно недоступен» на весь экран.
+   *
+   * Ответ сервера (даже 5xx) сюда НЕ входит: повторять его — значит удваивать
+   * нагрузку на МЭИ и скрывать реальную поломку.
+   */
+  private static isTransientNetworkError(err: unknown): boolean {
+    const candidate = err as { code?: string; message?: string; response?: unknown };
+    if (candidate?.response) return false;
+
+    const code = candidate?.code ?? '';
+    if (
+      code === 'ECONNRESET' ||
+      code === 'ETIMEDOUT' ||
+      code === 'ECONNABORTED' ||
+      code === 'EPIPE' ||
+      code === 'ENOTFOUND' ||
+      code === 'EAI_AGAIN'
+    ) {
+      return true;
+    }
+
+    return /socket hang up|network error|timeout of \d+ms exceeded/i.test(candidate?.message ?? '');
+  }
+
+  /**
+   * GET с одним повтором на транспортный сбой.
+   *
+   * Таймаут 30 с остаётся прежним: nginx ждёт API до 120 с, поэтому даже
+   * «таймаут + пауза + повтор» укладывается в бюджет.
+   */
+  private async getWithRetry(
+    targetUrl: string,
+    config?: AxiosRequestConfig,
+  ): Promise<AxiosResponse> {
+    const attempts = 2;
+
+    for (let attempt = 1; ; attempt += 1) {
+      try {
+        return await this.client.get(targetUrl, config);
+      } catch (err: unknown) {
+        if (attempt >= attempts || !BarsClient.isTransientNetworkError(err)) throw err;
+        console.warn(
+          `[Bars] ${targetUrl}: ${(err as { code?: string }).code ?? (err as Error).message}, повтор ${attempt + 1}/${attempts}`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, 1200));
+      }
+    }
+  }
+
+  /**
    * Преобразует относительный или абсолютный путь в полный URL.
    */
   private resolveUrl(urlPath: string): string {
@@ -211,7 +266,7 @@ export class BarsClient {
   public async getHtml(urlPath: string, config?: AxiosRequestConfig): Promise<cheerio.CheerioAPI> {
     const targetUrl = this.resolveUrl(urlPath);
 
-    const res = await this.client.get(targetUrl, {
+    const res = await this.getWithRetry(targetUrl, {
       ...config,
       headers: {
         Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
@@ -235,7 +290,7 @@ export class BarsClient {
   public async getJson<T>(urlPath: string, config?: AxiosRequestConfig): Promise<T> {
     const targetUrl = this.resolveUrl(urlPath);
 
-    const res = await this.client.get(targetUrl, {
+    const res = await this.getWithRetry(targetUrl, {
       ...config,
       headers: {
         'X-Requested-With': 'XMLHttpRequest',
