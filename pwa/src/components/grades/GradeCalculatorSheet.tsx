@@ -1,13 +1,13 @@
 /**
- * Калькулятор оценок: «что нужно, чтобы выйти на цель».
+ * Калькулятор оценок: предмет → порог автомата → что написать за оставшиеся КМ.
  *
- * Лист открывается поверх «Успеваемости» и работает только с уже полученным
- * снимком БАРС. Сервер не участвует: веса КМ и баллы приходят вместе с
- * оценками, а расчёт — чистая функция из `lib/gradeCalc`.
+ * Три блока, без лишнего:
+ *   1. текущие баллы за КМ и один итог по формуле «Σ балл × вес / 100»;
+ *   2. простой ползунок порога 2,0–5,0;
+ *   3. план по оставшимся КМ: какой балл нужно написать.
  *
- * Дизайн намеренно короткий: предмет → цель 3/4/5 → ответ. Никаких сценариев
- * «а если получу» и ручных порогов — они превращали лист в анкету и заставляли
- * пересчитывать всё на каждое движение слайдера.
+ * Все расчёты — в useMemo. Раньше они выполнялись на каждый рендер, в том
+ * числе на каждое движение слайдера, отсюда и ощущение «тупит».
  */
 
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
@@ -21,13 +21,11 @@ import {
   maxPossible,
   minimumPlan,
   requiredAverage,
-  weightSums,
 } from '@/lib/gradeCalc';
 import { formatScore } from '@/lib/gradeDetails';
 import { haptic } from '@/lib/env';
 import type { GradesResponse } from '@/types/api';
 
-/** Нижняя и верхняя границы шкалы порога. */
 const MIN_SCALE = 2;
 const MAX_SCALE = 5;
 
@@ -51,10 +49,10 @@ export function GradeCalculatorSheet({
   const subjects = grades?.subjects ?? [];
 
   const [discipline, setDiscipline] = useState('');
-  const [target, setTarget] = useState<number>(4);
+  const [target, setTarget] = useState(4.5);
 
-  // При открытии выбираем предмет с незакрытыми КМ: именно для него есть
-  // смысл в прогнозе. Если такого нет — первый в списке.
+  // При открытии выбираем предмет с незакрытыми КМ: для него и есть смысл
+  // в плане. Если такого нет — первый в списке.
   useEffect(() => {
     if (!open || subjects.length === 0) return;
 
@@ -69,14 +67,8 @@ export function GradeCalculatorSheet({
   const subject =
     subjects.find((candidate) => candidate.discipline === discipline) ?? subjects[0] ?? null;
 
-  /*
-   * Все расчёты — в useMemo. Раньше они выполнялись на каждый рендер, в том
-   * числе на каждое движение слайдера цели: отсюда и ощущение «тупит».
-   */
   const weights = useMemo(() => checkWeights(subject), [subject]);
-  const current = useMemo(() => (subject ? currentWeighted(subject) : null), [subject]);
   const maximum = useMemo(() => (subject ? maxPossible(subject) : null), [subject]);
-  const sums = useMemo(() => (subject ? weightSums(subject) : null), [subject]);
   const required = useMemo(
     () => (subject ? requiredAverage(subject, target) : null),
     [subject, target],
@@ -86,6 +78,15 @@ export function GradeCalculatorSheet({
     [subject, target],
   );
 
+  /*
+   * Один итоговый балл: ровно формула «балл × вес + … + балл × вес»,
+   * приведённая к пятибалльной шкале делением на 100.
+   */
+  const totalScore = useMemo(() => {
+    if (!subject) return null;
+    return Math.round((earnedWeighted(subject) / 100) * 100) / 100;
+  }, [subject]);
+
   const pending = useMemo(
     () =>
       (subject?.controlPoints ?? []).filter(
@@ -94,48 +95,23 @@ export function GradeCalculatorSheet({
     [subject],
   );
 
-  const minPossible = useMemo(() => {
-    if (!subject || !sums || sums.total <= 0) return null;
-    return Math.round((earnedWeighted(subject) / sums.total) * 100) / 100;
-  }, [subject, sums]);
-
-  // При смене предмета порог встаёт на текущий средний: человек сразу видит,
-  // где он сейчас, и двигает ползунок от этой точки.
+  // При смене предмета порог встаёт на текущий средний: понятная точка старта.
   useEffect(() => {
     if (!subject) return;
     const now = currentWeighted(subject);
-    setTarget(now !== null ? clamp(round1(now), MIN_SCALE, MAX_SCALE) : 4);
+    setTarget(now !== null ? clamp(round1(now), MIN_SCALE, MAX_SCALE) : 4.5);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [subject?.discipline]);
 
-  const progress = sums && sums.total > 0 ? Math.min(1, sums.graded / sums.total) : 0;
-  const reachable = maximum === null || maximum + 1e-6 >= target;
+  /** Заполненная часть трека до бегунка. */
+  const pct = ((clamp(target, MIN_SCALE, MAX_SCALE) - MIN_SCALE) / (MAX_SCALE - MIN_SCALE)) * 100;
+  const sliderBackground = `linear-gradient(90deg,
+    var(--accent) 0%,
+    var(--accent) ${pct}%,
+    var(--separator-soft) ${pct}%,
+    var(--separator-soft) 100%)`;
 
-  /** Положение значения на шкале 2–5 в процентах. */
-  const pct = (value: number): number => {
-    const clamped = clamp(value, MIN_SCALE, MAX_SCALE);
-    return ((clamped - MIN_SCALE) / (MAX_SCALE - MIN_SCALE)) * 100;
-  };
-
-  /*
-   * Трек ползунка показывает три зоны:
-   *   серый  — ниже минимума (такого среднего уже не получить);
-   *   зелёный — от минимума до текущего (порог уже взят);
-   *   акцент — от текущего до максимума (сюда ещё можно дотянуть);
-   *   красный — выше максимума (даже пятёрки не хватит).
-   */
-  const currentPos = pct(current ?? minPossible ?? MIN_SCALE);
-  const maxPos = pct(maximum ?? MAX_SCALE);
-  const minPos = pct(minPossible ?? MIN_SCALE);
-  const trackBackground = `linear-gradient(90deg,
-    var(--separator-soft) 0%,
-    var(--separator-soft) ${minPos}%,
-    var(--success) ${minPos}%,
-    var(--success) ${currentPos}%,
-    var(--accent) ${currentPos}%,
-    var(--accent) ${maxPos}%,
-    rgba(255, 59, 48, 0.35) ${maxPos}%,
-    rgba(255, 59, 48, 0.35) 100%)`;
+  const unreachable = required !== null && required > 5.0001;
 
   return (
     <BottomSheet
@@ -151,8 +127,8 @@ export function GradeCalculatorSheet({
           description="Оценки ещё не загрузились — вернитесь на экран успеваемости и обновите его."
         />
       ) : (
-        <div className="space-y-5 pb-3">
-          {/* Предмет: горизонтальные чипы вместо выпадающего списка. */}
+        <div className="space-y-6 pb-3">
+          {/* Предмет: горизонтальные чипы. */}
           <div
             className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-0.5"
             style={{ scrollbarWidth: 'none' }}
@@ -194,46 +170,59 @@ export function GradeCalculatorSheet({
             })}
           </div>
 
-          {/* Текущий балл и прогресс семестра. */}
-          <section
-            className="rounded-[20px] px-4 py-4"
-            style={{
-              background:
-                'linear-gradient(135deg, var(--accent-soft), rgba(124,77,255,0.02) 72%)',
-              border: '1px solid var(--separator-soft)',
-            }}
-          >
-            <div className="flex items-end justify-between gap-4">
-              <div className="min-w-0">
-                <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-[var(--text-tertiary)]">
-                  Средний сейчас
+          {/* 1. Текущие баллы и один итог по весам. */}
+          <section>
+            <div className="flex items-end justify-between gap-3 px-1">
+              <div>
+                <p className="text-[12px] font-semibold text-[var(--text-secondary)]">
+                  Текущие баллы
                 </p>
-                <p className="mt-1 text-[42px] font-bold leading-none tracking-[-0.02em] tabular-nums">
-                  {formatScore(current, 2)}
+                <p className="mt-0.5 text-[11px] text-[var(--text-tertiary)]">
+                  Σ балл × вес
                 </p>
               </div>
-
-              <div className="shrink-0 text-right">
-                <p className="text-[11px] text-[var(--text-tertiary)]">БАРС</p>
-                <p className="mt-1 text-[22px] font-semibold leading-none tabular-nums text-[var(--text-secondary)]">
-                  {formatScore(subject.barsAverage, 1)}
-                </p>
-              </div>
+              <p
+                className="text-[36px] font-bold leading-none tracking-[-0.02em] tabular-nums"
+                style={{ color: 'var(--accent)' }}
+              >
+                {formatScore(totalScore, 2)}
+              </p>
             </div>
 
-            <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-[var(--separator-soft)]">
-              <div
-                className="h-full rounded-full transition-[width] duration-500"
-                style={{ width: `${Math.round(progress * 100)}%`, background: 'var(--accent)' }}
-              />
+            <div className="mt-3 overflow-hidden rounded-[16px] border border-[var(--separator-soft)]">
+              {subject.controlPoints.map((point) => (
+                <div
+                  key={point.number}
+                  className="flex items-center gap-3 border-t border-[var(--separator-soft)] px-3.5 py-2.5 first:border-t-0"
+                >
+                  <span className="w-9 shrink-0 text-[11px] font-medium tabular-nums text-[var(--text-tertiary)]">
+                    КМ {point.number}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-[13px]">
+                    {point.title ?? 'Без названия'}
+                  </span>
+                  <span className="shrink-0 text-[11px] tabular-nums text-[var(--text-tertiary)]">
+                    {formatScore(point.weight, 0)}%
+                  </span>
+                  <span
+                    className="w-9 shrink-0 text-right text-[15px] font-semibold tabular-nums"
+                    style={{
+                      color:
+                        point.score === null
+                          ? 'var(--text-tertiary)'
+                          : point.score <= 2
+                            ? 'var(--danger)'
+                            : 'var(--text-primary)',
+                    }}
+                  >
+                    {point.score === null ? '—' : formatScore(point.score, 1)}
+                  </span>
+                </div>
+              ))}
             </div>
-            <p className="mt-1.5 text-[11px] text-[var(--text-tertiary)]">
-              Закрыто {Math.round(progress * 100)}% веса
-              {sums && sums.pending > 0 ? ` · осталось ${formatScore(sums.pending, 0)}%` : ''}
-            </p>
           </section>
 
-          {/* Порог автомата: свободный ползунок с зонами достижимости. */}
+          {/* 2. Простой ползунок порога. */}
           <section>
             <div className="mb-2 flex items-end justify-between gap-3 px-1">
               <span className="text-[12px] font-semibold text-[var(--text-secondary)]">
@@ -247,20 +236,10 @@ export function GradeCalculatorSheet({
               </span>
             </div>
 
-            <div className="relative h-9">
+            <div className="relative h-10">
               <div
                 className="absolute inset-x-0 top-1/2 h-2 -translate-y-1/2 rounded-full"
-                style={{ background: trackBackground }}
-                aria-hidden
-              />
-              {/* Где человек сейчас — тонкая метка на треке. */}
-              <div
-                className="pointer-events-none absolute top-1/2 h-3.5 w-0.5 -translate-y-1/2 rounded-full"
-                style={{
-                  left: `calc(${currentPos}% - 1px)`,
-                  background: 'var(--text-primary)',
-                  opacity: 0.45,
-                }}
+                style={{ background: sliderBackground }}
                 aria-hidden
               />
               <input
@@ -276,19 +255,12 @@ export function GradeCalculatorSheet({
                   }
                 }}
                 aria-label="Порог автомата, средний балл"
-                className="mood-range absolute inset-0 h-9 w-full cursor-pointer"
+                className="mood-range absolute inset-0 h-10 w-full cursor-pointer"
               />
-            </div>
-
-            <div className="mt-1 flex items-center justify-between px-0.5 text-[10px] tabular-nums text-[var(--text-tertiary)]">
-              <span>мин {formatScore(minPossible, 2)}</span>
-              <span style={{ color: 'var(--text-secondary)' }}>
-                сейчас {formatScore(current, 2)}
-              </span>
-              <span>макс {formatScore(maximum, 2)}</span>
             </div>
           </section>
 
+          {/* 3. Что написать за оставшиеся КМ. */}
           {weights.reason !== 'ok' ? (
             <WarningCard reason={weights.reason} sum={weights.sum} />
           ) : subject.finalGrade ? (
@@ -302,66 +274,62 @@ export function GradeCalculatorSheet({
             <InfoCard
               icon={<CheckCircle2 size={18} aria-hidden />}
               title="Все КМ закрыты"
-              text={`Итоговый средний — ${formatScore(current, 2)}. Изменить его новыми баллами уже нельзя.`}
+              text={`Итоговый балл — ${formatScore(totalScore, 2)}. Изменить его новыми баллами уже нельзя.`}
               tone="success"
             />
-          ) : !reachable ? (
+          ) : unreachable ? (
             <InfoCard
               icon={<AlertCircle size={18} aria-hidden />}
-              title={`До ${target} не дотянуть`}
+              title={`До ${formatScore(target, 1)} не дотянуть`}
               text={`Даже пятёрки за всё оставшееся дают максимум ${formatScore(maximum, 2)}.`}
               tone="warning"
             />
           ) : required !== null && required <= 0 ? (
             <InfoCard
               icon={<CheckCircle2 size={18} aria-hidden />}
-              title={`Цель ${target} уже достигнута`}
-              text={`Текущий средний ${formatScore(current, 2)} — баллы можно не добирать.`}
+              title={`Порог ${formatScore(target, 1)} уже взят`}
+              text="Баллы за оставшиеся КМ можно не добирать."
               tone="success"
             />
           ) : (
-            <>
-              <section>
-                <div className="mb-2 flex items-baseline justify-between gap-3 px-1">
-                  <p className="text-[12px] font-semibold text-[var(--text-secondary)]">
-                    Что написать за оставшиеся КМ
-                  </p>
-                  <span className="text-[11px] tabular-nums text-[var(--text-tertiary)]">
-                    {pending.length} КМ
-                  </span>
-                </div>
-                <div className="space-y-2">
-                  {plan?.items.map((item) => (
-                    <div
-                      key={item.point.number}
-                      className="flex items-center gap-3 rounded-[14px] px-3.5 py-3"
-                      style={{ background: 'var(--surface-grouped)' }}
+            <section>
+              <div className="mb-2 flex items-baseline justify-between gap-3 px-1">
+                <p className="text-[12px] font-semibold text-[var(--text-secondary)]">
+                  Что написать
+                </p>
+                <span className="text-[11px] tabular-nums text-[var(--text-tertiary)]">
+                  {pending.length} КМ
+                </span>
+              </div>
+              <div className="space-y-2">
+                {plan?.items.map((item) => (
+                  <div
+                    key={item.point.number}
+                    className="flex items-center gap-3 rounded-[14px] px-3.5 py-3"
+                    style={{ background: 'var(--surface-grouped)' }}
+                  >
+                    <span
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[12px] font-bold tabular-nums"
+                      style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}
                     >
-                      <span
-                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[11px] font-bold tabular-nums"
-                        style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}
-                      >
-                        {item.point.number}
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-[14px]">
-                          {item.point.title ?? 'Без названия'}
-                        </p>
-                        <p className="mt-0.5 text-[11px] tabular-nums text-[var(--text-tertiary)]">
-                          вес {formatScore(item.point.weight, 0)}%
-                        </p>
-                      </div>
-                      <span
-                        className="shrink-0 rounded-full px-2.5 py-1 text-[12px] font-bold tabular-nums"
-                        style={{ background: 'var(--accent)', color: 'var(--accent-text)' }}
-                      >
-                        ≥ {formatScore(item.score, 0)}
-                      </span>
+                      {item.point.number}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-[14px]">{item.point.title ?? 'Без названия'}</p>
+                      <p className="mt-0.5 text-[11px] tabular-nums text-[var(--text-tertiary)]">
+                        вес {formatScore(item.point.weight, 0)}%
+                      </p>
                     </div>
-                  ))}
-                </div>
-              </section>
-            </>
+                    <span
+                      className="shrink-0 rounded-full px-3 py-1.5 text-[13px] font-bold tabular-nums"
+                      style={{ background: 'var(--accent)', color: 'var(--accent-text)' }}
+                    >
+                      ≥ {formatScore(item.score, 0)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </section>
           )}
 
           <p className="flex items-start gap-2 px-1 text-[11px] leading-relaxed text-[var(--text-tertiary)]">
