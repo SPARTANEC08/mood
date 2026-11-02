@@ -136,6 +136,50 @@ export function looksLikeStudentProfile(info: StudentInfo): boolean {
   return name.split(/\s+/).length >= 2;
 }
 
+/** Студенческий дашборд: известный адрес, не зависит от того, куда редиректнуло. */
+const STUDENT_DASHBOARD_URL = '/bars_web/ST_Study/Main/Main';
+
+/**
+ * Профиль со страницы входа, а при неудаче — с явно открытого дашборда.
+ *
+ * Почему это нужно. После 2FA часть аккаунтов попадает не на дашборд, а на
+ * главную портала `/Auth/Menu`: в крошках «Главная», группы и ФИО нет. Раньше
+ * вход такого студента падал с «аккаунт не похож на студенческий», хотя
+ * студенческий раздел открывается тем же cookie. Здесь пробуем его явно и
+ * берём профиль оттуда.
+ *
+ * Если аккаунт действительно нестуденческий, дашборд снова отдаст меню —
+ * решение не меняется, и login.ts по-прежнему отклонит создание записи.
+ */
+async function extractStudentInfoWithFallback(
+  client: BarsClient,
+  $: cheerio.CheerioAPI,
+  finalUrl: string,
+): Promise<{ studentInfo: StudentInfo; finalUrl: string }> {
+  const studentInfo = client.extractStudentInfo($);
+  if (looksLikeStudentProfile(studentInfo)) return { studentInfo, finalUrl };
+
+  try {
+    const $dashboard = await client.getHtml(STUDENT_DASHBOARD_URL);
+    const fromDashboard = client.extractStudentInfo($dashboard);
+
+    if (looksLikeStudentProfile(fromDashboard)) {
+      // studentID нужен части разделов ЛК; он есть в ссылках дашборда.
+      const studentId = ($dashboard.html().match(/studentID=([a-f0-9-]+)/i) ?? [])[1];
+      return {
+        studentInfo: fromDashboard,
+        finalUrl: studentId
+          ? `${STUDENT_DASHBOARD_URL}?studentID=${studentId}`
+          : STUDENT_DASHBOARD_URL,
+      };
+    }
+  } catch {
+    // Дашборд не открылся — оставляем исходный результат и прежнее поведение.
+  }
+
+  return { studentInfo, finalUrl };
+}
+
 /**
  * Сервис полной авторизации в БАРС МЭИ (логин + пароль + 2FA).
  */
@@ -177,18 +221,19 @@ export class BarsAuth {
 
     // Проверяем, возможно уже авторизованы
     if (isDashboardPage(getFinalUrl, $get)) {
-      const studentInfo = client.extractStudentInfo($get);
+      const extracted = await extractStudentInfoWithFallback(client, $get, getFinalUrl);
+      const studentInfo = extracted.studentInfo;
       const sessionData: SavedSessionData = {
         savedAt: new Date().toISOString(),
         fio: studentInfo.studentName,
         group: studentInfo.groupName,
         studyCard: studentInfo.studyCard,
-        finalUrl: getFinalUrl,
+        finalUrl: extracted.finalUrl,
         cookies: client.getJar().toJSON(),
       };
       await saveSession(sessionData);
       client.setSavedSession(sessionData);
-      return { success: true, studentInfo, finalUrl: getFinalUrl, sessionData };
+      return { success: true, studentInfo, finalUrl: extracted.finalUrl, sessionData };
     }
 
     const loginForm = $get('form').first();
@@ -239,18 +284,19 @@ export class BarsAuth {
     const is2fa = isLoginCodePage($post, postFinalUrl);
     if (!is2fa && isDashboardPage(postFinalUrl, $post)) {
       step('Авторизация выполнена успешно (без 2FA).');
-      const studentInfo = client.extractStudentInfo($post);
+      const extracted = await extractStudentInfoWithFallback(client, $post, postFinalUrl);
+      const studentInfo = extracted.studentInfo;
       const sessionData: SavedSessionData = {
         savedAt: new Date().toISOString(),
         fio: studentInfo.studentName,
         group: studentInfo.groupName,
         studyCard: studentInfo.studyCard,
-        finalUrl: postFinalUrl,
+        finalUrl: extracted.finalUrl,
         cookies: client.getJar().toJSON(),
       };
       await saveSession(sessionData);
       client.setSavedSession(sessionData);
-      return { success: true, studentInfo, finalUrl: postFinalUrl, sessionData };
+      return { success: true, studentInfo, finalUrl: extracted.finalUrl, sessionData };
     }
 
     if (!is2fa) {
@@ -332,13 +378,14 @@ export class BarsAuth {
       throw new Error(`Вход не удался: маркеры личного кабинета не найдены на странице ${verifyFinalUrl}`);
     }
 
-    const studentInfo = client.extractStudentInfo($verify);
+    const extracted = await extractStudentInfoWithFallback(client, $verify, verifyFinalUrl);
+    const studentInfo = extracted.studentInfo;
     const sessionData: SavedSessionData = {
       savedAt: new Date().toISOString(),
       fio: studentInfo.studentName,
       group: studentInfo.groupName,
       studyCard: studentInfo.studyCard,
-      finalUrl: verifyFinalUrl,
+      finalUrl: extracted.finalUrl,
       cookies: client.getJar().toJSON(),
     };
 
@@ -348,7 +395,7 @@ export class BarsAuth {
     return {
       success: true,
       studentInfo,
-      finalUrl: verifyFinalUrl,
+      finalUrl: extracted.finalUrl,
       sessionData,
     };
   }
