@@ -33,7 +33,7 @@ export function GuestSettingsSheet({
   onClose: () => void;
   profile: BootstrapProfile;
   onSaved: (profile: BootstrapProfile) => void;
-  onExit: () => void;
+  onExit: (target: 'login' | 'landing') => void;
 }) {
   const [name, setName] = useState(profile.fullName);
   const [group, setGroup] = useState<GuestGroup | null>(
@@ -74,7 +74,7 @@ export function GuestSettingsSheet({
    * устройства) — тогда выходим локально. Сеть и 5xx не считаем выходом: иначе
    * гость остался бы в базе, а человек думал бы, что профиль удалён.
    */
-  async function exit(): Promise<void> {
+  async function exit(target: 'login' | 'landing'): Promise<void> {
     if (busy) return;
 
     setBusy(true);
@@ -97,7 +97,7 @@ export function GuestSettingsSheet({
 
     haptic('medium');
     setBusy(false);
-    onExit();
+    onExit(target);
   }
 
   return (
@@ -238,7 +238,7 @@ export function GuestSettingsSheet({
           <button
             type="button"
             disabled={busy}
-            onClick={() => void exit()}
+            onClick={() => void exit('login')}
             className="pressable pressable-active flex w-full items-center justify-center gap-2 rounded-[12px] px-4 py-2.5 text-[14px] font-semibold text-[var(--accent)] disabled:opacity-40"
           >
             <LogIn size={16} aria-hidden />
@@ -248,7 +248,7 @@ export function GuestSettingsSheet({
           <button
             type="button"
             disabled={busy}
-            onClick={() => void exit()}
+            onClick={() => void exit('landing')}
             className="pressable pressable-active flex w-full items-center justify-center gap-2 rounded-[12px] px-4 py-2.5 text-[14px] font-semibold text-[var(--danger)] disabled:opacity-40"
           >
             <LogOut size={16} aria-hidden />

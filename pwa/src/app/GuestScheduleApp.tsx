@@ -37,10 +37,13 @@ export function GuestScheduleApp({ bootstrap }: { bootstrap: BootstrapResponse }
     setProfile(next);
   }
 
-  function handleExit(): void {
-    // clearPwaToken сам снимает гостевой флаг и будит App событием выхода.
+  function handleExit(target: 'login' | 'landing'): void {
+    // clearPwaToken снимает гостевой флаг и будит App событием выхода.
     // Запись гостя к этому моменту уже удалена сервером.
     clearPwaToken();
+
+    // «Выйти» — на лендинг, «Войти» — на экран авторизации (его показывает App).
+    if (target === 'landing') window.location.replace('/landing.html');
   }
 
   return (
