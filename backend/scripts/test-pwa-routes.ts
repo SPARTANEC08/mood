@@ -718,6 +718,34 @@ console.log('\n— Гостевой режим —');
   check('в статистике гость помечен', guestRow?.isGuest === true, JSON.stringify(guestRow));
   check('гость попал в онлайн/активность', (guestRow?.lastSeenAt ?? 0) > 0, JSON.stringify(guestRow));
 
+  const guestExit = await app.inject({
+    method: 'POST',
+    url: '/api/guest/exit',
+    headers: auth(guestToken),
+  });
+  check('POST /api/guest/exit → 200', guestExit.statusCode === 200, `${guestExit.statusCode} ${guestExit.body}`);
+  check('гостевая запись удалена из users', userStore.getByUserId(guestId) === undefined);
+  check(
+    'гостя нет в статистике',
+    getStats().sessions.every((row) => row.id !== guestId),
+    JSON.stringify(getStats().sessions.map((row) => row.id)),
+  );
+
+  const afterExit = await app.inject({
+    method: 'GET',
+    url: '/api/bootstrap',
+    headers: auth(guestToken),
+  });
+  check('после выхода старый гостевой токен → 401', afterExit.statusCode === 401, String(afterExit.statusCode));
+
+  const notGuestExit = await app.inject({
+    method: 'POST',
+    url: '/api/guest/exit',
+    headers: auth(token),
+  });
+  check('обычному пользователю /api/guest/exit → 403', notGuestExit.statusCode === 403, String(notGuestExit.statusCode));
+  check('код not_guest', notGuestExit.json<{ error?: string }>().error === 'not_guest');
+
   registrationStore.setOpen(false);
   const closed = await app.inject({
     method: 'POST',

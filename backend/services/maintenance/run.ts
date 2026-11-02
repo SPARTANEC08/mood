@@ -10,17 +10,22 @@ import path from 'node:path';
 
 import { homeworkStore } from '../../../db/storage/homeworkStore.ts';
 import { importantStore } from '../../../db/storage/importantStore.ts';
+import { userStore, type StoredUser } from '../../../db/storage/userStore.ts';
 import { getDb } from '../../../db/sqlite.ts';
+import { activityByUser } from '../../server/devStats.ts';
+import { deleteAccount } from '../account/deleteAccount.ts';
 import {
   BACKUP_TTL_DAYS,
   DISK_WARN_RATIO,
   getDiskUsage,
+  GUEST_TTL_DAYS,
   PREVIEW_TTL_MS,
   REPORT_TTL_DAYS,
   selectExpiredPreviews,
   selectOldBackups,
   selectOldReports,
   selectOrphanFiles,
+  selectStaleGuestIds,
   selectStaleTmp,
   TMP_TTL_MS,
   type FileEntry,
@@ -37,6 +42,7 @@ export interface MaintenanceResult {
   tmp: number;
   reports: number;
   backups: number;
+  guests: number;
   freeMb: number | null;
 }
 
@@ -96,6 +102,23 @@ function referencedFiles(): Set<string> {
   return referenced;
 }
 
+/** Последняя активность гостя: запросы, правки записи и токены. */
+function lastActivityAt(user: StoredUser, activity: Map<string, number>): number {
+  let last = Date.parse(user.updatedAt) || 0;
+
+  const live = activity.get(user.userId) ?? 0;
+  if (live > last) last = live;
+
+  for (const token of user.pwaTokens ?? []) {
+    const used = Date.parse(token.lastUsedAt ?? '') || 0;
+    const created = Date.parse(token.createdAt) || 0;
+    const tokenTime = Math.max(used, created);
+    if (tokenTime > last) last = tokenTime;
+  }
+
+  return last;
+}
+
 export async function runMaintenance(now: number = Date.now()): Promise<MaintenanceResult> {
   // Обслуживание SQLite: раз в сутки — дешево, а планировщику даёт статистику
   // для индексов, которая иначе копится только при ANALYZE вручную.
@@ -106,6 +129,37 @@ export async function runMaintenance(now: number = Date.now()): Promise<Maintena
       '[Maintenance] PRAGMA optimize не выполнен:',
       err instanceof Error ? err.message : err,
     );
+  }
+
+  // Брошенные гости — до обхода файлов: deleteAccount убирает и их каталог,
+  // чтобы уборка не считала его содержимое сиротами.
+  let guests = 0;
+  const activity = activityByUser(now);
+  const guestUsers = userStore
+    .all()
+    .filter((user) => user.isGuest === true)
+    .map((user) => ({ user, lastActiveAt: lastActivityAt(user, activity) }));
+  const staleGuestIds = new Set(
+    selectStaleGuestIds(
+      guestUsers.map(({ user, lastActiveAt }) => ({ id: user.userId, isGuest: true, lastActiveAt })),
+      now,
+    ),
+  );
+
+  for (const { user } of guestUsers) {
+    if (!staleGuestIds.has(user.userId)) continue;
+    try {
+      await deleteAccount(user);
+      guests += 1;
+    } catch (err: unknown) {
+      console.warn(
+        '[Maintenance] не удалось удалить гостя:',
+        err instanceof Error ? err.message : err,
+      );
+    }
+  }
+  if (guests > 0) {
+    console.log(`[Maintenance] удалено брошенных гостей: ${guests} (TTL ${GUEST_TTL_DAYS} дн.)`);
   }
 
   const referenced = referencedFiles();
@@ -152,19 +206,19 @@ export async function runMaintenance(now: number = Date.now()): Promise<Maintena
     const freeMb = Math.round(disk.freeBytes / 1024 / 1024);
     const usedPercent = Math.round(disk.usedRatio * 100);
     console.log(
-      `[Maintenance] превью: ${previews}, сироты: ${orphans}, tmp: ${tmp}, отчёты: ${reports}, бэкапы: ${backups}; ` +
+      `[Maintenance] превью: ${previews}, сироты: ${orphans}, tmp: ${tmp}, отчёты: ${reports}, бэкапы: ${backups}, гости: ${guests}; ` +
         `диск занят ${usedPercent}%, свободно ${freeMb} МБ.`,
     );
     if (disk.usedRatio > DISK_WARN_RATIO) {
       console.warn(`[Maintenance] ВНИМАНИЕ: диск заполнен на ${usedPercent}% — пора чистить.`);
     }
-    return { previews, orphans, tmp, reports, backups, freeMb };
+    return { previews, orphans, tmp, reports, backups, guests, freeMb };
   }
 
   console.log(
-    `[Maintenance] превью: ${previews}, сироты: ${orphans}, tmp: ${tmp}, отчёты: ${reports}, бэкапы: ${backups}.`,
+    `[Maintenance] превью: ${previews}, сироты: ${orphans}, tmp: ${tmp}, отчёты: ${reports}, бэкапы: ${backups}, гости: ${guests}.`,
   );
-  return { previews, orphans, tmp, reports, backups, freeMb: null };
+  return { previews, orphans, tmp, reports, backups, guests, freeMb: null };
 }
 
 /** Запуск по расписанию: первый прогон через 10 минут, дальше раз в сутки. */

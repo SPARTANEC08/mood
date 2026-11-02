@@ -37,8 +37,9 @@ export function GuestScheduleApp({ bootstrap }: { bootstrap: BootstrapResponse }
     setProfile(next);
   }
 
-  function handleLogin(): void {
+  function handleExit(): void {
     // clearPwaToken сам снимает гостевой флаг и будит App событием выхода.
+    // Запись гостя к этому моменту уже удалена сервером.
     clearPwaToken();
   }
 
@@ -51,7 +52,7 @@ export function GuestScheduleApp({ bootstrap }: { bootstrap: BootstrapResponse }
         onClose={() => setSettingsOpen(false)}
         profile={profile}
         onSaved={handleSaved}
-        onLogin={handleLogin}
+        onExit={handleExit}
       />
     </DataProvider>
   );

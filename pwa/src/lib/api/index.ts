@@ -110,6 +110,9 @@ export const api = {
   }) =>
     request<{ profile: BootstrapProfile }>('/guest/profile', { method: 'PATCH', body }),
 
+  /** Выйти из гостевого режима: сервер удаляет запись гостя целиком. */
+  guestExit: () => request<{ ok: true }>('/guest/exit', { method: 'POST' }),
+
   /** Полное удаление аккаунта. Подтверждение проверяет и сервер. */
   deleteAccount: () =>
     request<{ ok: true }>('/account/delete', {

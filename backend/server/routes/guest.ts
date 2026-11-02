@@ -17,6 +17,7 @@ import type { FastifyInstance } from 'fastify';
 
 import { registrationStore } from '../../../db/storage/registrationStore.ts';
 import { userStore, type StoredUser } from '../../../db/storage/userStore.ts';
+import { deleteAccount } from '../../services/account/deleteAccount.ts';
 import { acceptConsents } from '../../legal/consentService.ts';
 import { GUEST_CONSENTS } from '../../legal/registry.ts';
 import type { LegalDocId } from '../../legal/types.ts';
@@ -266,5 +267,25 @@ export async function registerGuestRoutes(app: FastifyInstance): Promise<void> {
     if (!updated) throw new AuthError('Гость не найден.', 404, 'not_found');
 
     return reply.send({ profile: buildProfile(updated) });
+  });
+
+  /**
+   * POST /api/guest/exit — выйти из гостевого режима и удалить запись.
+   *
+   * Гость — временный профиль: без БАРС, файлов и авторского контента. Поэтому
+   * выход не «отзывает токен», а стирает запись целиком — иначе брошенные гости
+   * копились бы в users и в статистике. Подтверждение не требуется: действие
+   * инициирует сам гость, а восстановить нечего.
+   */
+  app.post('/api/guest/exit', async (request, reply) => {
+    const user = requireUser(request);
+    if (!isGuestUser(user)) {
+      throw new AuthError('Этот маршрут доступен только гостю.', 403, 'not_guest');
+    }
+
+    await deleteAccount(user);
+    console.log('[Guest] гостевой профиль удалён');
+
+    return reply.send({ ok: true });
   });
 }

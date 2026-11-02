@@ -451,7 +451,7 @@ export function registerAdminRoutes(app: FastifyInstance): void {
       admin,
       'maintenance',
       'диск',
-      `previews ${result.previews}, orphans ${result.orphans}, tmp ${result.tmp}, reports ${result.reports}`,
+      `previews ${result.previews}, orphans ${result.orphans}, tmp ${result.tmp}, reports ${result.reports}, guests ${result.guests}`,
     );
     return reply.send({ result });
   });

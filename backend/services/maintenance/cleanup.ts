@@ -35,6 +35,10 @@ export const REPORT_TTL_DAYS = 30;
 /** Бэкапы на том же диске — не дольше недели. */
 export const BACKUP_TTL_DAYS = 7;
 
+/** Брошенные гостевые профили живут 30 дней с последней активности. */
+export const GUEST_TTL_DAYS = 30;
+export const GUEST_TTL_MS = GUEST_TTL_DAYS * 24 * 60 * 60 * 1000;
+
 /** Порог свободного места для отказа в загрузке. */
 export const MIN_FREE_DISK_BYTES = 1024 * 1024 * 1024;
 
@@ -104,6 +108,30 @@ export function selectOldReports(names: string[], now: number, ttlDays = REPORT_
 export function selectOldBackups(dirs: FileEntry[], now: number, ttlDays = BACKUP_TTL_DAYS): string[] {
   const cutoff = now - ttlDays * 24 * 60 * 60 * 1000;
   return dirs.filter((dir) => dir.mtimeMs < cutoff).map((dir) => dir.filePath);
+}
+
+export interface GuestActivity {
+  id: string;
+  isGuest: boolean;
+  /** Последняя реальная активность, ms (0 — не было). */
+  lastActiveAt: number;
+}
+
+/**
+ * Брошенные гости: только `isGuest`, без активности дольше TTL.
+ *
+ * Гость — временный профиль без БАРС и контента. Если человек удалил приложение
+ * или потерял токен, запись иначе осталась бы в users и в статистике навсегда.
+ */
+export function selectStaleGuestIds(
+  entries: GuestActivity[],
+  now: number,
+  ttlMs = GUEST_TTL_MS,
+): string[] {
+  const cutoff = now - ttlMs;
+  return entries
+    .filter((entry) => entry.isGuest && entry.lastActiveAt < cutoff)
+    .map((entry) => entry.id);
 }
 
 export interface DiskUsage {

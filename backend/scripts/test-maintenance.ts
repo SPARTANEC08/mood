@@ -23,6 +23,7 @@ process.chdir(WORK_DIR);
 const {
   BACKUP_TTL_DAYS,
   DISK_WARN_RATIO,
+  GUEST_TTL_DAYS,
   MIN_FREE_DISK_BYTES,
   PREVIEW_TTL_MS,
   REPORT_TTL_DAYS,
@@ -31,9 +32,11 @@ const {
   selectOldBackups,
   selectOldReports,
   selectOrphanFiles,
+  selectStaleGuestIds,
   selectStaleTmp,
 } = await import('../services/maintenance/cleanup.ts');
 const { runMaintenance } = await import('../services/maintenance/run.ts');
+const { userStore } = await import('../../db/storage/userStore.ts');
 
 let passed = 0;
 let failed = 0;
@@ -64,6 +67,7 @@ section('Константы политики');
   check('превью живут 30 дней', PREVIEW_TTL_MS === 30 * DAY);
   check('отчёты храним 30 дней', REPORT_TTL_DAYS === 30);
   check('бэкапы на диске 7 дней', BACKUP_TTL_DAYS === 7);
+  check('брошенные гости живут 30 дней', GUEST_TTL_DAYS === 30);
   check('порог свободного места 1 ГБ', MIN_FREE_DISK_BYTES === 1024 * 1024 * 1024);
   check('порог предупреждения 80%', DISK_WARN_RATIO === 0.8);
 }
@@ -115,6 +119,18 @@ section('Селекторы');
   ];
   const oldBackups = selectOldBackups(backups, now);
   check('старый бэкап выбран, свежий нет', oldBackups.length === 1 && oldBackups[0] === '/backup/old', oldBackups.join(','));
+
+  const guests = [
+    { id: 'guest-old', isGuest: true, lastActiveAt: now - 31 * DAY },
+    { id: 'guest-fresh', isGuest: true, lastActiveAt: now - 2 * DAY },
+    { id: 'user-old', isGuest: false, lastActiveAt: now - 31 * DAY },
+  ];
+  const staleGuests = selectStaleGuestIds(guests, now);
+  check(
+    'старый гость выбран, свежий и обычный — нет',
+    staleGuests.length === 1 && staleGuests[0] === 'guest-old',
+    staleGuests.join(','),
+  );
 }
 
 section('Свободное место');
@@ -173,6 +189,21 @@ section('Полный прогон на временном каталоге');
   check('свежий отчёт на месте', fs.existsSync(freshReport));
   check('старый бэкап-каталог исчез', !fs.existsSync(oldBackup));
   check('свежий бэкап на месте', fs.existsSync(freshBackup));
+}
+
+section('Брошенные гости');
+{
+  const oldGuest = userStore.create({ barsLoginHash: 'guest:test-old', firstName: 'Старый гость' });
+  userStore.patch(oldGuest.userId, { isGuest: true });
+  const realUser = userStore.create({ barsLoginHash: 'real:test-user', firstName: 'Студент' });
+
+  // Сдвигаем время вперёд: гость создан «сейчас», значит для будущего прогона
+  // он уже старше 30 дней. Обычный пользователь не должен попасть под уборку.
+  const result = await runMaintenance(now + 31 * DAY + 60_000);
+
+  check('брошенный гость удалён', userStore.getByUserId(oldGuest.userId) === undefined);
+  check('обычный пользователь не тронут', userStore.getByUserId(realUser.userId) !== undefined);
+  check('счётчик гостей в результате', result.guests === 1, String(result.guests));
 }
 
 await fsp.rm(WORK_DIR, { recursive: true, force: true });

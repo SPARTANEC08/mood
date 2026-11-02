@@ -15,6 +15,7 @@ type MaintenanceResult = {
   tmp?: number;
   reports?: number;
   backups?: number;
+  guests?: number;
   freeMb?: number | null;
 };
 
@@ -47,7 +48,8 @@ export function AdminMaintenance({ onBack }: { onBack: () => void }) {
             <p className="text-[14px] font-semibold">Уборка диска</p>
             <p className="mt-1 text-[12px] leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
               Удаляет просроченные превью, временные файлы, осиротевшие вложения и
-              старые отчёты. Автоматически запускается раз в сутки — кнопка нужна,
+              старые отчёты, а также брошенные гостевые профили старше 30 дней.
+              Автоматически запускается раз в сутки — кнопка нужна,
               если место кончилось раньше.
             </p>
           </Card>
@@ -78,6 +80,7 @@ export function AdminMaintenance({ onBack }: { onBack: () => void }) {
               <StatCard label="Временные" value={result.tmp ?? 0} />
               <StatCard label="Отчёты" value={result.reports ?? 0} />
               <StatCard label="Бэкапы" value={result.backups ?? 0} />
+              <StatCard label="Гости" value={result.guests ?? 0} />
               <StatCard
                 label="Свободно"
                 value={result.freeMb != null ? formatBytes(result.freeMb * 1024 * 1024) : '—'}

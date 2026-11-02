@@ -7,7 +7,7 @@
  */
 
 import { useState } from 'react';
-import { ChevronRight, GitBranch, LogIn, MessageCircle, Monitor, Moon, Send, Sun, type LucideIcon } from 'lucide-react';
+import { ChevronRight, GitBranch, LogIn, LogOut, MessageCircle, Monitor, Moon, Send, Sun, type LucideIcon } from 'lucide-react';
 
 import { GuestGroupField } from './GuestGroupField';
 import { BottomSheet, Card } from '@/components/ui';
@@ -27,13 +27,13 @@ export function GuestSettingsSheet({
   onClose,
   profile,
   onSaved,
-  onLogin,
+  onExit,
 }: {
   open: boolean;
   onClose: () => void;
   profile: BootstrapProfile;
   onSaved: (profile: BootstrapProfile) => void;
-  onLogin: () => void;
+  onExit: () => void;
 }) {
   const [name, setName] = useState(profile.fullName);
   const [group, setGroup] = useState<GuestGroup | null>(
@@ -65,6 +65,39 @@ export function GuestSettingsSheet({
     } finally {
       setBusy(false);
     }
+  }
+
+  /**
+   * Выход из гостя: сервер удаляет запись, клиент стирает токен.
+   *
+   * 401/403 означают, что записи уже нет (токен истёк или её удалили с другого
+   * устройства) — тогда выходим локально. Сеть и 5xx не считаем выходом: иначе
+   * гость остался бы в базе, а человек думал бы, что профиль удалён.
+   */
+  async function exit(): Promise<void> {
+    if (busy) return;
+
+    setBusy(true);
+    setError(null);
+
+    try {
+      await api.guestExit();
+    } catch (err: unknown) {
+      const alreadyGone = err instanceof ApiError && (err.status === 401 || err.status === 403);
+      if (!alreadyGone) {
+        setError(
+          err instanceof ApiError
+            ? err.message
+            : 'Не удалось выйти. Проверьте связь и попробуйте ещё раз.',
+        );
+        setBusy(false);
+        return;
+      }
+    }
+
+    haptic('medium');
+    setBusy(false);
+    onExit();
   }
 
   return (
@@ -201,18 +234,29 @@ export function GuestSettingsSheet({
           </Card>
         </div>
 
-        <div className="border-t border-[var(--separator-soft)] pt-3">
+        <div className="space-y-1 border-t border-[var(--separator-soft)] pt-3">
           <button
             type="button"
             disabled={busy}
-            onClick={onLogin}
+            onClick={() => void exit()}
             className="pressable pressable-active flex w-full items-center justify-center gap-2 rounded-[12px] px-4 py-2.5 text-[14px] font-semibold text-[var(--accent)] disabled:opacity-40"
           >
             <LogIn size={16} aria-hidden />
             Войти в полный аккаунт
           </button>
-          <p className="mt-2 px-2 text-center text-[11px] leading-snug text-[var(--text-tertiary)]">
-            Гостевой профиль и его статистика останутся отдельными.
+
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void exit()}
+            className="pressable pressable-active flex w-full items-center justify-center gap-2 rounded-[12px] px-4 py-2.5 text-[14px] font-semibold text-[var(--danger)] disabled:opacity-40"
+          >
+            <LogOut size={16} aria-hidden />
+            Выйти из гостевого режима
+          </button>
+
+          <p className="px-2 pt-1 text-center text-[11px] leading-snug text-[var(--text-tertiary)]">
+            Гостевой профиль и его статистика будут удалены без возможности восстановления.
           </p>
         </div>
       </div>
