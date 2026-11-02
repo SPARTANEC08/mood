@@ -140,16 +140,44 @@ export function looksLikeStudentProfile(info: StudentInfo): boolean {
 const STUDENT_DASHBOARD_URL = '/bars_web/ST_Study/Main/Main';
 
 /**
+ * Ищет studentID в разметке.
+ *
+ * БАРС не отдаёт дашборд без `?studentID=`: на `/ST_Study/Main/Main` без
+ * параметра приходит заглушка 591 байт «Отсутствует обязательный параметр».
+ * ID обычно есть в ссылках страницы, на которую редиректит вход.
+ */
+async function findStudentId(client: BarsClient, html: string): Promise<string | null> {
+  const direct = html.match(/studentID=([a-f0-9-]+)/i);
+  if (direct?.[1]) return direct[1];
+
+  // Стартовая страница и корень портала: у студента они ведут в раздел
+  // «Учёба» со ссылкой, содержащей studentID.
+  for (const path of ['/bars_web/', '/']) {
+    try {
+      const $ = await client.getHtml(path);
+      const match = $.html().match(/studentID=([a-f0-9-]+)/i);
+      if (match?.[1]) return match[1];
+    } catch {
+      // Страница недоступна — пробуем следующую.
+    }
+  }
+
+  return null;
+}
+
+/**
  * Профиль со страницы входа, а при неудаче — с явно открытого дашборда.
  *
  * Почему это нужно. После 2FA часть аккаунтов попадает не на дашборд, а на
  * главную портала `/Auth/Menu`: в крошках «Главная», группы и ФИО нет. Раньше
  * вход такого студента падал с «аккаунт не похож на студенческий», хотя
- * студенческий раздел открывается тем же cookie. Здесь пробуем его явно и
- * берём профиль оттуда.
+ * студенческий раздел открывается тем же cookie.
  *
- * Если аккаунт действительно нестуденческий, дашборд снова отдаст меню —
- * решение не меняется, и login.ts по-прежнему отклонит создание записи.
+ * Важно: дашборд открывается только с `?studentID=`. Без него БАРС отдаёт
+ * заглушку «Отсутствует обязательный параметр», и профиль снова не находится.
+ *
+ * Если аккаунт действительно нестуденческий, studentID не найдётся — решение
+ * не меняется, и login.ts по-прежнему отклонит создание записи.
  */
 async function extractStudentInfoWithFallback(
   client: BarsClient,
@@ -159,23 +187,30 @@ async function extractStudentInfoWithFallback(
   const studentInfo = client.extractStudentInfo($);
   if (looksLikeStudentProfile(studentInfo)) return { studentInfo, finalUrl };
 
-  try {
-    const $dashboard = await client.getHtml(STUDENT_DASHBOARD_URL);
-    const fromDashboard = client.extractStudentInfo($dashboard);
+  const studentId = await findStudentId(client, $.html());
 
-    if (looksLikeStudentProfile(fromDashboard)) {
-      // studentID нужен части разделов ЛК; он есть в ссылках дашборда.
-      const studentId = ($dashboard.html().match(/studentID=([a-f0-9-]+)/i) ?? [])[1];
-      return {
-        studentInfo: fromDashboard,
-        finalUrl: studentId
-          ? `${STUDENT_DASHBOARD_URL}?studentID=${studentId}`
-          : STUDENT_DASHBOARD_URL,
-      };
+  if (studentId) {
+    const dashboardUrl = `${STUDENT_DASHBOARD_URL}?studentID=${studentId}`;
+    try {
+      const $dashboard = await client.getHtml(dashboardUrl);
+      const fromDashboard = client.extractStudentInfo($dashboard);
+
+      if (looksLikeStudentProfile(fromDashboard)) {
+        return { studentInfo: fromDashboard, finalUrl: dashboardUrl };
+      }
+    } catch {
+      // Дашборд не открылся — оставляем исходный результат.
     }
-  } catch {
-    // Дашборд не открылся — оставляем исходный результат и прежнее поведение.
   }
+
+  console.warn(
+    '[Auth] профиль не распознан и на дашборде:',
+    JSON.stringify({
+      finalUrl,
+      studentId: studentId ?? null,
+      title: $('title').text().trim(),
+    }),
+  );
 
   return { studentInfo, finalUrl };
 }
