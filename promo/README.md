@@ -47,7 +47,6 @@ npm run drafts -- --date 2026-11-03
 - `drafts/<дата>/changes.md` — сырые пользовательские коммиты;
 - `drafts/<дата>/scenario.md` — сценарий;
 - `drafts/<дата>/telegram.md` — пост;
-- `drafts/<дата>/telegram.txt` — пост для ручной вставки;
 - `drafts/<дата>/telegraph.md` — статья;
 - `drafts/<дата>/telegraph.html` — статья для проверки;
 - `drafts/<дата>/telegraph.json` — URL опубликованной статьи;

@@ -76,6 +76,7 @@ function bullets(block, limit = 8) {
 const main = bullets(section('Главное'), 6);
 const fixes = bullets(section('Исправления'), 4);
 const speed = bullets(section('Скорость'), 3);
+const speedImages = section('Скорость').match(/\{\{img:[^}]+\}\}/g) ?? [];
 const site = bullets(section('Сайт'), 2);
 const combined = main.length >= 3 ? main : [...main, ...fixes, ...speed, ...site];
 const seen = new Set();
@@ -128,7 +129,7 @@ const tg = [
   '',
   ...allBullets.map((b) => `- ${b}`),
   '',
-  `Подробнее об обновлении тут (тык) — ${telegraph}`,
+  `[Подробнее об обновлении тут (тык)](${telegraph})`,
   '',
   footer,
   '',
@@ -149,11 +150,14 @@ if (fs.existsSync(assetsPath)) {
   assets = JSON.parse(fs.readFileSync(assetsPath, 'utf8'));
 }
 
-const image = (screen) => {
-  const url = assets[screen.path];
-  if (url) return `![${screen.caption || ''}](${url})`;
-  return `{{img:${screen.path}|${screen.caption || ''}}}`;
-};
+function renderImages(text) {
+  return text.replace(/\{\{img:([^|}]+)\|?([^}]*)\}\}/g, (_, rawPath, rawCaption) => {
+    const p = rawPath.trim();
+    const caption = (rawCaption || '').trim();
+    const url = assets[p];
+    return url ? `![${caption}](${url})` : `_[скрин: ${caption}]_`;
+  });
+}
 
 const features = section('Фичи');
 const siteSection = section('Сайт');
@@ -170,14 +174,10 @@ const article = [
   '',
   '## Что нового',
   '',
-  features || allBullets.map((b) => `- ${b}`).join('\n'),
+  renderImages(features || allBullets.map((b) => `- ${b}`).join('\n')),
   '',
   fixes.length ? `## Исправления\n\n${fixes.map((b) => `- ${b}`).join('\n')}\n` : '',
-  speed.length ? `## Скорость\n\n${speed.map((b) => `- ${b}`).join('\n')}\n` : '',
-  '## Скриншоты',
-  '',
-  ...screens.map(image),
-  '',
+  speed.length ? `## Скорость\n\n${speed.map((b) => `- ${b}`).join('\n')}${speedImages.length ? `\n\n${renderImages(speedImages.join('\n\n'))}` : ''}\n` : '',
   videoLine
     ? `## Видео\n\n[20-секундный обзор](${videoLine}). В статье — ссылка на пост или страница с плеером.\n`
     : '',
@@ -196,8 +196,20 @@ const article = [
   '',
 ].join('\n');
 
+const footerHtml = [
+  ['web', utm(links.web)],
+  ['tg_bot', links.bot],
+  ['support', links.support],
+  ['GitHub', links.github],
+]
+  .filter(([, url]) => Boolean(url))
+  .map(([label, url]) => `<a href="${url}">${label}</a>`)
+  .join(' // ');
+
+const telegramHtml = `<!doctype html><html lang="ru"><head><meta charset="utf-8"><title>${meta.title || 'Обновление Mood'}</title><style>body{max-width:680px;margin:40px auto;padding:0 20px;font:18px/1.55 -apple-system,BlinkMacSystemFont,Inter,sans-serif}a{color:#7c4dff}</style></head><body><p>🎓 <b>${meta.title || 'Обновление Mood'}</b></p><ul>${allBullets.map((b) => `<li>${inlineHtml(b)}</li>`).join('')}</ul><p><a href="${telegraph}">Подробнее об обновлении тут (тык)</a></p><p>${footerHtml}</p></body></html>`;
+
 fs.writeFileSync(path.join(dir, 'telegram.md'), tg, 'utf8');
-fs.writeFileSync(path.join(dir, 'telegram.txt'), tg.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '$1: $2'), 'utf8');
+fs.writeFileSync(path.join(dir, 'telegram.html'), telegramHtml, 'utf8');
 fs.writeFileSync(path.join(dir, 'telegraph.md'), article, 'utf8');
 fs.writeFileSync(path.join(dir, 'telegraph.html'), toHtml(article), 'utf8');
 
@@ -205,7 +217,7 @@ console.log(`[drafts] ${allBullets.length} пунктов`);
 console.log(`  drafts/${date}/telegram.md`);
 console.log(`  drafts/${date}/telegraph.md`);
 console.log(`  drafts/${date}/telegraph.html`);
-console.log(`  drafts/${date}/telegram.txt`);
+console.log(`  drafts/${date}/telegram.html`);
 console.log(`  скринов: ${screens.length}, assets.json: ${Object.keys(assets).length}`);
 
 
