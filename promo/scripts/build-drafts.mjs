@@ -188,9 +188,91 @@ const article = [
 ].join('\n');
 
 fs.writeFileSync(path.join(dir, 'telegram.md'), tg, 'utf8');
+fs.writeFileSync(path.join(dir, 'telegram.txt'), tg.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '$1: $2'), 'utf8');
 fs.writeFileSync(path.join(dir, 'telegraph.md'), article, 'utf8');
+fs.writeFileSync(path.join(dir, 'telegraph.html'), toHtml(article), 'utf8');
 
 console.log(`[drafts] ${allBullets.length} пунктов`);
 console.log(`  drafts/${date}/telegram.md`);
 console.log(`  drafts/${date}/telegraph.md`);
+console.log(`  drafts/${date}/telegraph.html`);
+console.log(`  drafts/${date}/telegram.txt`);
 console.log(`  скринов: ${screens.length}, assets.json: ${Object.keys(assets).length}`);
+
+
+function inlineHtml(text) {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
+}
+
+function toHtml(markdown) {
+  const out = [];
+  let inList = false;
+  let paragraph = [];
+
+  const flushParagraph = () => {
+    if (paragraph.length > 0) {
+      out.push(`<p>${inlineHtml(paragraph.join(' '))}</p>`);
+      paragraph = [];
+    }
+  };
+
+  const closeList = () => {
+    flushParagraph();
+    if (inList) {
+      out.push('</ul>');
+      inList = false;
+    }
+  };
+
+  for (const line of markdown.split('\n')) {
+    const img = line.match(/^!\[([^\]]*)\]\(([^)]+)\)$/);
+    if (img) {
+      closeList();
+      out.push(
+        `<figure><img src="${img[2]}" alt="${img[1]}"><figcaption>${img[1]}</figcaption></figure>`,
+      );
+      continue;
+    }
+    if (line.startsWith('### ')) {
+      closeList();
+      out.push(`<h3>${inlineHtml(line.slice(4))}</h3>`);
+      continue;
+    }
+    if (line.startsWith('## ')) {
+      closeList();
+      out.push(`<h2>${inlineHtml(line.slice(3))}</h2>`);
+      continue;
+    }
+    if (line.startsWith('# ')) {
+      closeList();
+      out.push(`<h1>${inlineHtml(line.slice(2))}</h1>`);
+      continue;
+    }
+    if (/^-\s+/.test(line)) {
+      flushParagraph();
+      if (!inList) {
+        out.push('<ul>');
+        inList = true;
+      }
+      out.push(`<li>${inlineHtml(line.replace(/^-\s+/, ''))}</li>`);
+      continue;
+    }
+    if (line.trim() === '') {
+      closeList();
+      continue;
+    }
+    if (inList) {
+      out.push('</ul>');
+      inList = false;
+    }
+    paragraph.push(line.trim());
+  }
+  closeList();
+
+  return `<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${meta.title || 'Обновление Mood'}</title><style>body{max-width:720px;margin:40px auto;padding:0 20px;font:18px/1.55 -apple-system,BlinkMacSystemFont,Inter,sans-serif;color:#15131e}img{max-width:100%;border-radius:12px}h1,h2,h3{line-height:1.2}figcaption{font-size:14px;color:#666}</style></head><body>${out.join('\n')}</body></html>`;
+}

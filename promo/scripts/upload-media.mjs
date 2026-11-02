@@ -39,6 +39,15 @@ if (files.length === 0) {
 
 execFileSync('ssh', ['-o', 'ConnectTimeout=20', remote, `mkdir -p ${remoteDir}`], { stdio: 'ignore' });
 
+let existing = {};
+if (outPath && fs.existsSync(outPath)) {
+  try {
+    existing = JSON.parse(fs.readFileSync(outPath, 'utf8'));
+  } catch {
+    existing = {};
+  }
+}
+
 const mapping = {};
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mood-upload-'));
 
@@ -80,6 +89,6 @@ for (const file of files) {
 
 if (outPath) {
   fs.mkdirSync(path.dirname(outPath), { recursive: true });
-  fs.writeFileSync(outPath, JSON.stringify(mapping, null, 2), 'utf8');
+  fs.writeFileSync(outPath, JSON.stringify({ ...existing, ...mapping }, null, 2), 'utf8');
   console.log('[upload] assets:', outPath);
 }

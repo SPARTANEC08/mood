@@ -1,0 +1,13 @@
+import { chromium } from 'playwright';
+const browser = await chromium.launch();
+const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, colorScheme: 'dark', isMobile: true, hasTouch: true });
+const page = await ctx.newPage();
+await page.goto('https://mood-app.ru/landing.html', { waitUntil: 'networkidle', timeout: 90000 });
+await page.waitForTimeout(1200);
+await page.screenshot({ path: 'media/stock/20-landing.png' });
+console.log('landing', (await page.title()));
+await page.goto('https://mood-app.ru/setup', { waitUntil: 'networkidle', timeout: 90000 });
+await page.waitForTimeout(1500);
+await page.screenshot({ path: 'media/stock/21-setup.png' });
+console.log('setup', (await page.title()));
+await browser.close();
