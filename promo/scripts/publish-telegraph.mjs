@@ -54,6 +54,7 @@ function inlineNodes(text) {
 function toNodes(markdown) {
   const nodes = [];
   let list = null;
+  let listTag = 'ul';
   let paragraph = [];
 
   const flushParagraph = () => {
@@ -65,8 +66,9 @@ function toNodes(markdown) {
   const closeList = () => {
     flushParagraph();
     if (list) {
-      nodes.push({ tag: 'ul', children: list });
+      nodes.push({ tag: listTag, children: list });
       list = null;
+      listTag = 'ul';
     }
   };
 
@@ -74,33 +76,38 @@ function toNodes(markdown) {
     const img = line.match(/^!\[([^\]]*)\]\(([^)]+)\)$/);
     if (img) {
       closeList();
-      nodes.push({
-        tag: 'figure',
-        children: [
-          { tag: 'img', attrs: { src: img[2] } },
-          { tag: 'figcaption', children: [img[1] || ''] },
-        ],
-      });
+      nodes.push({ tag: 'figure', children: [{ tag: 'img', attrs: { src: img[2] } }] });
       continue;
     }
 
-    if (line.startsWith('### ')) {
+    const heading = line.match(/^(#{1,4})\s+(.+)$/);
+    if (heading) {
       closeList();
-      nodes.push({ tag: 'h4', children: inlineNodes(line.slice(4)) });
+      // # — заголовок страницы, в теле не дублируем
+      if (heading[1].length > 1) {
+        const level = heading[1].length >= 4 ? 'h4' : 'h3';
+        nodes.push({ tag: level, children: inlineNodes(heading[2]) });
+      }
       continue;
     }
-    if (line.startsWith('## ')) {
-      closeList();
-      nodes.push({ tag: 'h3', children: inlineNodes(line.slice(3)) });
+
+    const ordered = line.match(/^\d+\.\s+(.+)$/);
+    if (ordered) {
+      flushParagraph();
+      if (!list) {
+        list = [];
+        listTag = 'ol';
+      }
+      list.push({ tag: 'li', children: inlineNodes(ordered[1]) });
       continue;
     }
-    if (line.startsWith('# ')) {
-      closeList();
-      continue;
-    }
+
     if (/^-\s+/.test(line)) {
       flushParagraph();
-      if (!list) list = [];
+      if (!list) {
+        list = [];
+        listTag = 'ul';
+      }
       list.push({ tag: 'li', children: inlineNodes(line.replace(/^-\s+/, '')) });
       continue;
     }
@@ -109,15 +116,20 @@ function toNodes(markdown) {
       continue;
     }
 
-    if (list) {
-      nodes.push({ tag: 'ul', children: list });
-      list = null;
-    }
+    if (list) closeList();
     paragraph.push(line.trim());
   }
   closeList();
 
   return nodes;
+}
+
+/* ── dry-run ── */
+
+const nodes = toNodes(md);
+if (args.includes('--dry-run')) {
+  console.log(JSON.stringify(nodes, null, 2));
+  process.exit(0);
 }
 
 /* ── env ── */
@@ -128,7 +140,7 @@ function readEnv() {
   if (!fs.existsSync(file)) return out;
   for (const line of fs.readFileSync(file, 'utf8').split('\n')) {
     const m = line.match(/^([A-Z0-9_]+)=(.*)$/);
-    if (m) out[m[1]] = m[2];
+    if (m) out[m[1]] = m[2].trim().replace(/^["']|["']$/g, '');
   }
   return out;
 }
@@ -156,7 +168,6 @@ if (!token) {
   console.log('[telegraph] аккаунт создан, токен в promo/.env');
 }
 
-const nodes = toNodes(md);
 const body = new URLSearchParams({
   access_token: token,
   title,

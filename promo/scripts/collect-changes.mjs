@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 /**
- * Собирает коммиты за период и раскладывает пользовательские изменения
- * в drafts/<date>/changes.md.
+ * Собирает пользовательские коммиты за день и пишет drafts/<date>/changes.md.
  *
- * Использование:
  *   npm run collect -- --date 2026-11-03
- *   npm run collect -- --date 2026-11-03 --since 2026-11-01
+ *   npm run collect -- --since-last
+ *
+ * По умолчанию период — календарный день по Москве.
  */
 
 import { execFileSync } from 'node:child_process';
@@ -23,37 +23,40 @@ const arg = (name) => {
   return i >= 0 ? args[i + 1] : undefined;
 };
 
-const date = arg('--date') || new Date().toISOString().slice(0, 10);
-const sinceArg = arg('--since');
-const untilArg = arg('--until');
+const moscowDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Moscow' }).format(new Date());
+const date = arg('--date') || moscowDate;
 
-const lastPath = path.join(PROMO, 'smm', 'last-published.json');
-const last = JSON.parse(fs.readFileSync(lastPath, 'utf8'));
-
-function git(argv) {
-  return execFileSync('git', argv, { cwd: REPO, encoding: 'utf8' }).trim();
+function nextDay(day) {
+  const d = new Date(`${day}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().slice(0, 10);
 }
 
-let rangeArgs;
-let rangeLabel;
-if (sinceArg) {
-  rangeArgs = [`--since=${sinceArg}`];
-  rangeLabel = `с ${sinceArg}`;
-} else if (last.commit) {
-  rangeArgs = [`${last.commit}..HEAD`];
-  rangeLabel = `${last.commit.slice(0, 8)}..HEAD`;
+const since = arg('--since') || `${date} 00:00:00 +0300`;
+const until = arg('--until') || `${nextDay(date)} 00:00:00 +0300`;
+let rangeLabel = `за ${date}`;
+
+const gitArgs = ['log', '--date=short', '--name-only', '--pretty=format:%x1e%H%x09%ad%x09%s'];
+
+if (args.includes('--since-last')) {
+  const lastPath = path.join(PROMO, 'smm', 'last-published.json');
+  const last = JSON.parse(fs.readFileSync(lastPath, 'utf8'));
+  if (last.commit) {
+    gitArgs.push(`${last.commit}..HEAD`);
+    rangeLabel = `${String(last.commit).slice(0, 8)}..HEAD`;
+  } else if (last.publishedAt) {
+    gitArgs.push(`--since=${last.publishedAt}`);
+    rangeLabel = `с ${last.publishedAt}`;
+  }
 } else {
-  rangeArgs = [`--since=${last.publishedAt}`];
-  rangeLabel = `с ${last.publishedAt}`;
+  gitArgs.push(`--since=${since}`, `--until=${until}`);
 }
-if (untilArg) rangeArgs.push(`--until=${untilArg}`);
 
-const log = git([
-  'log',
-  ...rangeArgs,
-  '--date=short',
-  '--pretty=format:%H%x09%ad%x09%s',
-]);
+const log = execFileSync('git', gitArgs, {
+  cwd: REPO,
+  encoding: 'utf8',
+  maxBuffer: 32 * 1024 * 1024,
+}).trim();
 
 const USER_PATHS = [
   /^pwa\/(?!src\/test\/|scripts\/)/,
@@ -71,7 +74,6 @@ const IGNORED_PATHS = [
   /^promo\//,
   /^db\//,
   /^tg\//,
-  // Лендинг и обвязка сборки: пользователю важнее фичи внутри приложения.
   /^pwa\/public\/landing/,
   /^pwa\/public\/sw\.js$/,
   /^pwa\/index\.html$/,
@@ -80,40 +82,40 @@ const IGNORED_PATHS = [
   /^pwa\/preview\//,
 ];
 
-const groups = { feat: [], fix: [], perf: [], other: [] };
+const groups = { feat: [], fix: [], perf: [] };
+const typeRe = /^(feat|fix|perf)(\(|!?:)/;
 
-for (const line of log ? log.split('\n') : []) {
-  const [hash, day, subject] = line.split('\t');
+for (const record of log.split('\x1e')) {
+  const clean = record.trim();
+  if (!clean) continue;
+
+  const [header, ...fileLines] = clean.split('\n');
+  const [hash, day, ...subjectParts] = header.split('\t');
+  const subject = subjectParts.join('\t');
   if (!hash || !subject) continue;
 
-  const match = subject.match(/^(feat|fix|perf|refactor|style|chore|docs|test|ci|build)(\(|!?:)/);
-  const type = match?.[1] ?? 'other';
-  if (!['feat', 'fix', 'perf'].includes(type)) continue;
+  const type = subject.match(typeRe)?.[1];
+  if (!type) continue;
 
-  const files = git(['show', '--name-only', '--pretty=format:', hash])
-    .split('\n')
-    .filter(Boolean);
-
-  const userFiles = files.filter(
-    (file) =>
-      USER_PATHS.some((re) => re.test(file)) &&
-      !IGNORED_PATHS.some((re) => re.test(file)),
-  );
+  const userFiles = fileLines
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .filter(
+      (file) =>
+        USER_PATHS.some((re) => re.test(file)) &&
+        !IGNORED_PATHS.some((re) => re.test(file)),
+    );
 
   if (userFiles.length === 0) continue;
 
-  groups[type].push({
-    hash,
-    day,
-    subject,
-    files: userFiles.slice(0, 6),
-  });
+  groups[type].push({ hash, day, subject, files: userFiles.slice(0, 6) });
 }
 
-const total = Object.values(groups).reduce((sum, list) => sum + list.length, 0);
+const total = groups.feat.length + groups.fix.length + groups.perf.length;
 const outDir = path.join(PROMO, 'drafts', date);
 fs.mkdirSync(outDir, { recursive: true });
 
+const titles = { feat: 'Features', fix: 'Fixes', perf: 'Performance' };
 const lines = [
   `# Изменения за ${date}`,
   '',
@@ -121,13 +123,6 @@ const lines = [
   `Пользовательских коммитов: ${total}`,
   '',
 ];
-
-const titles = {
-  feat: 'Features',
-  fix: 'Fixes',
-  perf: 'Performance',
-  other: 'Other',
-};
 
 for (const key of ['feat', 'fix', 'perf']) {
   lines.push(`## ${titles[key]}`);
@@ -143,7 +138,7 @@ for (const key of ['feat', 'fix', 'perf']) {
 }
 
 fs.writeFileSync(path.join(outDir, 'changes.md'), lines.join('\n'), 'utf8');
-console.log(`[collect] ${total} коммитов → drafts/${date}/changes.md`);
+console.log(`[collect] ${total} коммитов ${rangeLabel} → drafts/${date}/changes.md`);
 for (const key of ['feat', 'fix', 'perf']) {
   console.log(`  ${titles[key]}: ${groups[key].length}`);
 }

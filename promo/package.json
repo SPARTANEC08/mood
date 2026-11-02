@@ -10,7 +10,10 @@
     "collect": "node scripts/collect-changes.mjs",
     "drafts": "node scripts/build-drafts.mjs",
     "upload": "node scripts/upload-images.mjs",
-    "publish": "node scripts/publish-telegraph.mjs"
+    "publish": "node scripts/publish-telegraph.mjs",
+    "send": "node scripts/send-post.mjs",
+    "tg:init": "node scripts/tg-init.mjs",
+    "finish": "node scripts/finish.mjs"
   },
   "dependencies": {
     "@remotion/cli": "4.0.540",

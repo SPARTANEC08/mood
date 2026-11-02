@@ -4,6 +4,7 @@
  * Видео сюда не попадает: оно живёт в Telegram.
  *
  *   npm run upload -- media/stock/10-calculator-plan.png --out drafts/2026-11-03/assets.json
+ *   npm run upload -- --date 2026-11-03   # все {{img:...}} из сценария
  */
 import { execFileSync } from 'node:child_process';
 import crypto from 'node:crypto';
@@ -26,9 +27,22 @@ const files = args.filter((a, i) => {
 });
 
 if (files.length === 0) {
-  console.error('Укажи файлы: npm run upload -- media/stock/01-schedule.png');
-  process.exit(1);
+  const scenarioPath = path.join(process.cwd(), 'drafts', date, 'scenario.md');
+  if (!fs.existsSync(scenarioPath)) {
+    console.error('Укажи файлы: npm run upload -- media/stock/01-schedule.png');
+    process.exit(1);
+  }
+  const scenario = fs.readFileSync(scenarioPath, 'utf8');
+  files.push(
+    ...new Set([...scenario.matchAll(/\{\{img:([^|}]+)/g)].map((m) => m[1].trim())),
+  );
+  if (files.length === 0) {
+    console.log('[upload] в сценарии нет {{img:...}}');
+    process.exit(0);
+  }
 }
+
+const resolvedOut = outPath ?? path.join('drafts', date, 'assets.json');
 
 function token() {
   const cred = execFileSync('git', ['credential', 'fill'], {
@@ -95,9 +109,9 @@ const existing = new Map(
 );
 
 let previous = {};
-if (outPath && fs.existsSync(outPath)) {
+if (fs.existsSync(resolvedOut)) {
   try {
-    previous = JSON.parse(fs.readFileSync(outPath, 'utf8'));
+    previous = JSON.parse(fs.readFileSync(resolvedOut, "utf8"));
   } catch {
     previous = {};
   }
@@ -155,8 +169,6 @@ for (const file of files) {
   console.log(`${file} → ${url}`);
 }
 
-if (outPath) {
-  fs.mkdirSync(path.dirname(outPath), { recursive: true });
-  fs.writeFileSync(outPath, JSON.stringify({ ...previous, ...mapping }, null, 2), 'utf8');
-  console.log('[upload] assets:', outPath);
-}
+fs.mkdirSync(path.dirname(resolvedOut), { recursive: true });
+fs.writeFileSync(resolvedOut, JSON.stringify({ ...previous, ...mapping }, null, 2), 'utf8');
+console.log('[upload] assets:', resolvedOut);
