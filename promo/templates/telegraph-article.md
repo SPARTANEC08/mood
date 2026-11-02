@@ -1,7 +1,8 @@
 # Шаблон статьи в Telegraph
 
 > Собирается из `scenario.md`. Публикует человек.
-> Скрины — только по теме, загружаются на `mood-app.ru/media/` через `npm run upload`.
+> Скрины — только по теме, загружаются в GitHub Release через `npm run upload`.
+> Свой сервер под медиа не используем.
 > Публикация: `npm run publish -- --date YYYY-MM-DD`, обновление — с `--update`.
 > `telegraph.html` — для быстрой проверки, `telegraph.md` — для правок.
 

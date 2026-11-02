@@ -179,7 +179,7 @@ const article = [
   fixes.length ? `## Исправления\n\n${fixes.map((b) => `- ${b}`).join('\n')}\n` : '',
   speed.length ? `## Скорость\n\n${speed.map((b) => `- ${b}`).join('\n')}${speedImages.length ? `\n\n${renderImages(speedImages.join('\n\n'))}` : ''}\n` : '',
   videoLine
-    ? `## Видео\n\n[20-секундный обзор](${videoLine}). В статье — ссылка на пост или страница с плеером.\n`
+    ? `## Видео\n\n20-секундный обзор — в посте Telegram-канала.\n`
     : '',
   siteSection ? `## Сайт\n\n${siteSection}\n` : '',
   '## Как установить',

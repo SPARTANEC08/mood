@@ -95,5 +95,6 @@ npm run drafts -- --date 2026-11-03           # вставить ссылку в
 npm run upload -- media/stock/*.png --out drafts/<дата>/assets.json
 ```
 
-Скрипт сжимает до 1600 px / JPEG и заливает на `mood-app.ru/media/`.
-Официальный `telegra.ph/upload` закрыт в 2026 году, поэтому используем VPS.
+Скрипт сжимает до 1600 px / JPEG и заливает в GitHub Release (не на наш сервер).
+Официальный `telegra.ph/upload` закрыт в 2026 году, а видео мы вообще не хостим:
+оно живёт только в Telegram.
