@@ -6,7 +6,7 @@
   "description": "Приложение Mood для браузера: ставится на домашний экран и работает как PWA",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build && node scripts/inject-sw-version.mjs && node scripts/precompress.mjs",
+    "build": "tsc --noEmit && node scripts/copy-apk.mjs && vite build && node scripts/inject-sw-version.mjs && node scripts/precompress.mjs",
     "preview": "vite preview --port 4173",
     "icons": "node scripts/gen-icons.mjs"
   },

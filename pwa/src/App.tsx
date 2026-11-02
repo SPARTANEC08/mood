@@ -61,6 +61,21 @@ type Phase = 'ready' | 'welcome' | 'guest';
  */
 const TWO_FA_WAIT_MS = 5 * 60 * 1000;
 
+/**
+ * Убирает служебный ?login=1 после входа.
+ *
+ * Параметр нужен только для того, чтобы landing-boot.js не увёл человека с
+ * корня обратно на лендинг. В адресной строке после успешного входа ему делать
+ * нечего.
+ */
+function clearLoginQuery(): void {
+  const url = new URL(window.location.href);
+  if (url.searchParams.get('login') !== '1') return;
+
+  url.searchParams.delete('login');
+  window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
+}
+
 export default function App() {
   const [phase, setPhase] = useState<Phase>(() =>
     hasUsablePwaToken() ? 'ready' : 'welcome',
@@ -134,6 +149,7 @@ export default function App() {
     // объяснения на экране входа.
     if (getPwaToken() && isPwaTokenExpired()) clearPwaToken();
     if (!hasUsablePwaToken() && isGuestMode()) clearGuestMode();
+    if (hasUsablePwaToken()) clearLoginQuery();
 
     setPhase(hasUsablePwaToken() ? 'ready' : 'welcome');
   }, []);
@@ -173,6 +189,7 @@ export default function App() {
   /** Вход состоялся — открываем приложение. */
   function onAuthenticated(_issued: PwaTokenResponse): void {
     clearGuestMode();
+    clearLoginQuery();
     haptic('medium');
     setPhase('ready');
   }
@@ -180,6 +197,7 @@ export default function App() {
   /** Гостевая сессия создана: токен уже выдан сервером. */
   function onGuestAuthenticated(issued: PwaTokenResponse): void {
     setPwaToken(issued.token, issued.expiresAt);
+    clearLoginQuery();
     setGuestMode();
     setPhase('ready');
   }

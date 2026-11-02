@@ -1,0 +1,2374 @@
+<!doctype html>
+<html lang="ru" data-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="description" content="Mood — расписание, задания, оценки и почта НИУ МЭИ. Вход по логину и паролю БАРС, без Telegram." />
+  <meta name="theme-color" content="#0c0a12" />
+  <meta name="color-scheme" content="dark light" />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Mood — вся учёба в одном приложении" />
+  <meta property="og:description" content="Расписание, задания, оценки и почта НИУ МЭИ. Вход по логину БАРС, без Telegram." />
+  <meta property="og:url" content="https://mood-app.ru" />
+  <link rel="icon" type="image/png" sizes="32x32" href="pwa/public/icons/favicon-32.png" />
+  <title>Mood — вся учёба в одном приложении</title>
+
+  <script>
+    /* Тема до первого кадра: без этого при светлой теме будет вспышка тёмного. */
+    (function () {
+      var root = document.documentElement;
+      root.classList.add("js");
+
+      try {
+        var saved = localStorage.getItem("mood-landing-theme");
+        if (saved === "light" || saved === "dark") {
+          root.setAttribute("data-theme", saved);
+        }
+      } catch (error) {
+        /* localStorage может быть недоступен */
+      }
+    })();
+  </script>
+
+  <style>
+    /* ============================================================
+       Mood landing — макет.
+       Это самостоятельный HTML-файл: без сборки, без картинок,
+       без внешних шрифтов. Скриншоты и фото пока заменены
+       аккуратными CSS-заглушками.
+       ============================================================ */
+
+    :root {
+      --bg: #0c0a12;
+      --bg-elev: #15131e;
+      --surface: rgba(255, 255, 255, 0.045);
+      --surface-solid: #1f1c2b;
+      --surface-2: #2a2638;
+      --text: #f4f2fb;
+      --text-2: rgba(244, 242, 251, 0.64);
+      --text-3: rgba(244, 242, 251, 0.38);
+      --border: rgba(244, 242, 251, 0.1);
+      --border-strong: rgba(244, 242, 251, 0.2);
+      --accent: #9d45fe;
+      --accent-2: #7c4dff;
+      --accent-soft: rgba(157, 69, 254, 0.14);
+      --success: #30d158;
+      --warning: #ff9f0a;
+      --danger: #ff453a;
+      --grid-line: rgba(255, 255, 255, 0.045);
+      --glow-1: rgba(124, 77, 255, 0.3);
+      --glow-2: rgba(157, 69, 254, 0.17);
+      --glow-3: rgba(80, 40, 160, 0.18);
+      --shadow: 0 30px 90px rgba(0, 0, 0, 0.5);
+      --radius: 20px;
+      --radius-lg: 28px;
+      --container: 1180px;
+      --header-h: 72px;
+      --ease: cubic-bezier(0.32, 0.72, 0, 1);
+      color-scheme: dark;
+    }
+
+    html[data-theme="light"] {
+      --bg: #f4f2fb;
+      --bg-elev: #ffffff;
+      --surface: rgba(255, 255, 255, 0.78);
+      --surface-solid: #ffffff;
+      --surface-2: #f8f6fe;
+      --text: #15131e;
+      --text-2: rgba(21, 19, 30, 0.64);
+      --text-3: rgba(21, 19, 30, 0.4);
+      --border: rgba(21, 19, 30, 0.1);
+      --border-strong: rgba(21, 19, 30, 0.2);
+      --accent: #7c4dff;
+      --accent-2: #6a3df0;
+      --accent-soft: rgba(124, 77, 255, 0.12);
+      --grid-line: rgba(21, 19, 30, 0.05);
+      --glow-1: rgba(124, 77, 255, 0.17);
+      --glow-2: rgba(157, 69, 254, 0.1);
+      --glow-3: rgba(80, 40, 160, 0.08);
+      --shadow: 0 30px 90px rgba(70, 50, 140, 0.18);
+      color-scheme: light;
+    }
+
+    * { box-sizing: border-box; }
+
+    html {
+      scroll-behavior: smooth;
+      scroll-padding-top: calc(var(--header-h) + 24px);
+    }
+
+    body {
+      margin: 0;
+      min-width: 320px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display",
+        "Inter", "Segoe UI", Roboto, system-ui, sans-serif;
+      font-size: 16px;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+      overflow-x: clip;
+      transition: background-color 0.25s var(--ease), color 0.25s var(--ease);
+    }
+
+    a { color: inherit; text-decoration: none; }
+    button { font: inherit; }
+    img, svg { display: block; }
+    ::selection { background: var(--accent); color: #fff; }
+
+    :where(a, button, summary):focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 3px;
+      border-radius: 6px;
+    }
+
+    .sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
+
+    .icon {
+      width: 20px;
+      height: 20px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.8;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      flex: 0 0 auto;
+    }
+
+    .icon-fill {
+      fill: currentColor;
+      stroke: none;
+    }
+
+    .container {
+      width: min(var(--container), calc(100% - 40px));
+      margin: 0 auto;
+    }
+
+    .skip-link {
+      position: fixed;
+      top: -100px;
+      left: 16px;
+      z-index: 200;
+      padding: 10px 16px;
+      border-radius: 10px;
+      background: var(--accent);
+      color: #fff;
+      font-size: 14px;
+      transition: top 0.2s var(--ease);
+    }
+
+    .skip-link:focus { top: 12px; }
+
+    /* ── фон ──────────────────────────────────────────────────── */
+
+    .bg {
+      position: fixed;
+      inset: 0;
+      z-index: -1;
+      overflow: hidden;
+      pointer-events: none;
+      background:
+        radial-gradient(1100px 760px at 74% -12%, var(--glow-1), transparent 62%),
+        radial-gradient(900px 700px at -8% 28%, var(--glow-2), transparent 62%),
+        radial-gradient(760px 620px at 104% 78%, var(--glow-3), transparent 64%);
+    }
+
+    .bg::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background-image:
+        linear-gradient(var(--grid-line) 1px, transparent 1px),
+        linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+      background-size: 72px 72px;
+      -webkit-mask-image: radial-gradient(ellipse 85% 60% at 50% 0%, #000 20%, transparent 78%);
+      mask-image: radial-gradient(ellipse 85% 60% at 50% 0%, #000 20%, transparent 78%);
+      opacity: 0.75;
+    }
+
+    .bg::after {
+      content: "";
+      position: absolute;
+      top: 4%;
+      right: -12%;
+      width: 620px;
+      height: 620px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(157, 69, 254, 0.24), transparent 66%);
+      filter: blur(42px);
+      animation: float-bg 20s ease-in-out infinite;
+    }
+
+    @keyframes float-bg {
+      0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+      50% { transform: translate3d(-40px, 36px, 0) scale(1.06); }
+    }
+
+    /* ── кнопки ───────────────────────────────────────────────── */
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 9px;
+      height: 48px;
+      padding: 0 21px;
+      border: 1px solid transparent;
+      border-radius: 14px;
+      font-size: 15px;
+      font-weight: 650;
+      letter-spacing: -0.01em;
+      white-space: nowrap;
+      cursor: pointer;
+      transition: transform 0.15s var(--ease), background-color 0.2s,
+        border-color 0.2s, box-shadow 0.2s, color 0.2s;
+    }
+
+    .btn:active { transform: scale(0.97); }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #a45cff 0%, #7c4dff 100%);
+      color: #fff;
+      box-shadow: 0 14px 32px rgba(124, 77, 255, 0.3);
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 18px 44px rgba(124, 77, 255, 0.42);
+    }
+
+    .btn-ghost {
+      background: var(--surface);
+      border-color: var(--border);
+      color: var(--text);
+      -webkit-backdrop-filter: blur(12px);
+      backdrop-filter: blur(12px);
+    }
+
+    .btn-ghost:hover {
+      border-color: var(--border-strong);
+      background: color-mix(in srgb, var(--surface-solid) 72%, transparent);
+    }
+
+    .btn-sm {
+      height: 38px;
+      padding: 0 15px;
+      border-radius: 11px;
+      font-size: 13px;
+    }
+
+    .btn .icon { width: 17px; height: 17px; }
+
+    /* ── шапка ────────────────────────────────────────────────── */
+
+    .site-header {
+      position: sticky;
+      top: 0;
+      z-index: 60;
+      height: var(--header-h);
+      background: var(--bg);
+      background: color-mix(in srgb, var(--bg) 76%, transparent);
+      -webkit-backdrop-filter: blur(20px);
+      backdrop-filter: blur(20px);
+      border-bottom: 1px solid transparent;
+      transition: border-color 0.25s, background-color 0.25s;
+    }
+
+    .site-header.scrolled {
+      background: color-mix(in srgb, var(--bg) 90%, transparent);
+      border-bottom-color: var(--border);
+    }
+
+    .header-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 100%;
+      gap: 20px;
+    }
+
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 18px;
+      font-weight: 750;
+      letter-spacing: -0.035em;
+    }
+
+    .brand-mark {
+      width: 34px;
+      height: 34px;
+      flex: 0 0 34px;
+      overflow: hidden;
+      border-radius: 9px;
+      background: #15131e;
+      box-shadow: 0 8px 24px rgba(124, 77, 255, 0.28);
+    }
+
+    .brand-mark img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 27px;
+      margin-left: auto;
+      margin-right: 6px;
+    }
+
+    .nav-links a {
+      font-size: 14px;
+      font-weight: 550;
+      color: var(--text-2);
+      transition: color 0.2s;
+    }
+
+    .nav-links a:hover { color: var(--text); }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+    }
+
+    .icon-btn {
+      width: 38px;
+      height: 38px;
+      display: grid;
+      place-items: center;
+      border: 1px solid var(--border);
+      border-radius: 11px;
+      background: var(--surface);
+      color: var(--text-2);
+      cursor: pointer;
+      transition: color 0.2s, border-color 0.2s, background-color 0.2s;
+    }
+
+    .icon-btn:hover {
+      color: var(--text);
+      border-color: var(--border-strong);
+    }
+
+    html[data-theme="dark"] .theme-sun { display: block; }
+    html[data-theme="dark"] .theme-moon { display: none; }
+    html[data-theme="light"] .theme-sun { display: none; }
+    html[data-theme="light"] .theme-moon { display: block; }
+
+    .menu-btn { display: none; }
+
+    .menu-close-icon { display: none; }
+
+    [data-menu-toggle][aria-expanded="true"] .menu-open-icon { display: none; }
+    [data-menu-toggle][aria-expanded="true"] .menu-close-icon { display: block; }
+
+    /* ── hero ─────────────────────────────────────────────────── */
+
+    .hero {
+      position: relative;
+      padding: 86px 0 78px;
+    }
+
+    .hero-grid {
+      display: grid;
+      grid-template-columns: 1.06fr 0.94fr;
+      gap: 54px;
+      align-items: center;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 12px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      background: var(--surface);
+      color: var(--text-2);
+      font-size: 12.5px;
+      font-weight: 600;
+      -webkit-backdrop-filter: blur(10px);
+      backdrop-filter: blur(10px);
+    }
+
+    .badge-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--success);
+      box-shadow: 0 0 0 4px rgba(48, 209, 88, 0.12);
+    }
+
+    h1 {
+      margin: 20px 0 20px;
+      font-size: clamp(40px, 5.3vw, 68px);
+      line-height: 0.98;
+      letter-spacing: -0.048em;
+      font-weight: 760;
+    }
+
+    .gradient-text {
+      background: linear-gradient(100deg, #ffffff 4%, #d6bcff 46%, #9d45fe 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+
+    html[data-theme="light"] .gradient-text {
+      background: linear-gradient(100deg, #15131e 4%, #5b32c9 52%, #9d45fe 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+    }
+
+    .hero-sub {
+      max-width: 570px;
+      margin: 0;
+      color: var(--text-2);
+      font-size: 18px;
+      line-height: 1.58;
+    }
+
+    .hero-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 29px;
+    }
+
+    .hero-note {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 17px;
+      margin-top: 19px;
+      color: var(--text-3);
+      font-size: 12.5px;
+    }
+
+    .hero-note span {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .hero-note .icon { width: 14px; height: 14px; color: var(--accent); }
+
+    /* ── макет телефона ───────────────────────────────────────── */
+
+    .hero-visual {
+      position: relative;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 700px;
+      perspective: 1200px;
+    }
+
+    .phone-wrap {
+      position: relative;
+      width: 306px;
+      transform: rotateY(-7deg) rotateX(2deg);
+      transform-style: preserve-3d;
+    }
+
+    .phone {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 306 / 685;
+      padding: 9px;
+      border-radius: 52px;
+      background: linear-gradient(155deg, #463d61 0%, #17141f 38%, #2a2638 100%);
+      box-shadow:
+        0 54px 110px rgba(0, 0, 0, 0.58),
+        0 0 0 1px rgba(255, 255, 255, 0.09),
+        inset 0 1px 0 rgba(255, 255, 255, 0.17);
+    }
+
+    .phone::before {
+      content: "";
+      position: absolute;
+      inset: 2px;
+      border-radius: 50px;
+      background: #09080d;
+    }
+
+    .phone-screen {
+      position: relative;
+      z-index: 1;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      border-radius: 44px;
+      background: #15131e;
+      color: #f4f2fb;
+    }
+
+    .phone-notch {
+      position: absolute;
+      top: 16px;
+      left: 50%;
+      z-index: 6;
+      width: 82px;
+      height: 22px;
+      transform: translateX(-50%);
+      border-radius: 999px;
+      background: #07060a;
+    }
+
+    .phone-glare {
+      position: absolute;
+      inset: 0;
+      z-index: 7;
+      border-radius: 44px;
+      pointer-events: none;
+      background: linear-gradient(123deg, rgba(255, 255, 255, 0.16), transparent 26%, transparent 72%, rgba(255, 255, 255, 0.04));
+    }
+
+    .app-status {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      height: 46px;
+      padding: 9px 22px 5px;
+      color: rgba(244, 242, 251, 0.6);
+      font-size: 10px;
+      font-weight: 650;
+    }
+
+    .app-status-dots {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .app-status-dots i {
+      display: block;
+      width: 3px;
+      height: 3px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    .phone-shot {
+      width: 100%;
+      flex: 1 1 auto;
+      min-height: 0;
+      object-fit: cover;
+      object-position: top center;
+      display: block;
+    }
+
+    .float-card {
+      position: absolute;
+      z-index: 4;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 14px;
+      border: 1px solid var(--border-strong);
+      border-radius: 16px;
+      background: var(--surface-solid);
+      box-shadow: var(--shadow);
+      -webkit-backdrop-filter: blur(18px);
+      backdrop-filter: blur(18px);
+      animation: float-card 8s ease-in-out infinite;
+    }
+
+    .float-card b {
+      display: block;
+      font-size: 12.5px;
+      line-height: 1.25;
+      letter-spacing: -0.01em;
+    }
+
+    .float-card span {
+      display: block;
+      margin-top: 2px;
+      color: var(--text-2);
+      font-size: 10.5px;
+      line-height: 1.25;
+    }
+
+    .float-icon {
+      width: 34px;
+      height: 34px;
+      display: grid;
+      place-items: center;
+      border-radius: 10px;
+      background: var(--accent-soft);
+      color: var(--accent);
+    }
+
+    .float-icon .icon { width: 17px; height: 17px; }
+
+    .float-grade { top: -56px; left: -70px; }
+    .float-mail { right: -46px; bottom: 14%; animation-delay: -4s; }
+
+    @keyframes float-card {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-9px); }
+    }
+
+    /* ── секции ───────────────────────────────────────────────── */
+
+    .section {
+      position: relative;
+      padding: 92px 0;
+    }
+
+    .section-alt {
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      background: color-mix(in srgb, var(--surface-solid) 30%, transparent);
+    }
+
+    .section-head {
+      max-width: 740px;
+      margin: 0 auto 44px;
+      text-align: center;
+    }
+
+    .kicker {
+      margin-bottom: 12px;
+      color: var(--accent);
+      font-size: 11.5px;
+      font-weight: 760;
+      letter-spacing: 0.15em;
+      line-height: 1.3;
+      text-transform: uppercase;
+    }
+
+    .section-head h2 {
+      margin: 0 0 14px;
+      font-size: clamp(30px, 3.7vw, 46px);
+      line-height: 1.04;
+      letter-spacing: -0.04em;
+      font-weight: 740;
+    }
+
+    .section-head p {
+      margin: 0;
+      color: var(--text-2);
+      font-size: 16.5px;
+      line-height: 1.6;
+    }
+
+    /* ── возможности ──────────────────────────────────────────── */
+
+    .feature-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      align-items: start;
+    }
+
+    .feature {
+      overflow: hidden;
+      border: 1px solid var(--border);
+      border-radius: 17px;
+      background: var(--surface);
+      transition: border-color 0.22s, background-color 0.22s;
+    }
+
+    .feature:hover {
+      border-color: var(--border-strong);
+      background: color-mix(in srgb, var(--surface-solid) 56%, transparent);
+    }
+
+    .feature[open] {
+      border-color: rgba(157, 69, 254, 0.34);
+      background: linear-gradient(180deg, rgba(124, 77, 255, 0.09), transparent 80%);
+    }
+
+    .feature summary {
+      display: flex;
+      align-items: center;
+      gap: 13px;
+      padding: 16px 17px;
+      cursor: pointer;
+      list-style: none;
+    }
+
+    .feature summary::-webkit-details-marker { display: none; }
+
+    .feature-icon {
+      width: 38px;
+      height: 38px;
+      flex: 0 0 38px;
+      display: grid;
+      place-items: center;
+      border-radius: 11px;
+      background: var(--accent-soft);
+      color: var(--accent);
+    }
+
+    .feature-icon .icon { width: 19px; height: 19px; }
+
+    .feature-title {
+      flex: 1;
+      font-size: 15.5px;
+      line-height: 1.3;
+      letter-spacing: -0.015em;
+      font-weight: 650;
+    }
+
+    .feature-plus {
+      width: 24px;
+      height: 24px;
+      display: grid;
+      place-items: center;
+      color: var(--accent);
+      font-size: 21px;
+      font-weight: 300;
+      line-height: 1;
+      transition: transform 0.22s var(--ease);
+    }
+
+    .feature[open] .feature-plus { transform: rotate(45deg); }
+
+    .feature-body {
+      padding: 0 17px 18px 68px;
+      animation: feature-in 0.22s var(--ease);
+    }
+
+    .feature-body p {
+      margin: 0;
+      color: var(--text-2);
+      font-size: 13.5px;
+      line-height: 1.55;
+    }
+
+    @keyframes feature-in {
+      from { opacity: 0; transform: translateY(-5px); }
+      to { opacity: 1; transform: none; }
+    }
+
+    /* ── скриншоты ────────────────────────────────────────────── */
+
+    .shots {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 14px;
+    }
+
+    .shot {
+      padding: 10px;
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      background: var(--surface);
+      transition: transform 0.25s var(--ease), border-color 0.25s;
+    }
+
+    .shot:hover {
+      transform: translateY(-4px);
+      border-color: var(--border-strong);
+    }
+
+    .shot-phone {
+      position: relative;
+      aspect-ratio: 1170 / 2532;
+      overflow: hidden;
+      border: 1px solid rgba(244, 242, 251, 0.08);
+      border-radius: 15px;
+      background: #15131e;
+    }
+
+    .shot-phone img {
+      width: 100%;
+      height: 100%;
+      display: block;
+      object-fit: cover;
+      object-position: top center;
+    }
+
+    .shot-title {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      margin-top: 10px;
+      padding: 0 2px;
+    }
+
+    .shot-title b {
+      font-size: 12.5px;
+      letter-spacing: -0.01em;
+      font-weight: 650;
+    }
+
+    .shot-title span {
+      color: var(--text-3);
+      font-size: 10.5px;
+      line-height: 1.3;
+    }
+
+    .shots-note {
+      margin: 18px 0 0;
+      color: var(--text-3);
+      font-size: 11.5px;
+      text-align: center;
+    }
+
+    /* ── как это работает ─────────────────────────────────────── */
+
+    .steps {
+      position: relative;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 18px;
+    }
+
+    .step {
+      padding: 26px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
+    }
+
+    .step-num {
+      width: 38px;
+      height: 38px;
+      display: grid;
+      place-items: center;
+      margin-bottom: 16px;
+      border-radius: 50%;
+      background: linear-gradient(145deg, #a45cff, #7c4dff);
+      color: #fff;
+      font-size: 14px;
+      font-weight: 750;
+      box-shadow: 0 10px 24px rgba(124, 77, 255, 0.3);
+    }
+
+    .step h3 {
+      margin: 0 0 7px;
+      font-size: 17px;
+      letter-spacing: -0.018em;
+      font-weight: 660;
+    }
+
+    .step p {
+      margin: 0;
+      color: var(--text-2);
+      font-size: 13.8px;
+      line-height: 1.55;
+    }
+
+    /* ── установка ────────────────────────────────────────────── */
+
+    .install-grid {
+      display: grid;
+      grid-template-columns: 0.84fr 1.16fr;
+      gap: 44px;
+      align-items: start;
+    }
+
+    .install-copy,
+    .install-panel { min-width: 0; }
+
+    .install-copy h2 {
+      margin: 0 0 16px;
+      font-size: clamp(30px, 3.7vw, 45px);
+      line-height: 1.04;
+      letter-spacing: -0.04em;
+      font-weight: 740;
+    }
+
+    .install-copy > p {
+      margin: 0;
+      color: var(--text-2);
+      font-size: 16px;
+      line-height: 1.6;
+    }
+
+    .install-points {
+      display: grid;
+      gap: 12px;
+      margin: 24px 0 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .install-points li {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      color: var(--text-2);
+      font-size: 13.8px;
+      line-height: 1.5;
+    }
+
+    .install-points .icon {
+      width: 17px;
+      height: 17px;
+      margin-top: 2px;
+      color: var(--accent);
+    }
+
+    .install-panel {
+      padding: 9px;
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      background: var(--surface);
+    }
+
+    .tabs {
+      display: flex;
+      gap: 6px;
+      padding: 6px;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      background: var(--bg-elev);
+    }
+
+    .tab {
+      flex: 1;
+      height: 40px;
+      border: 0;
+      border-radius: 11px;
+      background: transparent;
+      color: var(--text-2);
+      font-size: 13px;
+      font-weight: 650;
+      cursor: pointer;
+      transition: background-color 0.2s, color 0.2s, box-shadow 0.2s;
+    }
+
+    .tab:hover { color: var(--text); }
+
+    .tab[aria-selected="true"] {
+      background: linear-gradient(145deg, #a45cff, #7c4dff);
+      color: #fff;
+      box-shadow: 0 8px 20px rgba(124, 77, 255, 0.3);
+    }
+
+    .tab-panel { padding: 23px 20px 20px; }
+
+    .panel-lead {
+      margin: 0 0 17px;
+      color: var(--text-2);
+      font-size: 13.5px;
+      line-height: 1.55;
+    }
+
+    .steps-list {
+      display: grid;
+      gap: 14px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      counter-reset: install-step;
+    }
+
+    .steps-list li {
+      display: flex;
+      gap: 12px;
+      color: var(--text-2);
+      font-size: 13.8px;
+      line-height: 1.5;
+    }
+
+    .steps-list li > span {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .steps-list li::before {
+      counter-increment: install-step;
+      content: counter(install-step);
+      flex: 0 0 24px;
+      width: 24px;
+      height: 24px;
+      display: grid;
+      place-items: center;
+      border-radius: 50%;
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-size: 11.5px;
+      font-weight: 750;
+    }
+
+    .steps-list strong { color: var(--text); font-weight: 650; }
+
+    .panel-note {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      margin: 19px 0 0;
+      padding: 11px 12px;
+      border: 1px solid var(--border);
+      border-radius: 11px;
+      background: color-mix(in srgb, var(--surface-solid) 60%, transparent);
+      color: var(--text-3);
+      font-size: 11.5px;
+      line-height: 1.45;
+    }
+
+    .panel-note .icon {
+      width: 15px;
+      height: 15px;
+      margin-top: 1px;
+      color: var(--accent);
+    }
+
+    .panel-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 9px;
+      margin-top: 18px;
+    }
+
+    .panel-actions .btn { flex: 1 1 auto; }
+
+    .apk-meta {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px 14px;
+      margin-top: 18px;
+      color: var(--text-3);
+      font-size: 11px;
+    }
+
+    .apk-meta span {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .apk-meta .icon { width: 14px; height: 14px; color: var(--accent); }
+
+    .ios-shots {
+      display: flex;
+      gap: 10px;
+      margin-top: 18px;
+      padding-bottom: 4px;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+
+    .ios-shots::-webkit-scrollbar { display: none; }
+
+    .ios-shot {
+      flex: 0 0 132px;
+      margin: 0;
+    }
+
+    .ios-shot img {
+      width: 100%;
+      height: auto;
+      display: block;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--surface-solid);
+    }
+
+    .ios-shot figcaption {
+      margin-top: 5px;
+      color: var(--text-3);
+      font-size: 10px;
+      line-height: 1.3;
+    }
+
+    /* ── о проекте ────────────────────────────────────────────── */
+
+    .about-grid {
+      display: grid;
+      grid-template-columns: 1.04fr 0.96fr;
+      gap: 22px;
+      align-items: stretch;
+    }
+
+    .gh-card {
+      overflow: hidden;
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      background: var(--surface);
+      transition: border-color 0.2s;
+    }
+
+    .gh-card:hover { border-color: var(--border-strong); }
+
+    .gh-head {
+      display: flex;
+      flex-wrap: nowrap;
+      align-items: center;
+      gap: 8px 10px;
+      padding: 16px 17px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .gh-avatar {
+      width: 34px;
+      height: 34px;
+      flex: 0 0 34px;
+      display: grid;
+      place-items: center;
+      border-radius: 50%;
+      background: var(--accent-soft);
+      color: var(--accent);
+    }
+
+    .gh-avatar .icon { width: 18px; height: 18px; }
+
+    .gh-repo {
+      flex: 1;
+      min-width: 0;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 13px;
+      font-weight: 650;
+      line-height: 1.3;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .gh-repo span { color: var(--text-3); font-weight: 500; }
+    .gh-repo:hover { color: var(--accent); }
+
+    .gh-badge {
+      margin-left: 6px;
+      padding: 2px 7px;
+      border: 1px solid var(--border-strong);
+      border-radius: 999px;
+      color: var(--text-3);
+      font-size: 10px;
+      font-weight: 600;
+      vertical-align: 1px;
+    }
+
+    .gh-body { padding: 17px; }
+
+    .gh-desc {
+      margin: 0;
+      color: var(--text-2);
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    .gh-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px 15px;
+      margin-top: 14px;
+      color: var(--text-3);
+      font-size: 11px;
+    }
+
+    .gh-meta span {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .gh-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent);
+    }
+
+    .gh-dot.ts { background: #3178c6; }
+    .gh-dot.css { background: #a259ff; }
+    .gh-dot.swift { background: #f05138; }
+
+    .gh-topics {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 15px;
+    }
+
+    .gh-topics span {
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-size: 10.5px;
+      font-weight: 600;
+    }
+
+    .gh-foot {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 15px;
+      padding: 12px 17px;
+      border-top: 1px solid var(--border);
+      color: var(--text-3);
+      font-size: 11px;
+    }
+
+    .gh-foot a:hover { color: var(--text); }
+
+    .about-side {
+      display: grid;
+      gap: 12px;
+      align-content: start;
+    }
+
+    .about-card {
+      padding: 17px;
+      border: 1px solid var(--border);
+      border-radius: 17px;
+      background: var(--surface);
+    }
+
+    .about-card h3 {
+      margin: 0 0 9px;
+      font-size: 13.5px;
+      font-weight: 680;
+      letter-spacing: -0.01em;
+    }
+
+    .about-card ul {
+      display: grid;
+      gap: 8px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .about-card li {
+      display: flex;
+      align-items: flex-start;
+      gap: 7px;
+      color: var(--text-2);
+      font-size: 12.5px;
+      line-height: 1.45;
+    }
+
+    .about-card li .icon {
+      width: 14px;
+      height: 14px;
+      margin-top: 2px;
+      color: var(--accent);
+    }
+
+    .tech-pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .tech-pills span {
+      padding: 5px 8px;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      background: var(--surface);
+      color: var(--text-3);
+      font-size: 10.5px;
+      font-weight: 600;
+    }
+
+    .disclaimer {
+      display: flex;
+      gap: 9px;
+      padding: 13px;
+      border: 1px solid rgba(255, 159, 10, 0.2);
+      border-radius: 14px;
+      background: rgba(255, 159, 10, 0.06);
+      color: var(--text-2);
+      font-size: 11.5px;
+      line-height: 1.45;
+    }
+
+    .disclaimer .icon {
+      width: 16px;
+      height: 16px;
+      margin-top: 1px;
+      color: var(--warning);
+    }
+
+    /* ── FAQ ──────────────────────────────────────────────────── */
+
+    .faq {
+      display: grid;
+      gap: 10px;
+      max-width: 830px;
+      margin: 0 auto;
+    }
+
+    .faq details {
+      overflow: hidden;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      background: var(--surface);
+      transition: border-color 0.2s;
+    }
+
+    .faq details[open] { border-color: var(--border-strong); }
+
+    .faq summary {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      padding: 18px 20px;
+      cursor: pointer;
+      font-size: 15px;
+      font-weight: 620;
+      line-height: 1.4;
+      list-style: none;
+    }
+
+    .faq summary::-webkit-details-marker { display: none; }
+
+    .faq summary::after {
+      content: "+";
+      flex: 0 0 auto;
+      color: var(--accent);
+      font-size: 23px;
+      font-weight: 350;
+      line-height: 1;
+      transition: transform 0.2s var(--ease);
+    }
+
+    .faq details[open] summary::after { transform: rotate(45deg); }
+
+    .faq details p {
+      margin: 0;
+      padding: 0 20px 20px;
+      color: var(--text-2);
+      font-size: 14px;
+      line-height: 1.6;
+    }
+
+    /* ── CTA ──────────────────────────────────────────────────── */
+
+    .cta-band { padding: 20px 0 84px; }
+
+    .cta-card {
+      position: relative;
+      overflow: hidden;
+      padding: 50px 32px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      background:
+        radial-gradient(540px 280px at 50% 0%, rgba(157, 69, 254, 0.26), transparent 72%),
+        linear-gradient(135deg, rgba(124, 77, 255, 0.14), rgba(157, 69, 254, 0.04));
+      text-align: center;
+    }
+
+    .cta-card::before {
+      content: "";
+      position: absolute;
+      top: -120px;
+      left: 50%;
+      width: 520px;
+      height: 320px;
+      transform: translateX(-50%);
+      border-radius: 50%;
+      background: rgba(157, 69, 254, 0.18);
+      filter: blur(70px);
+      pointer-events: none;
+    }
+
+    .cta-card > * { position: relative; z-index: 1; }
+
+    .cta-card h2 {
+      margin: 0 0 12px;
+      font-size: clamp(29px, 3.6vw, 44px);
+      line-height: 1.05;
+      letter-spacing: -0.04em;
+      font-weight: 740;
+    }
+
+    .cta-card p {
+      max-width: 520px;
+      margin: 0 auto;
+      color: var(--text-2);
+      font-size: 15.5px;
+      line-height: 1.55;
+    }
+
+    .cta-actions {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 11px;
+      margin-top: 26px;
+    }
+
+    .cta-note {
+      margin-top: 16px !important;
+      color: var(--text-3) !important;
+      font-size: 11.5px !important;
+    }
+
+    /* ── подвал ───────────────────────────────────────────────── */
+
+    .footer {
+      padding: 48px 0 27px;
+      border-top: 1px solid var(--border);
+    }
+
+    .footer-grid {
+      display: grid;
+      grid-template-columns: 1.35fr 0.65fr 0.75fr 0.95fr;
+      gap: 34px;
+    }
+
+    .footer-brand p {
+      max-width: 280px;
+      margin: 14px 0 0;
+      color: var(--text-3);
+      font-size: 12.5px;
+      line-height: 1.55;
+    }
+
+    .footer h4 {
+      margin: 3px 0 14px;
+      color: var(--text-3);
+      font-size: 10.5px;
+      font-weight: 750;
+      letter-spacing: 0.13em;
+      text-transform: uppercase;
+    }
+
+    .footer a {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 9px;
+      color: var(--text-2);
+      font-size: 13px;
+      line-height: 1.35;
+      transition: color 0.2s;
+    }
+
+    .footer a:hover { color: var(--text); }
+
+    .footer a .icon { width: 14px; height: 14px; }
+
+    .footer-bottom {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-top: 34px;
+      padding-top: 23px;
+      border-top: 1px solid var(--border);
+      color: var(--text-3);
+      font-size: 11.5px;
+    }
+
+    .footer-bottom span { display: inline-flex; align-items: center; gap: 6px; }
+
+    .footer-bottom .dot {
+      width: 4px;
+      height: 4px;
+      border-radius: 50%;
+      background: var(--text-3);
+    }
+
+    /* ── появление при скролле ────────────────────────────────── */
+
+    html.js .reveal {
+      opacity: 0;
+      transform: translateY(18px);
+      transition: opacity 0.7s var(--ease), transform 0.7s var(--ease);
+    }
+
+    html.js .reveal.is-visible {
+      opacity: 1;
+      transform: none;
+    }
+
+    /* ── адаптив ──────────────────────────────────────────────── */
+
+    @media (max-width: 1100px) {
+      .float-card { display: none; }
+      .hero-grid { gap: 34px; }
+    }
+
+    @media (max-width: 1020px) {
+      .feature-grid { grid-template-columns: repeat(2, 1fr); }
+      .shots { grid-template-columns: repeat(3, 1fr); }
+      .footer-grid { grid-template-columns: 1fr 1fr; }
+    }
+
+    @media (max-width: 860px) {
+      :root { --header-h: 64px; }
+
+      .nav-links {
+        position: fixed;
+        top: var(--header-h);
+        left: 0;
+        right: 0;
+        z-index: 55;
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0;
+        margin: 0;
+        padding: 10px 20px 20px;
+        border-bottom: 1px solid var(--border);
+        background: var(--bg-elev);
+        box-shadow: 0 24px 50px rgba(0, 0, 0, 0.22);
+        opacity: 0;
+        transform: translateY(-8px);
+        pointer-events: none;
+        transition: opacity 0.2s var(--ease), transform 0.2s var(--ease);
+      }
+
+      .nav-links[data-open="true"] {
+        opacity: 1;
+        transform: none;
+        pointer-events: auto;
+      }
+
+      .nav-links a {
+        padding: 12px 0;
+        border-bottom: 1px solid var(--border);
+        font-size: 15px;
+      }
+
+      .nav-links a:last-child { border-bottom: 0; }
+
+      .menu-btn { display: grid; }
+
+      .hero { padding: 56px 0 62px; }
+      .hero-grid { grid-template-columns: 1fr; gap: 46px; }
+      .hero-visual { min-height: 0; margin-top: 8px; }
+      .phone-wrap { width: 264px; transform: none; }
+      .phone-screen { border-radius: 38px; }
+      .phone { border-radius: 46px; }
+      .phone::before { border-radius: 44px; }
+      .phone-glare { border-radius: 38px; }
+
+      .section { padding: 68px 0; }
+      .section-head { margin-bottom: 34px; }
+      .install-grid, .about-grid { grid-template-columns: 1fr; gap: 32px; }
+      .steps { grid-template-columns: 1fr; }
+      .cta-band { padding-bottom: 64px; }
+      .cta-card { padding: 38px 22px; }
+
+      .shots {
+        display: flex;
+        gap: 14px;
+        padding: 0 0 8px;
+        overflow-x: auto;
+        scroll-snap-type: x mandatory;
+        scrollbar-width: none;
+      }
+
+      .shots::-webkit-scrollbar { display: none; }
+      .shot { flex: 0 0 76%; scroll-snap-align: start; }
+    }
+
+    @media (max-width: 620px) {
+      .container { width: calc(100% - 32px); }
+
+      h1 { font-size: clamp(38px, 12vw, 52px); }
+      .hero-sub { font-size: 16.5px; }
+      .hero-actions .btn { flex: 1 1 100%; }
+
+      .feature-grid { grid-template-columns: 1fr; }
+      .shots { display: flex; }
+      .shot { flex-basis: 82%; }
+
+      .tab { height: 36px; font-size: 12px; }
+      .panel-actions .btn { flex: 1 1 100%; white-space: normal; }
+      .footer-grid { grid-template-columns: 1fr; gap: 26px; }
+      .footer-bottom { flex-direction: column; align-items: flex-start; }
+      .footer-bottom span { flex-wrap: wrap; }
+      .hero-note { gap: 8px 13px; }
+      .cta-actions .btn { flex: 1 1 100%; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+      }
+      html.js .reveal { opacity: 1; transform: none; transition: none; }
+    }
+  </style>
+</head>
+<body>
+  <a class="skip-link" href="#main">К содержанию</a>
+
+  <div class="bg" aria-hidden="true"></div>
+
+  <!-- Иконки: один спрайт на всю страницу -->
+  <svg class="sprite" aria-hidden="true" focusable="false">
+    <symbol id="i-arrow" viewBox="0 0 24 24">
+      <path d="M5 12h14M13 6l6 6-6 6" />
+    </symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="4" />
+      <path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.65 17.65l1.42 1.42M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.65 6.35l1.42-1.42" />
+    </symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24">
+      <path d="M20.5 14.2A8.5 8.5 0 0 1 9.8 3.5 8.5 8.5 0 1 0 20.5 14.2Z" />
+    </symbol>
+    <symbol id="i-menu" viewBox="0 0 24 24">
+      <path d="M4 7h16M4 12h16M4 17h16" />
+    </symbol>
+    <symbol id="i-close" viewBox="0 0 24 24">
+      <path d="M6 6l12 12M18 6 6 18" />
+    </symbol>
+    <symbol id="i-calendar" viewBox="0 0 24 24">
+      <rect x="3.5" y="5" width="17" height="15.5" rx="3" />
+      <path d="M7.5 3v4M16.5 3v4M3.5 10h17" />
+    </symbol>
+    <symbol id="i-check" viewBox="0 0 24 24">
+      <rect x="3.5" y="3.5" width="17" height="17" rx="4" />
+      <path d="m8 12 2.6 2.6L16.5 9" />
+    </symbol>
+    <symbol id="i-megaphone" viewBox="0 0 24 24">
+      <path d="M4 10.5v3a2 2 0 0 0 2 2h2l3.5 3v-13L8 8.5H6a2 2 0 0 0-2 2Z" />
+      <path d="M16 8.5a4 4 0 0 1 0 7M18.5 6a7 7 0 0 1 0 12" />
+    </symbol>
+    <symbol id="i-chart" viewBox="0 0 24 24">
+      <path d="M5 20V10M12 20V4M19 20v-6" />
+      <path d="M3.5 20h17" />
+    </symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M12 7v5l3.2 2" />
+    </symbol>
+    <symbol id="i-calc" viewBox="0 0 24 24">
+      <rect x="5" y="2.8" width="14" height="18.4" rx="3" />
+      <path d="M8 7h8M8.5 11h.01M12 11h.01M15.5 11h.01M8.5 14.5h.01M12 14.5h.01M15.5 14.5h.01M8.5 18h.01M12 18h.01M15.5 18h.01" />
+    </symbol>
+    <symbol id="i-mail" viewBox="0 0 24 24">
+      <rect x="3" y="5.5" width="18" height="13" rx="3" />
+      <path d="m4 7 8 6 8-6" />
+    </symbol>
+    <symbol id="i-bell" viewBox="0 0 24 24">
+      <path d="M18 9a6 6 0 1 0-12 0c0 7-2.5 7-2.5 8.5h17C20.5 16 18 16 18 9Z" />
+      <path d="M10 20a2.2 2.2 0 0 0 4 0" />
+    </symbol>
+    <symbol id="i-paperclip" viewBox="0 0 24 24">
+      <path d="m20 11.5-8.6 8.6a4.5 4.5 0 0 1-6.4-6.4l9-9a3 3 0 0 1 4.2 4.2l-8.3 8.3a1.5 1.5 0 0 1-2.1-2.1l7.7-7.7" />
+    </symbol>
+    <symbol id="i-phone" viewBox="0 0 24 24">
+      <rect x="6.5" y="2.5" width="11" height="19" rx="3" />
+      <path d="M10 5h4M11.5 18.5h1" />
+    </symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24">
+      <path d="M12 3 5 6v5c0 4.6 3 8.2 7 10 4-1.8 7-5.4 7-10V6l-7-3Z" />
+      <path d="m9 12 2 2 4-4" />
+    </symbol>
+    <symbol id="i-spark" viewBox="0 0 24 24">
+      <path d="m12 2.8 1.8 5.4L19 10l-5.2 1.8L12 17.2l-1.8-5.4L5 10l5.2-1.8L12 2.8Z" />
+      <path d="m19 16 .8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8L19 16Z" />
+    </symbol>
+    <symbol id="i-download" viewBox="0 0 24 24">
+      <path d="M12 3v12M7 10l5 5 5-5M4 21h16" />
+    </symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24">
+      <path d="M20 11a8 8 0 0 0-14.5-4L3 10M3 4v6h6M4 13a8 8 0 0 0 14.5 4L21 14M21 20v-6h-6" />
+    </symbol>
+    <symbol id="i-book" viewBox="0 0 24 24">
+      <path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v17H6.5A2.5 2.5 0 0 0 4 21.5v-17Z" />
+      <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20M8 7h8M8 11h6" />
+    </symbol>
+    <symbol id="i-users" viewBox="0 0 24 24">
+      <circle cx="9" cy="8" r="3.2" />
+      <path d="M3.5 20a5.5 5.5 0 0 1 11 0M16 5.2a3.2 3.2 0 0 1 0 5.6M17.5 14.4a5.5 5.5 0 0 1 3 5.6" />
+    </symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24">
+      <rect x="4.5" y="10" width="15" height="11" rx="3" />
+      <path d="M8 10V7a4 4 0 0 1 8 0v3M12 14.5v2.5" />
+    </symbol>
+    <symbol id="i-github" viewBox="0 0 24 24">
+      <path d="M12 2C6.48 2 2 6.58 2 12.26c0 4.53 2.87 8.37 6.84 9.72.5.1.68-.22.68-.49 0-.24-.01-.88-.01-1.73-2.78.62-3.37-1.37-3.37-1.37-.46-1.18-1.12-1.49-1.12-1.49-.91-.64.07-.63.07-.63 1.01.07 1.54 1.06 1.54 1.06.9 1.57 2.36 1.12 2.93.86.09-.66.35-1.12.64-1.37-2.22-.26-4.56-1.14-4.56-5.06 0-1.12.39-2.03 1.03-2.75-.1-.26-.45-1.3.1-2.71 0 0 .84-.27 2.75 1.05A9.3 9.3 0 0 1 12 6.8c.85 0 1.7.12 2.5.35 1.9-1.32 2.74-1.05 2.74-1.05.55 1.41.2 2.45.1 2.71.64.72 1.03 1.63 1.03 2.75 0 3.93-2.34 4.8-4.57 5.05.36.32.68.94.68 1.9 0 1.37-.01 2.47-.01 2.8 0 .27.18.59.69.49A10.04 10.04 0 0 0 22 12.26C22 6.58 17.52 2 12 2Z" />
+    </symbol>
+    <symbol id="i-telegram" viewBox="0 0 24 24">
+      <path d="M21.6 4.3 18.5 19c-.2 1-.8 1.3-1.7.8l-4.6-3.4-2.2 2.1c-.2.2-.4.4-.9.4l.3-4.7 8.6-7.8c.4-.3-.1-.5-.6-.2L7.2 13.1 3 11.8c-.9-.3-.9-.9.2-1.3L20 3.8c.8-.3 1.5.2 1.6.5Z" />
+    </symbol>
+  </svg>
+
+  <header class="site-header" data-header>
+    <div class="container header-inner">
+      <a class="brand" href="#top" aria-label="Mood — на главную">
+        <span class="brand-mark">
+          <img src="pwa/public/icons/site-icon-192.png" width="34" height="34" alt="" />
+        </span>
+        <span>Mood</span>
+      </a>
+
+      <nav class="nav-links" data-nav aria-label="Ссылки проекта">
+        <a href="#install">Установить</a>
+        <a href="https://github.com/SPARTANEC08/mood" target="_blank" rel="noopener noreferrer">GitHub</a>
+        <a href="https://t.me/mood_mpei" target="_blank" rel="noopener noreferrer">Telegram</a>
+        <a href="https://t.me/mood_mpei_sup" target="_blank" rel="noopener noreferrer">Поддержка</a>
+      </nav>
+
+      <div class="header-actions">
+        <button class="icon-btn" type="button" data-theme-toggle aria-label="Переключить тему">
+          <svg class="icon theme-sun" aria-hidden="true"><use href="#i-sun" /></svg>
+          <svg class="icon theme-moon" aria-hidden="true"><use href="#i-moon" /></svg>
+        </button>
+        <a class="btn btn-primary btn-sm" href="https://mood-app.ru">Войти</a>
+        <button class="icon-btn menu-btn" type="button" data-menu-toggle aria-label="Открыть меню" aria-expanded="false">
+          <svg class="icon menu-open-icon" aria-hidden="true"><use href="#i-menu" /></svg>
+          <svg class="icon menu-close-icon" aria-hidden="true"><use href="#i-close" /></svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main id="main">
+    <!-- ── hero ────────────────────────────────────────────────── -->
+    <section class="hero" id="top">
+      <div class="container hero-grid">
+        <div class="hero-copy">
+          <div class="badge">
+            <span class="badge-dot" aria-hidden="true"></span>
+            Для студентов НИУ МЭИ
+          </div>
+
+          <h1>Вся учёба —<br /><span class="gradient-text">в одном приложении.</span></h1>
+
+          <p class="hero-sub">
+            Расписание, домашние задания, оценки, пропуски и почта ОСЭП.
+            Вход — логином и паролем БАРС, без Telegram.
+          </p>
+
+          <div class="hero-actions">
+            <a class="btn btn-primary" href="https://mood-app.ru">
+              Войти в Mood
+              <svg class="icon" aria-hidden="true"><use href="#i-arrow" /></svg>
+            </a>
+            <a class="btn btn-ghost" href="#features">Посмотреть возможности</a>
+          </div>
+
+          <div class="hero-note">
+            <span><svg class="icon" aria-hidden="true"><use href="#i-lock" /></svg> Вход через БАРС</span>
+            <span><svg class="icon icon-fill" aria-hidden="true"><use href="#i-telegram" /></svg> Без Telegram</span>
+            <span><svg class="icon" aria-hidden="true"><use href="#i-phone" /></svg> iPhone и Android</span>
+            <span><svg class="icon" aria-hidden="true"><use href="#i-check" /></svg> Бесплатно</span>
+          </div>
+        </div>
+
+        <div class="hero-visual" role="img" aria-label="Макет экрана расписания Mood">
+          <div class="phone-wrap" aria-hidden="true">
+            <div class="phone">
+              <div class="phone-notch" aria-hidden="true"></div>
+              <div class="phone-screen">
+                <div class="app-status">
+                  <span>9:41</span>
+                  <span class="app-status-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+                </div>
+                <img
+                  class="phone-shot"
+                  src="promo/stock/01-schedule.png"
+                  width="1170"
+                  height="2532"
+                  alt="Экран расписания Mood"
+                  fetchpriority="high"
+                />
+              </div>
+              <div class="phone-glare" aria-hidden="true"></div>
+            </div>
+
+            <div class="float-card float-grade">
+              <span class="float-icon"><svg class="icon" aria-hidden="true"><use href="#i-chart" /></svg></span>
+              <span><b>КМ2 · 15 (+5)</b><span>Математический анализ</span></span>
+            </div>
+
+            <div class="float-card float-mail">
+              <span class="float-icon"><svg class="icon" aria-hidden="true"><use href="#i-mail" /></svg></span>
+              <span><b>3 новых письма</b><span>ОСЭП · только что</span></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── возможности ─────────────────────────────────────────── -->
+    <section class="section" id="features">
+      <div class="container">
+        <div class="section-head reveal">
+          <div class="kicker">Возможности</div>
+          <h2>Всё, что нужно каждый день</h2>
+          <p>Без десятка вкладок, паролей и «а где посмотреть расписание». Одни данные, один вход, один интерфейс.</p>
+        </div>
+
+        <div class="feature-grid">
+          <details class="feature reveal">
+            <summary>
+              <span class="feature-icon"><svg class="icon" aria-hidden="true"><use href="#i-calendar" /></svg></span>
+              <span class="feature-title">Расписание</span>
+              <span class="feature-plus" aria-hidden="true">+</span>
+            </summary>
+            <div class="feature-body"><p>Неделя, дни, «сейчас идёт», перерывы, аудитории и преподаватели. Детали пары открываются по тапу.</p></div>
+          </details>
+
+          <details class="feature reveal">
+            <summary>
+              <span class="feature-icon"><svg class="icon" aria-hidden="true"><use href="#i-check" /></svg></span>
+              <span class="feature-title">Домашние задания</span>
+              <span class="feature-plus" aria-hidden="true">+</span>
+            </summary>
+            <div class="feature-body"><p>Привязка к следующей паре, предметные сокращения и личная отметка «сделано».</p></div>
+          </details>
+
+          <details class="feature reveal">
+            <summary>
+              <span class="feature-icon"><svg class="icon" aria-hidden="true"><use href="#i-megaphone" /></svg></span>
+              <span class="feature-title">«Важное»</span>
+              <span class="feature-plus" aria-hidden="true">+</span>
+            </summary>
+            <div class="feature-body"><p>Объявления группы с заголовком, текстом и файлами. Новые — сверху.</p></div>
+          </details>
+
+          <details class="feature reveal">
+            <summary>
+              <span class="feature-icon"><svg class="icon" aria-hidden="true"><use href="#i-chart" /></svg></span>
+              <span class="feature-title">Успеваемость</span>
+              <span class="feature-plus" aria-hidden="true">+</span>
+            </summary>
+            <div class="feature-body"><p>Средневзвешенный балл, рейтинг, распределение оценок и задолженности по КМ.</p></div>
+          </details>
+
+          <details class="feature reveal">
+            <summary>
+              <span class="feature-icon"><svg class="icon" aria-hidden="true"><use href="#i-clock" /></svg></span>
+              <span class="feature-title">Пропуски и приказы</span>
+              <span class="feature-plus" aria-hidden="true">+</span>
+            </summary>
+            <div class="feature-body"><p>Часы, уважительные причины, приказы, стипендия и книги НТБ — в одном кабинете.</p></div>
+          </details>
+
+          <details class="feature reveal">
+            <summary>
+              <span class="feature-icon"><svg class="icon" aria-hidden="true"><use href="#i-calc" /></svg></span>
+              <span class="feature-title">Калькулятор оценок</span>
+              <span class="feature-plus" aria-hidden="true">+</span>
+            </summary>
+            <div class="feature-body"><p>Выбери цель — приложение посчитает, сколько нужно набрать за оставшиеся КМ.</p></div>
+          </details>
+
+          <details class="feature reveal">
+            <summary>
+              <span class="feature-icon"><svg class="icon" aria-hidden="true"><use href="#i-mail" /></svg></span>
+              <span class="feature-title">Почта ОСЭП</span>
+              <span class="feature-plus" aria-hidden="true">+</span>
+            </summary>
+            <div class="feature-body"><p>Превью непрочитанных писем. Содержимое не читается — только количество новых.</p></div>
+          </details>
+
+          <details class="feature reveal">
+            <summary>
+              <span class="feature-icon"><svg class="icon" aria-hidden="true"><use href="#i-bell" /></svg></span>
+              <span class="feature-title">Уведомления</span>
+              <span class="feature-plus" aria-hidden="true">+</span>
+            </summary>
+            <div class="feature-body"><p>Новые оценки, письма, приказы и стипендия — в Web Push и центре уведомлений.</p></div>
+          </details>
+
+          <details class="feature reveal">
+            <summary>
+              <span class="feature-icon"><svg class="icon" aria-hidden="true"><use href="#i-paperclip" /></svg></span>
+              <span class="feature-title">Файлы</span>
+              <span class="feature-plus" aria-hidden="true">+</span>
+            </summary>
+            <div class="feature-body"><p>Фото и PDF из заданий и объявлений: просмотр, скачивание и «Поделиться».</p></div>
+          </details>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── скриншоты ───────────────────────────────────────────── -->
+    <section class="section section-alt" id="screens">
+      <div class="container">
+        <div class="section-head reveal">
+          <div class="kicker">Скриншоты</div>
+          <h2>Знакомый интерфейс, только всё под рукой</h2>
+          <p>Тёмная и светлая темы, крупные карточки и минимум лишних движений. Скриншоты — из текущей версии приложения.</p>
+        </div>
+
+        <div class="shots">
+          <article class="shot reveal">
+            <div class="shot-phone">
+              <img src="promo/stock/02-calendar.png" width="1170" height="2532" alt="Календарь расписания в Mood" loading="lazy" decoding="async" />
+            </div>
+            <div class="shot-title"><b>Календарь</b><span>быстрый переход по датам</span></div>
+          </article>
+
+          <article class="shot reveal">
+            <div class="shot-phone">
+              <img src="promo/stock/04-grades.png" width="1170" height="2532" alt="Успеваемость и рейтинг в Mood" loading="lazy" decoding="async" />
+            </div>
+            <div class="shot-title"><b>Успеваемость</b><span>средний балл и рейтинг</span></div>
+          </article>
+
+          <article class="shot reveal">
+            <div class="shot-phone">
+              <img src="promo/stock/11-tasks.png" width="1170" height="2532" alt="Домашние задания в Mood" loading="lazy" decoding="async" />
+            </div>
+            <div class="shot-title"><b>Задания</b><span>что сдать и когда</span></div>
+          </article>
+
+          <article class="shot reveal">
+            <div class="shot-phone">
+              <img src="promo/stock/09-calculator.png" width="1170" height="2532" alt="Калькулятор оценок в Mood" loading="lazy" decoding="async" />
+            </div>
+            <div class="shot-title"><b>Калькулятор</b><span>сколько нужно до цели</span></div>
+          </article>
+
+          <article class="shot reveal">
+            <div class="shot-phone">
+              <img src="promo/stock/15-notifications.png" width="1170" height="2532" alt="Центр уведомлений в Mood" loading="lazy" decoding="async" />
+            </div>
+            <div class="shot-title"><b>Уведомления</b><span>оценки, письма, приказы</span></div>
+          </article>
+        </div>
+
+        <p class="shots-note reveal">Демонстрационные данные. Скриншоты сняты в текущей версии приложения.</p>
+      </div>
+    </section>
+
+    <!-- ── как это работает ────────────────────────────────────── -->
+    <section class="section" id="how">
+      <div class="container">
+        <div class="section-head reveal">
+          <div class="kicker">Как начать</div>
+          <h2>Установите, войдите, пользуйтесь</h2>
+          <p>Три шага. Без отдельной регистрации и ручного заполнения профиля.</p>
+        </div>
+
+        <div class="steps">
+          <article class="step reveal">
+            <div class="step-num">1</div>
+            <h3>Установите Mood</h3>
+            <p>Добавьте приложение на домашний экран или поставьте APK на Android.</p>
+          </article>
+          <article class="step reveal">
+            <div class="step-num">2</div>
+            <h3>Войдите через БАРС</h3>
+            <p>Логин и пароль от личного кабинета. Код 2FA поддерживается.</p>
+          </article>
+          <article class="step reveal">
+            <div class="step-num">3</div>
+            <h3>Пользуйтесь</h3>
+            <p>Расписание, задания, оценки и почта — в одном приложении.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── установка ───────────────────────────────────────────── -->
+    <section class="section section-alt" id="install">
+      <div class="container install-grid">
+        <div class="install-copy reveal">
+          <div class="kicker">Установка</div>
+          <h2>Как поставить Mood на телефон</h2>
+          <p>Приложение открывается с домашнего экрана и работает как обычное — без App Store и Google Play.</p>
+
+          <ul class="install-points">
+            <li><svg class="icon" aria-hidden="true"><use href="#i-phone" /></svg><span><strong>iPhone и iPad</strong> — только Safari, «Поделиться» → «На экран “Домой”».</span></li>
+            <li><svg class="icon" aria-hidden="true"><use href="#i-download" /></svg><span><strong>Android</strong> — установка из Chrome или APK-файл.</span></li>
+            <li><svg class="icon" aria-hidden="true"><use href="#i-spark" /></svg><span><strong>Компьютер</strong> — Chrome или Edge, иконка установки в адресной строке.</span></li>
+          </ul>
+
+
+        </div>
+
+        <div class="install-panel reveal">
+          <div class="tabs" role="tablist" aria-label="Платформа">
+            <button class="tab" type="button" role="tab" id="tab-ios" aria-controls="panel-ios" aria-selected="true" data-tab="ios">iPhone</button>
+            <button class="tab" type="button" role="tab" id="tab-android" aria-controls="panel-android" aria-selected="false" data-tab="android">Android</button>
+            <button class="tab" type="button" role="tab" id="tab-desktop" aria-controls="panel-desktop" aria-selected="false" data-tab="desktop">Компьютер</button>
+          </div>
+
+          <div class="tab-panel" role="tabpanel" id="panel-ios" aria-labelledby="tab-ios" data-panel="ios">
+            <p class="panel-lead">На iPhone установка возможна только из Safari. Если вы открыли ссылку в Telegram, сначала выйдите в Safari.</p>
+            <ol class="steps-list">
+              <li><span>Откройте <strong>mood-app.ru</strong> в Safari.</span></li>
+              <li><span>Нажмите «Поделиться» — квадрат со стрелкой вверх.</span></li>
+              <li><span>Пролистайте список и выберите <strong>«На экран “Домой”»</strong>.</span></li>
+              <li><span>Нажмите «Добавить» и запустите Mood с иконки.</span></li>
+            </ol>
+
+            <div class="ios-shots" aria-label="Шаги установки на iPhone">
+              <figure class="ios-shot">
+                <img src="pwa/public/install/ios-step-1.webp" width="720" height="129" alt="Открыть ссылку в Safari" loading="lazy" decoding="async" />
+                <figcaption>Открыть в Safari</figcaption>
+              </figure>
+              <figure class="ios-shot">
+                <img src="pwa/public/install/ios-step-2.webp" width="720" height="1428" alt="Нажать «Поделиться» в Safari" loading="lazy" decoding="async" />
+                <figcaption>Нажать «Поделиться»</figcaption>
+              </figure>
+              <figure class="ios-shot">
+                <img src="pwa/public/install/ios-step-3.webp" width="720" height="1156" alt="Выбрать «На экран Домой»" loading="lazy" decoding="async" />
+                <figcaption>Выбрать «На экран “Домой”»</figcaption>
+              </figure>
+              <figure class="ios-shot">
+                <img src="pwa/public/install/ios-step-4.webp" width="720" height="590" alt="Нажать «Добавить»" loading="lazy" decoding="async" />
+                <figcaption>Нажать «Добавить»</figcaption>
+              </figure>
+            </div>
+
+            <div class="panel-note">
+              <svg class="icon" aria-hidden="true"><use href="#i-phone" /></svg>
+              APK для iOS не подходит — это приложение для Android.
+            </div>
+          </div>
+
+          <div class="tab-panel" role="tabpanel" id="panel-android" aria-labelledby="tab-android" data-panel="android" hidden>
+            <p class="panel-lead">В Chrome установка занимает пару секунд. Если браузер не предлагает установку — скачайте APK.</p>
+            <ol class="steps-list">
+              <li><span>Откройте <strong>mood-app.ru</strong> в Chrome.</span></li>
+              <li><span>Нажмите меню <strong>⋮</strong> в правом верхнем углу.</span></li>
+              <li><span>Выберите <strong>«Установить приложение»</strong> или «Добавить на главный экран».</span></li>
+              <li><span>Подтвердите установку.</span></li>
+            </ol>
+
+            <div class="apk-meta">
+              <span><svg class="icon" aria-hidden="true"><use href="#i-download" /></svg> mood-1.1.0.apk · 1,4 МБ</span>
+              <span>Android 7+</span>
+            </div>
+
+            <div class="panel-actions">
+              <a class="btn btn-primary btn-sm" href="apk/mood-1.1.0.apk" download>
+                <svg class="icon" aria-hidden="true"><use href="#i-download" /></svg>
+                Скачать с сайта
+              </a>
+              <a class="btn btn-ghost btn-sm" href="https://t.me/mood_mpei" target="_blank" rel="noopener noreferrer">
+                <svg class="icon icon-fill" aria-hidden="true"><use href="#i-telegram" /></svg>
+                Последняя версия в Telegram
+              </a>
+              <a class="btn btn-ghost btn-sm" href="https://github.com/SPARTANEC08/mood/releases" target="_blank" rel="noopener noreferrer">
+                <svg class="icon icon-fill" aria-hidden="true"><use href="#i-github" /></svg>
+                GitHub Releases
+              </a>
+            </div>
+
+            <div class="panel-note">
+              <svg class="icon" aria-hidden="true"><use href="#i-shield" /></svg>
+              APK ставится поверх предыдущей версии. Обновлять приложение можно тем же файлом.
+            </div>
+          </div>
+
+          <div class="tab-panel" role="tabpanel" id="panel-desktop" aria-labelledby="tab-desktop" data-panel="desktop" hidden>
+            <p class="panel-lead">На компьютере Mood работает как обычный сайт, но его можно закрепить в отдельном окне.</p>
+            <ol class="steps-list">
+              <li><span>Откройте <strong>mood-app.ru</strong> в Chrome или Edge.</span></li>
+              <li><span>Нажмите иконку установки в адресной строке.</span></li>
+              <li><span>Или откройте меню браузера → <strong>«Установить Mood»</strong>.</span></li>
+              <li><span>Приложение появится в Dock или меню «Пуск».</span></li>
+            </ol>
+            <div class="panel-note">
+              <svg class="icon" aria-hidden="true"><use href="#i-spark" /></svg>
+              На компьютере удобно проверять расписание и открывать файлы, но push-уведомления лучше работают на телефоне.
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── о проекте ───────────────────────────────────────────── -->
+    <section class="section" id="about">
+      <div class="container">
+        <div class="section-head reveal">
+          <div class="kicker">О проекте</div>
+          <h2>Открытый код. Без рекламы.</h2>
+          <p>Mood — личный проект студента НИУ МЭИ.</p>
+        </div>
+
+        <div class="about-grid">
+          <div class="gh-card reveal">
+            <div class="gh-head">
+              <span class="gh-avatar"><svg class="icon icon-fill" aria-hidden="true"><use href="#i-github" /></svg></span>
+              <a class="gh-repo" href="https://github.com/SPARTANEC08/mood" target="_blank" rel="noopener noreferrer">SPARTANEC08 <span>/</span> mood</a>
+              <span class="gh-badge">Public</span>
+            </div>
+            <div class="gh-body">
+              <p class="gh-desc">Расписание, задания, оценки и почта НИУ МЭИ. PWA и тонкий Telegram-бот поддержки.</p>
+              <div class="gh-meta">
+                <span><i class="gh-dot ts" aria-hidden="true"></i>TypeScript</span>
+                <span><i class="gh-dot css" aria-hidden="true"></i>CSS</span>
+                <span><i class="gh-dot swift" aria-hidden="true"></i>Swift</span>
+              </div>
+              <div class="gh-topics">
+                <span>pwa</span>
+                <span>react</span>
+                <span>fastify</span>
+                <span>sqlite</span>
+                <span>mpei</span>
+              </div>
+            </div>
+            <div class="gh-foot">
+              <a href="https://github.com/SPARTANEC08/mood" target="_blank" rel="noopener noreferrer">Star</a>
+              <a href="https://github.com/SPARTANEC08/mood#readme" target="_blank" rel="noopener noreferrer">README</a>
+              <a href="https://github.com/SPARTANEC08/mood/issues" target="_blank" rel="noopener noreferrer">Issues</a>
+              <a href="https://github.com/SPARTANEC08/mood" target="_blank" rel="noopener noreferrer">GitHub</a>
+            </div>
+          </div>
+
+          <div class="about-side reveal">
+            <div class="about-card">
+              <h3>Приватность</h3>
+              <ul>
+                <li><svg class="icon" aria-hidden="true"><use href="#i-lock" /></svg><span>AES-256-GCM для логина, пароля и cookie-сессий</span></li>
+                <li><svg class="icon" aria-hidden="true"><use href="#i-shield" /></svg><span>PWA-токен хранится только в браузере</span></li>
+                <li><svg class="icon" aria-hidden="true"><use href="#i-check" /></svg><span>Без рекламы, трекеров и Telegram-входа</span></li>
+                <li><svg class="icon" aria-hidden="true"><use href="#i-users" /></svg><span>Аккаунт удаляется в «Кабинете»</span></li>
+              </ul>
+            </div>
+
+            <div class="about-card">
+              <h3>Стек</h3>
+              <div class="tech-pills" aria-label="Технологии">
+                <span>React</span>
+                <span>TypeScript</span>
+                <span>Fastify</span>
+                <span>SQLite</span>
+                <span>Web Push</span>
+                <span>SwiftUI</span>
+              </div>
+            </div>
+
+            <div class="disclaimer">
+              <svg class="icon" aria-hidden="true"><use href="#i-shield" /></svg>
+              <span>Не официальное приложение НИУ МЭИ. Использует открытые интерфейсы БАРС и почты ОСЭП и может перестать работать при их изменении.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── FAQ ─────────────────────────────────────────────────── -->
+    <section class="section section-alt" id="faq">
+      <div class="container">
+        <div class="section-head reveal">
+          <div class="kicker">Вопросы</div>
+          <h2>Коротко о важном</h2>
+          <p>Если чего-то не хватает — напишите в поддержку, ссылки внизу.</p>
+        </div>
+
+        <div class="faq">
+          <details class="reveal" open>
+            <summary>Нужен ли Telegram?</summary>
+            <p>Нет. Вход и уведомления работают без Telegram. Бот используется только как канал поддержки и ссылок на приложение.</p>
+          </details>
+          <details class="reveal">
+            <summary>Где взять логин и пароль?</summary>
+            <p>Это те же логин и пароль, что от личного кабинета БАРС. Отдельной регистрации в Mood нет: запись создаётся автоматически при первом входе.</p>
+          </details>
+          <details class="reveal">
+            <summary>Это официальное приложение МЭИ?</summary>
+            <p>Нет. Mood — личный проект студента, не связанный с администрацией университета. Он использует те же открытые веб-сервисы, что и обычный браузер.</p>
+          </details>
+          <details class="reveal">
+            <summary>Что видят одногруппники?</summary>
+            <p>Общие домашние задания и объявления группы. Оценки, пропуски, почта и личные настройки видны только вам.</p>
+          </details>
+          <details class="reveal">
+            <summary>Работает ли приложение без интернета?</summary>
+            <p>Расписание и оболочка приложения открываются из кэша. Оценки, почта и новые объявления требуют сети.</p>
+          </details>
+          <details class="reveal">
+            <summary>Как удалить аккаунт и данные?</summary>
+            <p>В приложении откройте «Кабинет» и нажмите «Удалить аккаунт» в подвале. Это удалит запись, файлы, созданные задания и историю уведомлений.</p>
+          </details>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── CTA ─────────────────────────────────────────────────── -->
+    <section class="cta-band">
+      <div class="container">
+        <div class="cta-card reveal">
+          <h2>Готовы открыть Mood?</h2>
+          <p>Войдите логином БАРС и посмотрите своё расписание, оценки и задания в одном месте.</p>
+          <div class="cta-actions">
+            <a class="btn btn-primary" href="https://mood-app.ru">
+              Войти в Mood
+              <svg class="icon" aria-hidden="true"><use href="#i-arrow" /></svg>
+            </a>
+            <a class="btn btn-ghost" href="#install">Как установить</a>
+          </div>
+          <p class="cta-note">Бесплатно · без Telegram · работает на iPhone, Android и компьютере</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-grid">
+        <div class="footer-brand">
+          <a class="brand" href="#top" aria-label="Mood — на главную">
+            <span class="brand-mark">
+              <img src="pwa/public/icons/site-icon-192.png" width="34" height="34" alt="" />
+            </span>
+            <span>Mood</span>
+          </a>
+          <p>Расписание, задания, оценки и почта НИУ МЭИ — в одном приложении. Не официальный проект университета.</p>
+        </div>
+
+        <div>
+          <h4>Приложение</h4>
+          <a href="#features">Возможности</a>
+          <a href="#screens">Скриншоты</a>
+          <a href="#install">Установка</a>
+          <a href="#about">О проекте</a>
+        </div>
+
+        <div>
+          <h4>Документы</h4>
+          <a href="https://mood-app.ru/legal/privacy-policy.html">Политика ПДн</a>
+          <a href="https://mood-app.ru/legal/terms.html">Соглашение</a>
+          <a href="https://mood-app.ru/legal/consent-processing.html">Согласие на обработку</a>
+          <a href="https://mood-app.ru/legal/age-18.html">Подтверждение 18+</a>
+        </div>
+
+        <div>
+          <h4>Связь</h4>
+          <a href="https://t.me/mood_mpei" target="_blank" rel="noopener noreferrer">
+            <svg class="icon icon-fill" aria-hidden="true"><use href="#i-telegram" /></svg>
+            Telegram-канал
+          </a>
+          <a href="https://t.me/mood_mpei_sup" target="_blank" rel="noopener noreferrer">
+            <svg class="icon icon-fill" aria-hidden="true"><use href="#i-telegram" /></svg>
+            Поддержка
+          </a>
+          <a href="https://github.com/SPARTANEC08/mood" target="_blank" rel="noopener noreferrer">
+            <svg class="icon icon-fill" aria-hidden="true"><use href="#i-github" /></svg>
+            GitHub
+          </a>
+          <a href="https://mood-app.ru">mood-app.ru</a>
+        </div>
+      </div>
+
+      <div class="footer-bottom">
+        <span>© 2026 Mood</span>
+        <span><span class="dot" aria-hidden="true"></span> Сделано для НИУ МЭИ</span>
+        <span>Не официальное приложение университета</span>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    (function () {
+      var root = document.documentElement;
+      root.classList.add("js");
+
+      /* ── тема ─────────────────────────────────────────────── */
+      try {
+        var storedTheme = localStorage.getItem("mood-landing-theme");
+        if (storedTheme === "light" || storedTheme === "dark") {
+          root.setAttribute("data-theme", storedTheme);
+        }
+      } catch (error) {
+        /* localStorage может быть недоступен в приватном режиме */
+      }
+
+      var themeMeta = document.querySelector('meta[name="theme-color"]');
+
+      function syncThemeColor() {
+        if (!themeMeta) return;
+        themeMeta.setAttribute(
+          "content",
+          root.getAttribute("data-theme") === "light" ? "#f4f2fb" : "#0c0a12"
+        );
+      }
+
+      syncThemeColor();
+
+      var themeToggle = document.querySelector("[data-theme-toggle]");
+      if (themeToggle) {
+        themeToggle.addEventListener("click", function () {
+          var next = root.getAttribute("data-theme") === "dark" ? "light" : "dark";
+          root.setAttribute("data-theme", next);
+          syncThemeColor();
+          try {
+            localStorage.setItem("mood-landing-theme", next);
+          } catch (error) {
+            /* тихо игнорируем */
+          }
+        });
+      }
+
+      /* ── шапка при скролле ────────────────────────────────── */
+      var header = document.querySelector("[data-header]");
+      function syncHeader() {
+        if (!header) return;
+        header.classList.toggle("scrolled", window.scrollY > 8);
+      }
+      syncHeader();
+      window.addEventListener("scroll", syncHeader, { passive: true });
+
+      /* ── мобильное меню ───────────────────────────────────── */
+      var menuButton = document.querySelector("[data-menu-toggle]");
+      var nav = document.querySelector("[data-nav]");
+
+      function closeMenu() {
+        if (!nav || !menuButton) return;
+        nav.setAttribute("data-open", "false");
+        menuButton.setAttribute("aria-expanded", "false");
+        menuButton.setAttribute("aria-label", "Открыть меню");
+      }
+
+      if (menuButton && nav) {
+        menuButton.addEventListener("click", function () {
+          var isOpen = nav.getAttribute("data-open") === "true";
+          nav.setAttribute("data-open", String(!isOpen));
+          menuButton.setAttribute("aria-expanded", String(!isOpen));
+          menuButton.setAttribute("aria-label", isOpen ? "Открыть меню" : "Закрыть меню");
+        });
+
+        nav.querySelectorAll("a").forEach(function (link) {
+          link.addEventListener("click", closeMenu);
+        });
+
+        window.addEventListener("resize", function () {
+          if (window.innerWidth > 860) closeMenu();
+        });
+      }
+
+      /* ── вкладки установки ────────────────────────────────── */
+      var tabs = Array.prototype.slice.call(document.querySelectorAll("[data-tab]"));
+      var panels = Array.prototype.slice.call(document.querySelectorAll("[data-panel]"));
+
+      tabs.forEach(function (tab) {
+        tab.addEventListener("click", function () {
+          var id = tab.getAttribute("data-tab");
+          tabs.forEach(function (item) {
+            item.setAttribute("aria-selected", String(item === tab));
+          });
+          panels.forEach(function (panel) {
+            panel.hidden = panel.getAttribute("data-panel") !== id;
+          });
+        });
+      });
+
+      /* ── появление секций ─────────────────────────────────── */
+      var revealItems = Array.prototype.slice.call(document.querySelectorAll(".reveal"));
+
+      if ("IntersectionObserver" in window) {
+        var observer = new IntersectionObserver(
+          function (entries) {
+            entries.forEach(function (entry) {
+              if (!entry.isIntersecting) return;
+              entry.target.classList.add("is-visible");
+              observer.unobserve(entry.target);
+            });
+          },
+          { threshold: 0.12, rootMargin: "0px 0px -40px 0px" }
+        );
+
+        revealItems.forEach(function (item) {
+          observer.observe(item);
+        });
+      } else {
+        revealItems.forEach(function (item) {
+          item.classList.add("is-visible");
+        });
+      }
+    })();
+  </script>
+</body>
+</html>
