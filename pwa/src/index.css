@@ -516,3 +516,59 @@ body {
     opacity: 0.7;
   }
 }
+
+/* ───────────────────────────── ползунок порога ───────────────────────────── */
+/*
+ * Ползунок порога автомата в калькуляторе оценок.
+ *
+ * Трек рисуется отдельным div-ом (там градиент зон «уже взято / ещё можно /
+ * недостижимо»), а нативный input остаётся сверху ради доступности и жестов.
+ * Поэтому его собственный трек прозрачный, а стилизуется только бегунок.
+ */
+.mood-range {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  outline: none;
+}
+
+.mood-range::-webkit-slider-runnable-track {
+  height: 8px;
+  background: transparent;
+}
+
+.mood-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 28px;
+  height: 28px;
+  margin-top: -10px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 3px solid var(--surface);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.28);
+  transition: transform 0.15s ease;
+}
+
+.mood-range:active::-webkit-slider-thumb {
+  transform: scale(1.08);
+}
+
+.mood-range::-moz-range-track {
+  height: 8px;
+  background: transparent;
+}
+
+.mood-range::-moz-range-thumb {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 3px solid var(--surface);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.28);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mood-range::-webkit-slider-thumb {
+    transition: none;
+  }
+}

@@ -17,6 +17,7 @@ import { BottomSheet, EmptyState } from '@/components/ui';
 import {
   checkWeights,
   currentWeighted,
+  earnedWeighted,
   maxPossible,
   minimumPlan,
   requiredAverage,
@@ -26,14 +27,17 @@ import { formatScore } from '@/lib/gradeDetails';
 import { haptic } from '@/lib/env';
 import type { GradesResponse } from '@/types/api';
 
-/** Цели, между которыми переключается человек. */
-const TARGETS = [3, 4, 5] as const;
+/** Нижняя и верхняя границы шкалы порога. */
+const MIN_SCALE = 2;
+const MAX_SCALE = 5;
 
-const TARGET_LABELS: Record<number, string> = {
-  3: 'тройка',
-  4: 'четвёрка',
-  5: 'пятёрка',
-};
+function round1(value: number): number {
+  return Math.round(value * 10) / 10;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
 
 export function GradeCalculatorSheet({
   open,
@@ -90,8 +94,48 @@ export function GradeCalculatorSheet({
     [subject],
   );
 
+  const minPossible = useMemo(() => {
+    if (!subject || !sums || sums.total <= 0) return null;
+    return Math.round((earnedWeighted(subject) / sums.total) * 100) / 100;
+  }, [subject, sums]);
+
+  // При смене предмета порог встаёт на текущий средний: человек сразу видит,
+  // где он сейчас, и двигает ползунок от этой точки.
+  useEffect(() => {
+    if (!subject) return;
+    const now = currentWeighted(subject);
+    setTarget(now !== null ? clamp(round1(now), MIN_SCALE, MAX_SCALE) : 4);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subject?.discipline]);
+
   const progress = sums && sums.total > 0 ? Math.min(1, sums.graded / sums.total) : 0;
   const reachable = maximum === null || maximum + 1e-6 >= target;
+
+  /** Положение значения на шкале 2–5 в процентах. */
+  const pct = (value: number): number => {
+    const clamped = clamp(value, MIN_SCALE, MAX_SCALE);
+    return ((clamped - MIN_SCALE) / (MAX_SCALE - MIN_SCALE)) * 100;
+  };
+
+  /*
+   * Трек ползунка показывает три зоны:
+   *   серый  — ниже минимума (такого среднего уже не получить);
+   *   зелёный — от минимума до текущего (порог уже взят);
+   *   акцент — от текущего до максимума (сюда ещё можно дотянуть);
+   *   красный — выше максимума (даже пятёрки не хватит).
+   */
+  const currentPos = pct(current ?? minPossible ?? MIN_SCALE);
+  const maxPos = pct(maximum ?? MAX_SCALE);
+  const minPos = pct(minPossible ?? MIN_SCALE);
+  const trackBackground = `linear-gradient(90deg,
+    var(--separator-soft) 0%,
+    var(--separator-soft) ${minPos}%,
+    var(--success) ${minPos}%,
+    var(--success) ${currentPos}%,
+    var(--accent) ${currentPos}%,
+    var(--accent) ${maxPos}%,
+    rgba(255, 59, 48, 0.35) ${maxPos}%,
+    rgba(255, 59, 48, 0.35) 100%)`;
 
   return (
     <BottomSheet
@@ -189,53 +233,59 @@ export function GradeCalculatorSheet({
             </p>
           </section>
 
-          {/* Цель: три понятных варианта вместо слайдера 2.0–5.0. */}
+          {/* Порог автомата: свободный ползунок с зонами достижимости. */}
           <section>
-            <p className="mb-2 px-1 text-[12px] font-semibold text-[var(--text-secondary)]">
-              К чему идём
-            </p>
-            <div className="grid grid-cols-3 gap-2">
-              {TARGETS.map((grade) => {
-                const selected = target === grade;
-                const unreachable = maximum !== null && maximum + 1e-6 < grade;
-                const achieved = current !== null && current + 1e-6 >= grade;
+            <div className="mb-2 flex items-end justify-between gap-3 px-1">
+              <span className="text-[12px] font-semibold text-[var(--text-secondary)]">
+                Порог автомата
+              </span>
+              <span
+                className="text-[30px] font-bold leading-none tracking-[-0.02em] tabular-nums"
+                style={{ color: 'var(--accent)' }}
+              >
+                {formatScore(target, 1)}
+              </span>
+            </div>
 
-                return (
-                  <button
-                    key={grade}
-                    type="button"
-                    aria-pressed={selected}
-                    disabled={unreachable}
-                    title={
-                      unreachable
-                        ? `Максимум по оставшимся КМ — ${formatScore(maximum, 2)}`
-                        : undefined
-                    }
-                    onClick={() => {
-                      haptic('light');
-                      setTarget(grade);
-                    }}
-                    className="pressable rounded-[16px] border px-2 py-3 text-center transition-all disabled:opacity-35"
-                    style={{
-                      borderColor: selected ? 'var(--accent)' : 'var(--separator-soft)',
-                      background: selected ? 'var(--accent)' : 'var(--surface)',
-                      color: selected ? 'var(--accent-text)' : 'var(--text-primary)',
-                    }}
-                  >
-                    <span className="block text-[24px] font-bold leading-none tabular-nums">
-                      {grade}
-                    </span>
-                    <span
-                      className="mt-1 block text-[10px]"
-                      style={{
-                        color: selected ? 'rgba(255,255,255,0.75)' : 'var(--text-tertiary)',
-                      }}
-                    >
-                      {achieved ? 'уже есть' : TARGET_LABELS[grade]}
-                    </span>
-                  </button>
-                );
-              })}
+            <div className="relative h-9">
+              <div
+                className="absolute inset-x-0 top-1/2 h-2 -translate-y-1/2 rounded-full"
+                style={{ background: trackBackground }}
+                aria-hidden
+              />
+              {/* Где человек сейчас — тонкая метка на треке. */}
+              <div
+                className="pointer-events-none absolute top-1/2 h-3.5 w-0.5 -translate-y-1/2 rounded-full"
+                style={{
+                  left: `calc(${currentPos}% - 1px)`,
+                  background: 'var(--text-primary)',
+                  opacity: 0.45,
+                }}
+                aria-hidden
+              />
+              <input
+                type="range"
+                min={MIN_SCALE}
+                max={MAX_SCALE}
+                step={0.1}
+                value={target}
+                onChange={(event) => {
+                  const value = Number(event.target.value);
+                  if (Number.isFinite(value)) {
+                    setTarget(clamp(round1(value), MIN_SCALE, MAX_SCALE));
+                  }
+                }}
+                aria-label="Порог автомата, средний балл"
+                className="mood-range absolute inset-0 h-9 w-full cursor-pointer"
+              />
+            </div>
+
+            <div className="mt-1 flex items-center justify-between px-0.5 text-[10px] tabular-nums text-[var(--text-tertiary)]">
+              <span>мин {formatScore(minPossible, 2)}</span>
+              <span style={{ color: 'var(--text-secondary)' }}>
+                сейчас {formatScore(current, 2)}
+              </span>
+              <span>макс {formatScore(maximum, 2)}</span>
             </div>
           </section>
 
@@ -271,30 +321,15 @@ export function GradeCalculatorSheet({
             />
           ) : (
             <>
-              <section
-                className="rounded-[20px] px-4 py-4"
-                style={{ background: 'var(--accent)', color: 'var(--accent-text)' }}
-              >
-                <p className="text-[12px] font-medium opacity-80">
-                  Нужно в среднем за {pending.length}{' '}
-                  {pending.length === 1 ? 'оставшийся КМ' : 'оставшихся КМ'}
-                </p>
-                <div className="mt-1 flex items-end gap-2">
-                  <p className="text-[44px] font-bold leading-none tracking-[-0.02em] tabular-nums">
-                    {formatScore(required, 2)}
-                  </p>
-                  <p className="mb-1 text-[14px] font-medium opacity-80">из 5</p>
-                </div>
-                <p className="mt-2 text-[11px] opacity-80">
-                  Это минимум, чтобы средний вышел {target}. Оценку всё равно
-                  выставляет преподаватель.
-                </p>
-              </section>
-
               <section>
-                <p className="mb-2 px-1 text-[12px] font-semibold text-[var(--text-secondary)]">
-                  Минимальный план
-                </p>
+                <div className="mb-2 flex items-baseline justify-between gap-3 px-1">
+                  <p className="text-[12px] font-semibold text-[var(--text-secondary)]">
+                    Что написать за оставшиеся КМ
+                  </p>
+                  <span className="text-[11px] tabular-nums text-[var(--text-tertiary)]">
+                    {pending.length} КМ
+                  </span>
+                </div>
                 <div className="space-y-2">
                   {plan?.items.map((item) => (
                     <div
@@ -308,12 +343,14 @@ export function GradeCalculatorSheet({
                       >
                         {item.point.number}
                       </span>
-                      <span className="min-w-0 flex-1 truncate text-[14px]">
-                        {item.point.title ?? 'Без названия'}
-                      </span>
-                      <span className="shrink-0 text-[11px] tabular-nums text-[var(--text-tertiary)]">
-                        {formatScore(item.point.weight, 0)}%
-                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-[14px]">
+                          {item.point.title ?? 'Без названия'}
+                        </p>
+                        <p className="mt-0.5 text-[11px] tabular-nums text-[var(--text-tertiary)]">
+                          вес {formatScore(item.point.weight, 0)}%
+                        </p>
+                      </div>
                       <span
                         className="shrink-0 rounded-full px-2.5 py-1 text-[12px] font-bold tabular-nums"
                         style={{ background: 'var(--accent)', color: 'var(--accent-text)' }}
