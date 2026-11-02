@@ -49,3 +49,10 @@ bot-subscribers.json
 # Веб-версия (PWA)
 pwa/node_modules/
 pwa/dist/
+
+# iOS (нативное приложение): .xcodeproj генерируется XcodeGen по ios/project.yml
+ios/Mood.xcodeproj/
+ios/build/
+ios/DerivedData/
+**/xcuserdata/
+*.xcuserstate

@@ -1,0 +1,54 @@
+# XcodeGen-описание iOS-приложения Mood.
+#
+# Источник правды — этот файл, а не .xcodeproj: проект генерируется командой
+# `cd ios && xcodegen generate` и в git не попадает (как android/ у TWA).
+# Bundle ID намеренно не ru.mpei.mood: бесплатный Personal Team регистрирует
+# App ID на твой Apple ID, а платный/сторовый идентификатор оставляем на потом.
+#
+# Сборка: см. ios/README.md.
+
+name: Mood
+
+options:
+  bundleIdPrefix: ru.spartanec
+  deploymentTarget:
+    iOS: "18.0"
+  createIntermediateGroups: true
+  developmentLanguage: ru
+  generateEmptyDirectories: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    SWIFT_STRICT_CONCURRENCY: minimal
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    CODE_SIGN_STYLE: Automatic
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    CLANG_ENABLE_MODULES: YES
+    GCC_WARN_UNDECLARED_SELECTOR: YES
+
+targets:
+  Mood:
+    type: application
+    platform: iOS
+    deploymentTarget: "18.0"
+    sources:
+      - path: Mood
+        excludes:
+          - Info.plist
+    settings:
+      base:
+        PRODUCT_NAME: Mood
+        PRODUCT_BUNDLE_IDENTIFIER: ru.spartanec.mood.dev
+        INFOPLIST_FILE: Mood/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        TARGETED_DEVICE_FAMILY: "1"
+        SUPPORTS_MACCATALYST: NO
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        IPHONEOS_DEPLOYMENT_TARGET: "18.0"
+        DEVELOPMENT_ASSET_PATHS: ""
+    scheme:
+      testTargets: []
+      gatherCoverageData: false
