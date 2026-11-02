@@ -1,0 +1,25 @@
+{
+  "name": "Mood",
+  "audience": "студенты НИУ МЭИ",
+  "tone": "сдержанный",
+  "maxEmojiPerPost": 1,
+  "colors": {
+    "background": "#15131e",
+    "accent": "#7c4dff",
+    "accentBright": "#9d45fe",
+    "text": "#f4f2fb",
+    "muted": "rgba(244,242,251,0.62)"
+  },
+  "fonts": {
+    "display": "SF Pro Display / Inter",
+    "body": "SF Pro Text / Inter"
+  },
+  "emoji": ["🎓", "📱", "⚡", "🔔", "🧮"],
+  "forbiddenPhrases": [
+    "революция",
+    "уникальный",
+    "лучший в мире",
+    "не имеющий аналогов",
+    "инновационный"
+  ]
+}

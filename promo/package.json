@@ -1,0 +1,22 @@
+{
+  "name": "mood-promo",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "prepare": "node scripts/prepare-media.mjs",
+    "studio": "npm run prepare && remotion studio src/index.ts",
+    "render": "npm run prepare && remotion render src/index.ts Mood20 media/video/mood-20s-9x16.mp4 --codec h264 --crf 18 --audio-codec aac --audio-bitrate 192k --overwrite",
+    "audio": "node scripts/make-audio.mjs",
+    "collect": "node scripts/collect-changes.mjs",
+    "drafts": "node scripts/build-drafts.mjs",
+    "upload": "node scripts/upload-media.mjs"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.540",
+    "playwright": "1.64.1",
+    "qrcode": "1.5.4",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "remotion": "4.0.540"
+  }
+}

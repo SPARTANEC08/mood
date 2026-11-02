@@ -56,3 +56,11 @@ ios/build/
 ios/DerivedData/
 **/xcuserdata/
 *.xcuserstate
+
+# SMM/Motion: медиа и публичные копии генерируются, в git не нужны
+promo/node_modules/
+promo/public/
+promo/media/video/*.mp4
+promo/media/audio/*.wav
+promo/media/stock/*.png
+promo/drafts/

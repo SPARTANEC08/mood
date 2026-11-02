@@ -1,0 +1,14 @@
+{
+  "cadence": "on-command",
+  "channels": ["telegram", "telegraph"],
+  "utm": {
+    "source": "telegram",
+    "medium": "post",
+    "campaign": "date"
+  },
+  "post": {
+    "minBullets": 3,
+    "maxBullets": 6,
+    "linkLabel": "Подробнее об обновлении тут (тык)"
+  }
+}
