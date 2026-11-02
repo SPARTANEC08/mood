@@ -9,7 +9,8 @@
     "audio": "node scripts/make-audio.mjs",
     "collect": "node scripts/collect-changes.mjs",
     "drafts": "node scripts/build-drafts.mjs",
-    "upload": "node scripts/upload-media.mjs"
+    "upload": "node scripts/upload-media.mjs",
+    "publish": "node scripts/publish-telegraph.mjs"
   },
   "dependencies": {
     "@remotion/cli": "4.0.540",

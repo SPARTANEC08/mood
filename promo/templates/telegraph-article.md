@@ -2,8 +2,8 @@
 
 > Собирается из `scenario.md`. Публикует человек.
 > Скрины — только по теме, загружаются на `mood-app.ru/media/` через `npm run upload`.
-> Для публикации: открыть `telegraph.html` в браузере, скопировать всё и вставить
-> в редактор Telegraph. `telegraph.md` — для правок и хранения.
+> Публикация: `npm run publish -- --date YYYY-MM-DD`, обновление — с `--update`.
+> `telegraph.html` — для быстрой проверки, `telegraph.md` — для правок.
 
 ## Структура
 

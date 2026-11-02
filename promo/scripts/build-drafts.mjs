@@ -88,7 +88,16 @@ const allBullets = combined
   })
   .slice(0, 6);
 
-const telegraph = meta.telegraph || links.telegraph || '{{telegraph}}';
+let telegraph = meta.telegraph || links.telegraph || '{{telegraph}}';
+const publishedPath = path.join(dir, 'telegraph.json');
+if (fs.existsSync(publishedPath)) {
+  try {
+    const published = JSON.parse(fs.readFileSync(publishedPath, 'utf8'));
+    if (published.url) telegraph = published.url;
+  } catch {
+    // битый файл не должен ломать сборку
+  }
+}
 
 function utm(url) {
   if (!url) return '';
@@ -170,7 +179,7 @@ const article = [
   ...screens.map(image),
   '',
   videoLine
-    ? `## Видео\n\n20-секундный обзор: \`${videoLine}\`. В статье — ссылка на пост или страница с плеером.\n`
+    ? `## Видео\n\n[20-секундный обзор](${videoLine}). В статье — ссылка на пост или страница с плеером.\n`
     : '',
   siteSection ? `## Сайт\n\n${siteSection}\n` : '',
   '## Как установить',

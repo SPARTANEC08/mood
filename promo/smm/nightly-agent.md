@@ -48,7 +48,13 @@
 
    ```bash
    npm run drafts -- --date YYYY-MM-DD
+   npm run publish -- --date YYYY-MM-DD          # создать статью
+   npm run publish -- --date YYYY-MM-DD --update # если статья уже была
+   npm run drafts -- --date YYYY-MM-DD           # ссылка в TG-пост
    ```
+
+   Публиковать статью в Telegraph можно: это часть сборки. Пост в Telegram
+   не публикуй — его отправляет человек.
 
 8. Проверь `telegram.md` и `telegraph.md` по `smm/approval.md`:
    - 3–6 пунктов, один эмодзи;

@@ -31,10 +31,14 @@ npm run collect -- --date 2026-11-03
 # 3. Черновики
 npm run drafts -- --date 2026-11-03
 
-# 4. Скрины в Telegraph (по одному или списком)
+# 4. Статья в Telegraph (создать или обновить)
+npm run publish -- --date 2026-11-03
+npm run publish -- --date 2026-11-03 --update
+
+# 5. Скрины (по одному или списком)
 npm run upload -- media/stock/*.png --out drafts/2026-11-03/assets.json
 
-# 5. Пересобрать статью с URL картинок
+# 6. Пересобрать статью с URL картинок и ссылку в TG
 npm run drafts -- --date 2026-11-03
 ```
 
@@ -45,7 +49,8 @@ npm run drafts -- --date 2026-11-03
 - `drafts/<дата>/telegram.md` — пост;
 - `drafts/<дата>/telegram.txt` — пост для ручной вставки;
 - `drafts/<дата>/telegraph.md` — статья;
-- `drafts/<дата>/telegraph.html` — статья для копирования в Telegraph;
+- `drafts/<дата>/telegraph.html` — статья для проверки;
+- `drafts/<дата>/telegraph.json` — URL опубликованной статьи;
 - `drafts/<дата>/assets.json` — локальный файл → URL в Telegraph.
 
 ## Правила
