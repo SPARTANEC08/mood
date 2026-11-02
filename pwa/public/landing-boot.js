@@ -2,9 +2,9 @@
  * Первый экран для тех, кто ещё не вошёл.
  *
  * Приложение остаётся на «/»: его URL, манифест, Service Worker и APK не
- * меняются. Если PWA-токена нет, корень сразу уводит на статический лендинг,
- * а лендинг ведёт на «/?login=1» — этот параметр отключает редирект, чтобы
- * человек попал на экран входа, а не обратно на лендинг.
+ * меняются. Если PWA-токена нет, корень сразу уводит на статический лендинг.
+ * Главная кнопка лендинга ведёт на «/setup» — отдельный экран установки без
+ * входа; «/?login=1» оставлен как прямой вход для старых ссылок.
  *
  * Скрипт синхронный и стоит в <head> до React: без него приложение успевало
  * показать экран входа, а затем прыгало на лендинг.
@@ -16,12 +16,22 @@
 
     var params = new URLSearchParams(window.location.search);
     if (
+      params.get('install') === '1' ||
       params.get('login') === '1' ||
       params.get('guest') === '1' ||
       params.get('debug') === '1'
     ) {
       return;
     }
+
+    // Установленное приложение не должно открывать маркетинговый лендинг:
+    // без токена ему нужен обычный экран входа.
+    var standalone =
+      window.navigator.standalone === true ||
+      (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) ||
+      document.referrer.indexOf('android-app://') === 0;
+
+    if (standalone) return;
 
     var token = window.localStorage.getItem('mood_pwa_token');
     if (!token) {

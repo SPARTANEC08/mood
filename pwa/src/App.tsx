@@ -2,11 +2,11 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 
 import { ScheduleApp } from '@/app/ScheduleApp';
 import { GuestOnboarding } from '@/components/guest/GuestOnboarding';
-import { InstallPrompt, shouldShowInstallPrompt } from '@/components/InstallPrompt';
-import { IosInstallGuide, useShouldShowIosInstallGuide } from '@/components/IosInstallGuide';
+import { isStandalone } from '@/components/InstallPrompt';
 import { DiagnosticsScreen } from '@/DiagnosticsScreen';
+import { InstallScreen } from '@/InstallScreen';
 import { api } from '@/lib/api';
-import { haptic, isIOS, openLink } from '@/lib/env';
+import { haptic, openLink } from '@/lib/env';
 import { LOGIN_DOCUMENTS, POLICY_LINK, PUSH_DOCUMENT } from './legal';
 import type { LegalDocId } from './types/api';
 import {
@@ -45,7 +45,7 @@ import {
  * запуск на новом устройстве.
  */
 
-type Phase = 'ready' | 'welcome' | 'guest';
+type Phase = 'ready' | 'welcome' | 'guest' | 'install';
 
 /**
  * Сколько ждём код подтверждения, прежде чем вернуть человека к логину.
@@ -61,25 +61,40 @@ type Phase = 'ready' | 'welcome' | 'guest';
  */
 const TWO_FA_WAIT_MS = 5 * 60 * 1000;
 
-/**
- * Убирает служебный ?login=1 после входа.
- *
- * Параметр нужен только для того, чтобы landing-boot.js не увёл человека с
- * корня обратно на лендинг. В адресной строке после успешного входа ему делать
- * нечего.
- */
-function clearLoginQuery(): void {
+/** Убирает служебный параметр из адреса после того, как он отработал. */
+function clearQueryParam(name: string): void {
   const url = new URL(window.location.href);
-  if (url.searchParams.get('login') !== '1') return;
+  if (!url.searchParams.has(name)) return;
 
-  url.searchParams.delete('login');
+  url.searchParams.delete(name);
   window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
 }
 
+/** ?login=1 оставляет человека на экране входа и отключает редирект на лендинг. */
+function clearLoginQuery(): void {
+  clearQueryParam('login');
+}
+
+/**
+ * Открыт ли экран установки.
+ *
+ * Основной адрес — /setup: он не конфликтует с каталогом /install/ со
+ * скриншотами iOS и переживает переход из Telegram в Safari (там открывается
+ * текущий URL, а не ссылка с query-параметром). ?install=1 оставлен для
+ * старых ссылок.
+ */
+function isInstallRequested(): boolean {
+  if (window.location.pathname === '/setup') return true;
+  return new URLSearchParams(window.location.search).get('install') === '1';
+}
+
 export default function App() {
-  const [phase, setPhase] = useState<Phase>(() =>
-    hasUsablePwaToken() ? 'ready' : 'welcome',
-  );
+  const [phase, setPhase] = useState<Phase>(() => {
+    // В уже установленном приложении ?install=1 мог остаться в адресе иконки
+    // (iOS сохраняет текущий URL). Не показываем установку повторно.
+    if (isInstallRequested() && !isStandalone()) return 'install';
+    return hasUsablePwaToken() ? 'ready' : 'welcome';
+  });
   /** null — конфиг ещё грузится; false — рубильник регистрации закрыт. */
   const [registrationOpen, setRegistrationOpen] = useState<boolean | null>(null);
 
@@ -95,54 +110,6 @@ export default function App() {
     () => new URLSearchParams(window.location.search).get('debug') === '1',
   );
 
-  /**
-   * Показывать ли первый экран с установкой.
-   *
-   * Проверка состояния (браузер, не standalone, не отказывался, не dev-домен)
-   * живёт в компоненте, решение — здесь: экран перекрывает всё остальное,
-   * поэтому он и должен быть первым в цепочке условий ниже.
-   */
-  const [installOpen, setInstallOpen] = useState(() => shouldShowInstallPrompt());
-
-  /**
-   * iOS-гайд установки. Показывается ТОЛЬКО на iOS в браузере и при каждой
-   * загрузке; на Android и десктопе всегда false, поэтому их поведение не
-   * меняется (см. IosInstallGuide).
-   */
-  const iosGuide = useShouldShowIosInstallGuide();
-
-  /** Идёт ввод кода 2FA — в этот момент гайд не перебиваем. */
-  const [twoFactorActive, setTwoFactorActive] = useState(false);
-
-  /**
-   * Возврат подсказки после установки.
-   *
-   * Человек часто ставит приложение, не закрывая вкладку: нажал «Показать, где
-   * кнопка», свернул Safari, поставил иконку, вернулся. К этому моменту он уже
-   * в standalone, а переменная installOpen осталась бы `true` — и подсказка
-   * перекрыла бы работающее приложение до перезагрузки страницы.
-   *
-   * Поэтому состояние перепроверяется при возврате на экран, а не только при
-   * первом рендере. Условие то же самое, что и на старте: приложение
-   * установлено — подсказки нет.
-   */
-  useEffect(() => {
-    if (!installOpen) return;
-
-    const onVisible = () => {
-      if (document.visibilityState !== 'visible') return;
-      if (!shouldShowInstallPrompt()) setInstallOpen(false);
-    };
-
-    document.addEventListener('visibilitychange', onVisible);
-    window.addEventListener('appinstalled', onVisible);
-
-    return () => {
-      document.removeEventListener('visibilitychange', onVisible);
-      window.removeEventListener('appinstalled', onVisible);
-    };
-  }, [installOpen]);
-
   useEffect(() => {
     // Истёкший токен убираем сразу: оставить его значило бы каждый раз
     // отправлять заведомо мёртвый заголовок и получать 401 вместо нормального
@@ -151,7 +118,25 @@ export default function App() {
     if (!hasUsablePwaToken() && isGuestMode()) clearGuestMode();
     if (hasUsablePwaToken()) clearLoginQuery();
 
+    // ?install=1 важнее токена, но только в браузере. В установленном
+    // приложении этот параметр мог остаться в адресе иконки — тогда нужен
+    // обычный вход, а не повторная установка.
+    if (isInstallRequested() && !isStandalone()) return;
+
     setPhase(hasUsablePwaToken() ? 'ready' : 'welcome');
+  }, []);
+
+  useEffect(() => {
+    // Сразу после первого рендера убираем установочный адрес. На iOS
+    // «На экран Домой» сохраняет ТЕКУЩИЙ URL, поэтому иконка должна получить
+    // «/», а не «/setup» или «/?install=1». Сам экран установки при этом
+    // остаётся на месте: фаза уже зафиксирована в состоянии.
+    if (window.location.pathname === '/setup') {
+      window.history.replaceState(null, '', '/');
+      return;
+    }
+
+    clearQueryParam('install');
   }, []);
 
   useEffect(() => {
@@ -213,11 +198,17 @@ export default function App() {
     setPhase('welcome');
   }
 
+  /** Закончили экран установки: убираем ?install=1 и идём во вход или в приложение. */
+  function onInstallContinue(): void {
+    clearQueryParam('install');
+    setPhase(hasUsablePwaToken() ? 'ready' : 'welcome');
+  }
+
   if (debugOpen) return <DiagnosticsScreen onClose={() => setDebugOpen(false)} />;
 
-  // Прежний InstallPrompt обслуживает Android и десктоп; на iOS его заменяет
-  // IosInstallGuide (там нужен шаг «Открыть в Safari» и показ при каждой загрузке).
-  if (installOpen && !isIOS()) return <InstallPrompt onSkip={() => setInstallOpen(false)} />;
+  if (phase === 'install') {
+    return <InstallScreen onContinue={onInstallContinue} />;
+  }
 
   if (phase === 'guest') {
     return (
@@ -231,25 +222,16 @@ export default function App() {
 
   if (phase === 'welcome') {
     return (
-      <>
-        <LoginScreen
-          onAuthenticated={onAuthenticated}
-          onCancel={onReLogin}
-          onTwoFactorChange={setTwoFactorActive}
-          onGuest={() => setPhase('guest')}
-          guestAllowed={registrationOpen !== false}
-        />
-        {iosGuide && !twoFactorActive ? <IosInstallGuide /> : null}
-      </>
+      <LoginScreen
+        onAuthenticated={onAuthenticated}
+        onCancel={onReLogin}
+        onGuest={() => setPhase('guest')}
+        guestAllowed={registrationOpen !== false}
+      />
     );
   }
 
-  return (
-    <>
-      <ScheduleApp onReLogin={onReLogin} guestHint={isGuestMode()} />
-      {iosGuide ? <IosInstallGuide /> : null}
-    </>
-  );
+  return <ScheduleApp onReLogin={onReLogin} guestHint={isGuestMode()} />;
 }
 
 /** Что показать в поле ошибки: серверский текст или запасной вариант. */

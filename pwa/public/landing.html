@@ -1415,7 +1415,8 @@
     }
 
     .footer a {
-      display: inline-flex;
+      display: flex;
+      width: fit-content;
       align-items: center;
       gap: 6px;
       margin-bottom: 9px;
@@ -1565,6 +1566,11 @@
       .cta-actions .btn { flex: 1 1 100%; }
     }
 
+    @media (max-width: 360px) {
+      .header-actions { gap: 6px; }
+      .header-actions .btn-sm { padding: 0 11px; font-size: 12px; }
+    }
+
     @media (prefers-reduced-motion: reduce) {
       html { scroll-behavior: auto; }
       *, *::before, *::after {
@@ -1682,7 +1688,6 @@
       </a>
 
       <nav class="nav-links" data-nav aria-label="Ссылки проекта">
-        <a href="#install">Установить</a>
         <a href="https://github.com/SPARTANEC08/mood" target="_blank" rel="noopener noreferrer">GitHub</a>
         <a href="https://t.me/mood_mpei" target="_blank" rel="noopener noreferrer">Telegram</a>
         <a href="https://t.me/mood_mpei_sup" target="_blank" rel="noopener noreferrer">Поддержка</a>
@@ -1693,7 +1698,7 @@
           <svg class="icon theme-sun" aria-hidden="true"><use href="#i-sun" /></svg>
           <svg class="icon theme-moon" aria-hidden="true"><use href="#i-moon" /></svg>
         </button>
-        <a class="btn btn-primary btn-sm" href="/?login=1">Войти</a>
+        <a class="btn btn-primary btn-sm" href="/setup">Установить</a>
         <button class="icon-btn menu-btn" type="button" data-menu-toggle aria-label="Открыть меню" aria-expanded="false">
           <svg class="icon menu-open-icon" aria-hidden="true"><use href="#i-menu" /></svg>
           <svg class="icon menu-close-icon" aria-hidden="true"><use href="#i-close" /></svg>
@@ -1720,10 +1725,7 @@
           </p>
 
           <div class="hero-actions">
-            <a class="btn btn-primary" href="/?login=1">
-              Войти в Mood
-              <svg class="icon" aria-hidden="true"><use href="#i-arrow" /></svg>
-            </a>
+            <a class="btn btn-primary" href="/setup">Установить Mood <svg class="icon" aria-hidden="true"><use href="#i-download" /></svg></a>
             <a class="btn btn-ghost" href="#features">Посмотреть возможности</a>
           </div>
 
@@ -1945,110 +1947,21 @@
 
     <!-- ── установка ───────────────────────────────────────────── -->
     <section class="section section-alt" id="install">
-      <div class="container install-grid">
-        <div class="install-copy reveal">
-          <div class="kicker">Установка</div>
-          <h2>Как поставить Mood на телефон</h2>
-          <p>Приложение открывается с домашнего экрана и работает как обычное — без App Store и Google Play.</p>
-
-          <ul class="install-points">
-            <li><svg class="icon" aria-hidden="true"><use href="#i-phone" /></svg><span><strong>iPhone и iPad</strong> — только Safari, «Поделиться» → «На экран “Домой”».</span></li>
-            <li><svg class="icon" aria-hidden="true"><use href="#i-download" /></svg><span><strong>Android</strong> — установка из Chrome или APK-файл.</span></li>
-            <li><svg class="icon" aria-hidden="true"><use href="#i-spark" /></svg><span><strong>Компьютер</strong> — Chrome или Edge, иконка установки в адресной строке.</span></li>
-          </ul>
-
-
-        </div>
-
-        <div class="install-panel reveal">
-          <div class="tabs" role="tablist" aria-label="Платформа">
-            <button class="tab" type="button" role="tab" id="tab-ios" aria-controls="panel-ios" aria-selected="true" data-tab="ios">iPhone</button>
-            <button class="tab" type="button" role="tab" id="tab-android" aria-controls="panel-android" aria-selected="false" data-tab="android">Android</button>
-            <button class="tab" type="button" role="tab" id="tab-desktop" aria-controls="panel-desktop" aria-selected="false" data-tab="desktop">Компьютер</button>
+      <div class="container">
+        <div class="cta-card reveal">
+          <h2>Поставьте Mood на телефон</h2>
+          <p>Покажем шаги для вашего устройства. Это займёт меньше минуты.</p>
+          <div class="cta-actions">
+            <a class="btn btn-primary" href="/setup">
+              Установить Mood
+              <svg class="icon" aria-hidden="true"><use href="#i-download" /></svg>
+            </a>
+            <a class="btn btn-ghost" href="/apk/mood-latest.apk" download>
+              <svg class="icon" aria-hidden="true"><use href="#i-download" /></svg>
+              Скачать APK
+            </a>
           </div>
-
-          <div class="tab-panel" role="tabpanel" id="panel-ios" aria-labelledby="tab-ios" data-panel="ios">
-            <p class="panel-lead">На iPhone установка возможна только из Safari. Если вы открыли ссылку в Telegram, сначала выйдите в Safari.</p>
-            <ol class="steps-list">
-              <li><span>Откройте <strong>mood-app.ru</strong> в Safari.</span></li>
-              <li><span>Нажмите «Поделиться» — квадрат со стрелкой вверх.</span></li>
-              <li><span>Пролистайте список и выберите <strong>«На экран “Домой”»</strong>.</span></li>
-              <li><span>Нажмите «Добавить» и запустите Mood с иконки.</span></li>
-            </ol>
-
-            <div class="ios-shots" aria-label="Шаги установки на iPhone">
-              <figure class="ios-shot">
-                <img src="/install/ios-step-1.webp" width="720" height="129" alt="Открыть ссылку в Safari" loading="lazy" decoding="async" />
-                <figcaption>Открыть в Safari</figcaption>
-              </figure>
-              <figure class="ios-shot">
-                <img src="/install/ios-step-2.webp" width="720" height="1428" alt="Нажать «Поделиться» в Safari" loading="lazy" decoding="async" />
-                <figcaption>Нажать «Поделиться»</figcaption>
-              </figure>
-              <figure class="ios-shot">
-                <img src="/install/ios-step-3.webp" width="720" height="1156" alt="Выбрать «На экран Домой»" loading="lazy" decoding="async" />
-                <figcaption>Выбрать «На экран “Домой”»</figcaption>
-              </figure>
-              <figure class="ios-shot">
-                <img src="/install/ios-step-4.webp" width="720" height="590" alt="Нажать «Добавить»" loading="lazy" decoding="async" />
-                <figcaption>Нажать «Добавить»</figcaption>
-              </figure>
-            </div>
-
-            <div class="panel-note">
-              <svg class="icon" aria-hidden="true"><use href="#i-phone" /></svg>
-              APK для iOS не подходит — это приложение для Android.
-            </div>
-          </div>
-
-          <div class="tab-panel" role="tabpanel" id="panel-android" aria-labelledby="tab-android" data-panel="android" hidden>
-            <p class="panel-lead">В Chrome установка занимает пару секунд. Если браузер не предлагает установку — скачайте APK.</p>
-            <ol class="steps-list">
-              <li><span>Откройте <strong>mood-app.ru</strong> в Chrome.</span></li>
-              <li><span>Нажмите меню <strong>⋮</strong> в правом верхнем углу.</span></li>
-              <li><span>Выберите <strong>«Установить приложение»</strong> или «Добавить на главный экран».</span></li>
-              <li><span>Подтвердите установку.</span></li>
-            </ol>
-
-            <div class="apk-meta">
-              <span><svg class="icon" aria-hidden="true"><use href="#i-download" /></svg> APK · 1,4 МБ</span>
-              <span>Android 7+</span>
-            </div>
-
-            <div class="panel-actions">
-              <a class="btn btn-primary btn-sm" href="/apk/mood-latest.apk" download>
-                <svg class="icon" aria-hidden="true"><use href="#i-download" /></svg>
-                Скачать с сайта
-              </a>
-              <a class="btn btn-ghost btn-sm" href="https://t.me/mood_mpei" target="_blank" rel="noopener noreferrer">
-                <svg class="icon icon-fill" aria-hidden="true"><use href="#i-telegram" /></svg>
-                Последняя версия в Telegram
-              </a>
-              <a class="btn btn-ghost btn-sm" href="https://github.com/SPARTANEC08/mood/releases" target="_blank" rel="noopener noreferrer">
-                <svg class="icon icon-fill" aria-hidden="true"><use href="#i-github" /></svg>
-                GitHub Releases
-              </a>
-            </div>
-
-            <div class="panel-note">
-              <svg class="icon" aria-hidden="true"><use href="#i-shield" /></svg>
-              APK ставится поверх предыдущей версии. Обновлять приложение можно тем же файлом.
-            </div>
-          </div>
-
-          <div class="tab-panel" role="tabpanel" id="panel-desktop" aria-labelledby="tab-desktop" data-panel="desktop" hidden>
-            <p class="panel-lead">На компьютере Mood работает как обычный сайт, но его можно закрепить в отдельном окне.</p>
-            <ol class="steps-list">
-              <li><span>Откройте <strong>mood-app.ru</strong> в Chrome или Edge.</span></li>
-              <li><span>Нажмите иконку установки в адресной строке.</span></li>
-              <li><span>Или откройте меню браузера → <strong>«Установить Mood»</strong>.</span></li>
-              <li><span>Приложение появится в Dock или меню «Пуск».</span></li>
-            </ol>
-            <div class="panel-note">
-              <svg class="icon" aria-hidden="true"><use href="#i-spark" /></svg>
-              На компьютере удобно проверять расписание и открывать файлы, но push-уведомления лучше работают на телефоне.
-            </div>
-          </div>
+          <p class="cta-note">iPhone — Safari · Android 7+ · без App Store и Google Play</p>
         </div>
       </div>
     </section>
@@ -2166,16 +2079,13 @@
     <section class="cta-band">
       <div class="container">
         <div class="cta-card reveal">
-          <h2>Готовы открыть Mood?</h2>
-          <p>Войдите логином БАРС и посмотрите своё расписание, оценки и задания в одном месте.</p>
+          <h2>Остались вопросы?</h2>
+          <p>Напишите в поддержку или посмотрите исходный код на GitHub.</p>
           <div class="cta-actions">
-            <a class="btn btn-primary" href="/?login=1">
-              Войти в Mood
-              <svg class="icon" aria-hidden="true"><use href="#i-arrow" /></svg>
-            </a>
-            <a class="btn btn-ghost" href="#install">Как установить</a>
+            <a class="btn btn-primary" href="https://t.me/mood_mpei_sup" target="_blank" rel="noopener noreferrer">Поддержка</a>
+            <a class="btn btn-ghost" href="https://github.com/SPARTANEC08/mood" target="_blank" rel="noopener noreferrer">GitHub</a>
           </div>
-          <p class="cta-note">Бесплатно · без Telegram · работает на iPhone, Android и компьютере</p>
+          <p class="cta-note">Установка — в разделе выше или кнопкой в шапке.</p>
         </div>
       </div>
     </section>
