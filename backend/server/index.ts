@@ -54,8 +54,23 @@ function apiPathname(url: string): string {
   }
 }
 
-/** Публичные адреса фронтендов: только они идут в CORS. */
+/**
+ * Публичные адреса фронтендов: только они идут в CORS.
+ *
+ * Результат кэшируется по строке окружения: `allowedOrigins()` вызывается в
+ * CORS-колбэке на каждый запрос с Origin, а разбор двух URL и Set на каждом
+ * запросе — лишняя работа на ровном месте.
+ */
+let originsCache: { key: string; value: string[] } | null = null;
+
 function allowedOrigins(): string[] {
+  const cacheKey = [
+    process.env.PWA_URL ?? '',
+    process.env.APP_URL ?? '',
+    process.env.NODE_ENV ?? '',
+  ].join('|');
+  if (originsCache?.key === cacheKey) return originsCache.value;
+
   const list: string[] = [];
 
   // Адрес PWA. Задаётся один: Mini App больше нет, отдельной раздачи тоже.
@@ -85,7 +100,9 @@ function allowedOrigins(): string[] {
     list.push('http://localhost:5173', 'http://127.0.0.1:5173');
   }
 
-  return [...new Set(list)];
+  const origins = [...new Set(list)];
+  originsCache = { key: cacheKey, value: origins };
+  return origins;
 }
 
 /**

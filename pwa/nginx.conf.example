@@ -185,7 +185,9 @@ server {
         add_header Cache-Control "public, max-age=3600";
     }
 
+    gzip_static on;
     gzip on;
+    gzip_vary on;
     gzip_types text/plain text/css application/javascript application/json image/svg+xml application/manifest+json;
     gzip_min_length 1024;
 }

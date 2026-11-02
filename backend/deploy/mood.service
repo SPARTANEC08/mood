@@ -33,10 +33,15 @@ UMask=0077
 # объёму RAM, и на VPS ядро доводит процесс до SIGKILL от OOM-killer'а — в
 # журнале будет только «Killed», без причины. С флагом V8 сам останавливает
 # процесс раньше, печатая «FATAL ERROR: ... JavaScript heap out of memory».
-ExecStart=/usr/bin/node --max-old-space-size=768 dist/app.js
+#
+# 512 МБ, а не 768: прод RU — 830 МБ RAM (см. info.md). При 768 МБ кучи плюс
+# RSS, sharp и буферы процесс упирается в физическую память раньше, чем в
+# cgroup. Те же значения продублированы в mood-hardening.conf; здесь они
+# остаются на случай, если drop-in не установлен.
+ExecStart=/usr/bin/node --max-old-space-size=512 dist/app.js
 
 # Мягкий лимит памяти cgroup. Если превышен — SIGKILL и рестарт.
-MemoryMax=1536M
+MemoryMax=700M
 
 # Перезапуск при любом выходе, а не только при ошибке.
 Restart=always

@@ -103,8 +103,8 @@ WorkingDirectory=/home/mood/mood
 UMask=0077
 EnvironmentFile=/home/mood/mood/.env
 Environment=NODE_ENV=production
-ExecStart=/usr/bin/node --max-old-space-size=768 dist/app.js
-MemoryMax=1536M
+ExecStart=/usr/bin/node --max-old-space-size=512 dist/app.js
+MemoryMax=700M
 Restart=always
 RestartSec=10
 TimeoutStopSec=30

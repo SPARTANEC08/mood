@@ -232,8 +232,10 @@ function read(): UsersDocument {
 }
 
 /** Пишет документ и оба индекса одной атомарной операцией. */
-function commit(doc: UsersDocument): void {
+function commit(doc: UsersDocument, changedUserId?: string): void {
   document.stage(doc);
+  // Без отметки saveUsers не узнает, кого писать, и пропустит изменение.
+  if (changedUserId) document.markUserChanged(changedUserId);
   document.save();
 }
 
@@ -323,7 +325,7 @@ export const userStore = {
 
     doc.users[user.userId] = user;
     reindex(doc);
-    commit(doc);
+    commit(doc, user.userId);
 
     return user as TelegramUser;
   },
@@ -344,7 +346,7 @@ export const userStore = {
 
     doc.users[user.userId] = next as unknown as StoredUser;
     reindex(doc);
-    commit(doc);
+    commit(doc, user.userId);
   },
 
   /**
@@ -373,7 +375,7 @@ export const userStore = {
     // обновления (отметка токена, флаг уведомлений, креды) их не трогают, и
     // лишний проход по всем записям на каждую операцию не нужен.
     if ('telegramId' in patch || 'barsLoginHash' in patch) reindex(doc);
-    commit(doc);
+    commit(doc, userId);
 
     return next as unknown as StoredUser;
   },
@@ -430,7 +432,7 @@ export const userStore = {
 
     doc.users[user.userId] = user;
     reindex(doc);
-    commit(doc);
+    commit(doc, user.userId);
 
     return user;
   },
@@ -459,7 +461,7 @@ export const userStore = {
 
     delete doc.users[userId];
     reindex(doc);
-    commit(doc);
+    commit(doc, userId);
 
     return removed;
   },

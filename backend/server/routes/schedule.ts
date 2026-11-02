@@ -104,11 +104,11 @@ app.get('/api/subjects', async (request, reply) => {
       });
     }
 
-    const days = filterByRange(
-      schedule.days.map((day) => mapDay(day, group.groupName, !student.isGuest)),
-      query.startDate,
-      query.endDate,
-    );
+    // Фильтруем ДНИ до маппинга: клиент обычно запрашивает неделю, а в кэше
+    // лежит окно на 104 дня. Раньше mapDay строился для всех дней, включая
+    // те, что тут же выбрасывались фильтром.
+    const rangedDays = filterByRange(schedule.days, query.startDate, query.endDate);
+    const days = rangedDays.map((day) => mapDay(day, group.groupName, !student.isGuest));
 
     const response: ScheduleResponse = {
       groupName: schedule.groupName,
@@ -187,10 +187,10 @@ function isRawDate(value: string | undefined): value is string {
 }
 
 function filterByRange(
-  days: ApiScheduleDay[],
+  days: ParsedSchedule['days'],
   startDate?: string,
   endDate?: string,
-): ApiScheduleDay[] {
+): ParsedSchedule['days'] {
   let out = days;
 
   if (isRawDate(startDate)) out = out.filter((d) => d.rawDate >= startDate);

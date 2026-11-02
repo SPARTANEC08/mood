@@ -258,11 +258,35 @@ export function persistCore(cacheUserId: string, coreRef: { current: Tier1Core }
   const important = core.important;
 
   scheduleIdleWrite(() => {
-    writeJson(`${CACHE_KEYS.schedule}:${userId}`, { schedule, savedAt: Date.now() });
-    writeJson(`${CACHE_KEYS.homework}:${userId}`, homework);
-    writeJson(`${CACHE_KEYS.important}:${userId}`, important);
+    // Расписание меняется раз в неделю, ДЗ и «Важное» — чаще. Раньше при
+    // каждом обновлении заново сериализовались все три записи, включая
+    // мегабайтное расписание. Сравниваем ссылки: сеттер провайдера всегда
+    // кладёт новый объект/массив, поэтому неизменённая ссылка означает
+    // неизменённые данные.
+    if (lastPersisted?.userId !== userId) lastPersisted = null;
+    const previous = lastPersisted;
+
+    if (!previous || previous.schedule !== schedule) {
+      writeJson(`${CACHE_KEYS.schedule}:${userId}`, { schedule, savedAt: Date.now() });
+    }
+    if (!previous || previous.homework !== homework) {
+      writeJson(`${CACHE_KEYS.homework}:${userId}`, homework);
+    }
+    if (!previous || previous.important !== important) {
+      writeJson(`${CACHE_KEYS.important}:${userId}`, important);
+    }
+
+    lastPersisted = { userId, schedule, homework, important };
   });
 }
+
+/** Что уже лежит в localStorage — для пропуска неизменившихся записей. */
+let lastPersisted: {
+  userId: string;
+  schedule: Tier1Core['schedule'];
+  homework: Tier1Core['homework'];
+  important: Tier1Core['important'];
+} | null = null;
 
 /** Отложенная запись: одна за раз, последняя версия побеждает. */
 let pendingWrite: (() => void) | null = null;

@@ -10,6 +10,7 @@ import path from 'node:path';
 
 import { homeworkStore } from '../../../db/storage/homeworkStore.ts';
 import { importantStore } from '../../../db/storage/importantStore.ts';
+import { getDb } from '../../../db/sqlite.ts';
 import {
   BACKUP_TTL_DAYS,
   DISK_WARN_RATIO,
@@ -96,6 +97,17 @@ function referencedFiles(): Set<string> {
 }
 
 export async function runMaintenance(now: number = Date.now()): Promise<MaintenanceResult> {
+  // Обслуживание SQLite: раз в сутки — дешево, а планировщику даёт статистику
+  // для индексов, которая иначе копится только при ANALYZE вручную.
+  try {
+    getDb().pragma('optimize');
+  } catch (err: unknown) {
+    console.warn(
+      '[Maintenance] PRAGMA optimize не выполнен:',
+      err instanceof Error ? err.message : err,
+    );
+  }
+
   const referenced = referencedFiles();
 
   const userDirs = await listDirs(FILES_DIR);

@@ -132,6 +132,17 @@ export class JsonDocument<T extends object> {
   private cache: T | null = null;
   /** Последнее сохранённое состояние пользователей: userId → JSON. */
   private persistedUsers: Map<string, string> | null = null;
+  /**
+   * Кто изменился с прошлого сохранения.
+   *
+   * `users.json` — самый горячий документ: нотификатор патчит по пользователю
+   * (cookie OWA, снимки, флаги), и раньше каждый такой патч стрингифицировал
+   * ВСЕХ пользователей, чтобы найти изменения. Теперь пишутся только те, кого
+   * пометил userStore.
+   */
+  private readonly dirtyUsers = new Set<string>();
+  /** Полная перезапись нужна только после replace() — сброса базы. */
+  private fullUsersRewrite = false;
 
   constructor(
     fileName: string,
@@ -199,12 +210,16 @@ export class JsonDocument<T extends object> {
 
   replace(doc: T): void {
     this.cache = doc;
+    // Сброс базы: сравнивать построчно не с чем — пишем/удаляем всё.
+    if (this.name === USERS_DOCUMENT) this.fullUsersRewrite = true;
     this.save();
   }
 
   drop(): void {
     this.cache = null;
     this.persistedUsers = null;
+    this.dirtyUsers.clear();
+    this.fullUsersRewrite = false;
 
     if (this.name === USERS_DOCUMENT) {
       getDb().exec('DELETE FROM users');
@@ -212,6 +227,15 @@ export class JsonDocument<T extends object> {
     }
 
     getDb().prepare('DELETE FROM documents WHERE name = ?').run(this.name);
+  }
+
+  /**
+   * Помечает пользователя изменённым перед save().
+   *
+   * Вызывается только из userStore: он единственный владелец документа users.
+   */
+  markUserChanged(userId: string): void {
+    this.dirtyUsers.add(userId);
   }
 
   /** Абсолютный путь к БД — нужен скриптам сброса/бэкапа. */
@@ -257,39 +281,40 @@ export class JsonDocument<T extends object> {
   }
 
   private saveUsers(): void {
+    // Ничего не помечено — писать нечего. Это главный выигрыш: патч одного
+    // пользователя больше не перебирает и не стрингифицирует всех.
+    if (!this.fullUsersRewrite && this.dirtyUsers.size === 0) return;
+
     const doc = this.read() as unknown as {
       users?: Record<string, Record<string, unknown>>;
     };
     const users = doc.users ?? {};
 
-    const next = new Map<string, string>();
-    for (const [userId, user] of Object.entries(users)) {
-      next.set(userId, JSON.stringify(user));
-    }
-
     const previous = this.persistedUsers ?? new Map<string, string>();
     const db = getDb();
+    const { upsert, remove } = userStatements(db);
 
-    const upsert = db.prepare(
-      'INSERT INTO users(user_id, bars_login_hash, telegram_id, data, created_at, updated_at) ' +
-        'VALUES (?, ?, ?, ?, ?, ?) ' +
-        'ON CONFLICT(user_id) DO UPDATE SET ' +
-        '  bars_login_hash = excluded.bars_login_hash, ' +
-        '  telegram_id = excluded.telegram_id, ' +
-        '  data = excluded.data, ' +
-        '  created_at = excluded.created_at, ' +
-        '  updated_at = excluded.updated_at',
-    );
-    const remove = db.prepare('DELETE FROM users WHERE user_id = ?');
+    // Полная перезапись — только после replace(): тогда смотрим и на записи,
+    // которых в документе больше нет.
+    const ids = this.fullUsersRewrite
+      ? new Set([...Object.keys(users), ...previous.keys()])
+      : new Set(this.dirtyUsers);
 
     try {
       db.transaction(() => {
-        for (const [userId, plainJson] of next) {
+        for (const userId of ids) {
+          const user = users[userId];
+
+          if (!user) {
+            if (previous.delete(userId)) remove.run(userId);
+            continue;
+          }
+
+          const plainJson = JSON.stringify(user);
           if (previous.get(userId) === plainJson) continue;
 
-          const user = JSON.parse(plainJson) as Record<string, unknown>;
           // В строку кладём зашифрованную копию (cookie), а сравнение
-          // «изменилось ли» выше идёт по плейнтексту.
+          // «изменилось ли» идёт по плейнтексту.
           const stored = this.encodeUser ? this.encodeUser(user) : user;
           const json = this.encodeUser ? JSON.stringify(stored) : plainJson;
           const now = new Date().toISOString();
@@ -304,14 +329,14 @@ export class JsonDocument<T extends object> {
             typeof user.createdAt === 'string' ? user.createdAt : now,
             typeof user.updatedAt === 'string' ? user.updatedAt : now,
           );
-        }
 
-        for (const userId of previous.keys()) {
-          if (!next.has(userId)) remove.run(userId);
+          previous.set(userId, plainJson);
         }
       })();
 
-      this.persistedUsers = next;
+      this.persistedUsers = previous;
+      this.dirtyUsers.clear();
+      this.fullUsersRewrite = false;
     } catch (err: unknown) {
       console.error(
         '[SqliteDocument] не удалось сохранить users.json:',
@@ -319,4 +344,38 @@ export class JsonDocument<T extends object> {
       );
     }
   }
+}
+
+/**
+ * Подготовленные запросы к таблице users.
+ *
+ * Раньше `db.prepare` вызывался на каждое сохранение — мелочь, но на горячем
+ * пути (патч пользователя в круге нотификатора) она складывалась в тысячи
+ * лишних разборов SQL в сутки.
+ */
+let cachedStatements: {
+  db: ReturnType<typeof getDb>;
+  upsert: import('better-sqlite3').Statement;
+  remove: import('better-sqlite3').Statement;
+} | null = null;
+
+function userStatements(db: ReturnType<typeof getDb>) {
+  if (cachedStatements?.db === db) return cachedStatements;
+
+  cachedStatements = {
+    db,
+    upsert: db.prepare(
+      'INSERT INTO users(user_id, bars_login_hash, telegram_id, data, created_at, updated_at) ' +
+        'VALUES (?, ?, ?, ?, ?, ?) ' +
+        'ON CONFLICT(user_id) DO UPDATE SET ' +
+        '  bars_login_hash = excluded.bars_login_hash, ' +
+        '  telegram_id = excluded.telegram_id, ' +
+        '  data = excluded.data, ' +
+        '  created_at = excluded.created_at, ' +
+        '  updated_at = excluded.updated_at',
+    ),
+    remove: db.prepare('DELETE FROM users WHERE user_id = ?'),
+  };
+
+  return cachedStatements;
 }

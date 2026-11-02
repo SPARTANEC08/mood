@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 
 import { ScheduleApp } from '@/app/ScheduleApp';
 import { GuestOnboarding } from '@/components/guest/GuestOnboarding';
@@ -278,14 +278,13 @@ function LoginScreen({
   const [step, setStep] = useState<'credentials' | 'code'>('credentials');
   const [login, setLogin] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [code, setCode] = useState('');
   const [challengeId, setChallengeId] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   /** Когда перестаёт быть смысл ждать код. 0 = код не запрашивали. */
   const [codeDeadline, setCodeDeadline] = useState(0);
-  /** Что показать рядом с полем кода: сколько осталось ждать. */
-  const [secondsLeft, setSecondsLeft] = useState(0);
   /** Принятые на этом экране документы. Ни одна галочка не стоит по умолчанию. */
   const [accepted, setAccepted] = useState<Partial<Record<LegalDocId, boolean>>>({});
   /** Push — необязательный канал: галочка не блокирует вход. */
@@ -303,32 +302,18 @@ function LoginScreen({
   }, [step, onTwoFactorChange]);
 
   /**
-   * Обратный отсчёт до конца ожидания кода.
+   * Истёк срок ожидания кода.
    *
-   * Тик каждую секунду нужен только пока код запрошен, поэтому эффект поднимается
-   * и опускается вместе с шагом. На нуле экран сам возвращается к логину с
-   * паролем: ждать дальше нечего, а код в БАРС к этому моменту уже недействителен.
+   * Вынесено в колбэк для CodeCountdown: обратный отсчёт тикает раз в секунду
+   * и раньше ре-рендерил весь экран входа целиком.
    */
-  useEffect(() => {
-    if (step !== 'code' || !codeDeadline) return;
-
-    const tick = () => {
-      const left = Math.max(0, Math.ceil((codeDeadline - Date.now()) / 1000));
-      setSecondsLeft(left);
-
-      if (left === 0) {
-        setStep('credentials');
-        setCode('');
-        setChallengeId('');
-        setCodeDeadline(0);
-        setError('Код не пришёл за пять минут. Проверьте уведомления и войдите заново.');
-      }
-    };
-
-    tick();
-    const timer = window.setInterval(tick, 1000);
-    return () => window.clearInterval(timer);
-  }, [step, codeDeadline]);
+  const expireCode = useCallback(() => {
+    setStep('credentials');
+    setCode('');
+    setChallengeId('');
+    setCodeDeadline(0);
+    setError('Код не пришёл за пять минут. Проверьте уведомления и войдите заново.');
+  }, []);
 
   /** Отправляет логин с паролем. Запись заводится сервером, если её ещё нет. */
   async function submitCredentials() {
@@ -497,6 +482,8 @@ function LoginScreen({
           <input
             value={login}
             onChange={(event) => setLogin(event.target.value)}
+            name="username"
+            autoComplete="username"
             placeholder="Логин, например st123456"
             autoCapitalize="none"
             autoCorrect="off"
@@ -505,20 +492,42 @@ function LoginScreen({
             className="w-full rounded-[12px] border border-[var(--separator-soft)] bg-[var(--surface)] px-3 py-2.5 text-[15px] text-[var(--text-primary)] outline-none focus:border-[var(--accent)]"
           />
 
-          <input
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            type="password"
-            placeholder="Пароль"
-            autoCapitalize="none"
-            autoCorrect="off"
-            spellCheck={false}
-            enterKeyHint="go"
-            className="w-full rounded-[12px] border border-[var(--separator-soft)] bg-[var(--surface)] px-3 py-2.5 text-[15px] text-[var(--text-primary)] outline-none focus:border-[var(--accent)]"
-          />
+          <div className="relative">
+            <input
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              type={showPassword ? 'text' : 'password'}
+              name="password"
+              autoComplete="current-password"
+              placeholder="Пароль"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              enterKeyHint="go"
+              className="w-full rounded-[12px] border border-[var(--separator-soft)] bg-[var(--surface)] py-2.5 pl-3 pr-[92px] text-[15px] text-[var(--text-primary)] outline-none focus:border-[var(--accent)]"
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword((value) => !value)}
+              aria-label={showPassword ? 'Скрыть пароль' : 'Показать пароль'}
+              aria-pressed={showPassword}
+              className="pressable absolute right-1 top-1/2 -translate-y-1/2 rounded-[10px] px-3 py-2 text-[13px] font-semibold"
+              style={{ color: 'var(--accent)' }}
+            >
+              {showPassword ? 'Скрыть' : 'Показать'}
+            </button>
+          </div>
 
           {error ? (
-            <p className="text-[13px] leading-snug text-[var(--danger)]">{error}</p>
+            <p role="alert" aria-live="polite" className="text-[13px] leading-snug text-[var(--danger)]">
+              {error}
+            </p>
+          ) : null}
+
+          {!allAccepted ? (
+            <p className="text-[12px] leading-snug" style={{ color: 'var(--text-tertiary)' }}>
+              Отметьте все документы выше — без этого вход недоступен.
+            </p>
           ) : null}
 
           <button
@@ -535,16 +544,12 @@ function LoginScreen({
             БАРС прислал код подтверждения на {login.trim()}. Введите его — вход продолжится.
           </p>
 
-          {secondsLeft > 0 ? (
-            <p className="text-center text-[12px] leading-snug text-[var(--text-tertiary)]">
-              Код действует ограниченное время. Если он не придёт, экран вернётся к входу
-              через {secondsLeft} с.
-            </p>
-          ) : null}
+          <CodeCountdown deadline={codeDeadline} onExpire={expireCode} />
 
           <input
             value={code}
             onChange={(event) => setCode(event.target.value)}
+            name="code"
             placeholder="Код из СМС или приложения БАРС"
             inputMode="numeric"
             autoComplete="one-time-code"
@@ -554,7 +559,9 @@ function LoginScreen({
           />
 
           {error ? (
-            <p className="text-[13px] leading-snug text-[var(--danger)]">{error}</p>
+            <p role="alert" aria-live="polite" className="text-[13px] leading-snug text-[var(--danger)]">
+              {error}
+            </p>
           ) : null}
 
           <button
@@ -614,5 +621,52 @@ function LoginScreen({
       </p>
       </div>
     </div>
+  );
+}
+
+/**
+ * Обратный отсчёт до конца ожидания кода 2FA.
+ *
+ * Отдельный компонент намеренно: тик раз в секунду не должен ре-рендерить весь
+ * экран входа с формой, галочками согласий и списком документов.
+ */
+function CodeCountdown({ deadline, onExpire }: { deadline: number; onExpire: () => void }) {
+  const [secondsLeft, setSecondsLeft] = useState(() =>
+    deadline > 0 ? Math.max(0, Math.ceil((deadline - Date.now()) / 1000)) : 0,
+  );
+  const onExpireRef = useRef(onExpire);
+  onExpireRef.current = onExpire;
+  const firedRef = useRef(false);
+
+  useEffect(() => {
+    if (!deadline) {
+      setSecondsLeft(0);
+      return;
+    }
+
+    firedRef.current = false;
+
+    const tick = () => {
+      const left = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
+      setSecondsLeft(left);
+
+      if (left === 0 && !firedRef.current) {
+        firedRef.current = true;
+        onExpireRef.current();
+      }
+    };
+
+    tick();
+    const timer = window.setInterval(tick, 1000);
+    return () => window.clearInterval(timer);
+  }, [deadline]);
+
+  if (secondsLeft <= 0) return null;
+
+  return (
+    <p className="text-center text-[12px] leading-snug text-[var(--text-tertiary)]">
+      Код действует ограниченное время. Если он не придёт, экран вернётся к входу
+      через {secondsLeft} с.
+    </p>
   );
 }

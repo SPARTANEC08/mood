@@ -19,6 +19,7 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 
 import { type StoredUser, userStore } from '../../../db/storage/userStore.ts';
 import { missingConsents } from '../../legal/registry.ts';
+import { markActive } from '../../services/notifications/pollSchedule.ts';
 import { detectPlatform } from '../../utils/platform.ts';
 import { hashToken, verifyPwaToken } from '../../utils/pwaAuth.ts';
 
@@ -113,6 +114,16 @@ export async function authHook(request: FastifyRequest, reply: FastifyReply): Pr
 
   req.userId = user.userId;
   req.student = user;
+
+  /*
+   * Отметка реальной активности для графика нотификатора.
+   *
+   * Раньше markActive вызывался только из бота, а бот больше не работает с
+   * аккаунтами. Из-за этого lastActivity всегда был пуст, intervalFor всегда
+   * возвращал базовые 20 минут, и множитель «спящих» ×18 не включался: люди,
+   * не заходившие неделями, опрашивались на полной частоте.
+   */
+  markActive(user.userId);
 
   // Платформа обновляется только при реальном изменении и не чаще раза в час:
   // X-PWA-Platform — клиентский заголовок, и его чередование иначе вызывало бы

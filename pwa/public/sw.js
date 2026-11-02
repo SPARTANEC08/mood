@@ -151,7 +151,14 @@ async function precacheBuildAssets(cache) {
 
       if (entry.file) urls.add(`/${entry.file}`);
       for (const css of entry.css ?? []) urls.add(`/${css}`);
-      for (const asset of entry.assets ?? []) urls.add(`/${asset}`);
+      for (const asset of entry.assets ?? []) {
+        // PDF.js worker (≈280 КБ gzip) нужен только при открытии PDF. Держать
+        // его в обязательной установке — значит скачивать почти треть веса
+        // оболочки ради экрана, который большинство не открывает. В кэш он
+        // попадёт при первом использовании обычным cacheFirst ниже.
+        if (asset.includes('pdf.worker')) continue;
+        urls.add(`/${asset}`);
+      }
     }
 
     // Манифест сам в офлайне не нужен — занимал бы место и устаревал бы раньше

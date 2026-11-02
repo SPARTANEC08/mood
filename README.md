@@ -827,8 +827,8 @@ systemctl daemon-reload && systemctl enable --now mood mood-bot
 `npm run migrate:sqlite`, затем запустить сервис. Старые `db/data/*.json`
 остаются на месте до проверки — их удаление отдельное решение.
 
-Лимиты памяти выставлены в юнитах: приложение — `--max-old-space-size=768`,
-`MemoryMax=1536M`; бот — 96 и 160 МБ. Падение от OOM тогда видно в
+Лимиты памяти выставлены в юнитах: приложение — `--max-old-space-size=512`,
+`MemoryMax=700M` (прод RU — 830 МБ RAM); бот — 96 и 160 МБ. Падение от OOM тогда видно в
 `journalctl`, а не приходит молчаливым `SIGKILL`.
 
 ### Статика PWA
@@ -1057,7 +1057,7 @@ npm run apk:bot     # apk/*.apk → tg/apk/, старые версии удал�
 
 ### Память и CPU
 
-- `--max-old-space-size=768`, `MemoryMax=1536M`: OOM виден в journald, а не
+- `--max-old-space-size=512`, `MemoryMax=700M`: OOM виден в journald, а не
   приходит тихим SIGKILL. RSS процесса в простое — 55–60 МБ.
 - **sharp** ограничен семафором «одна задача за раз»: libvips иначе занимает
   потоки и выедает CPU у API/нотификатора на 1 vCPU.
