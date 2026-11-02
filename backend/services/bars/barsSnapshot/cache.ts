@@ -101,7 +101,13 @@ export async function getBarsSnapshot(
   const pending = inflight.get(userId);
   if (pending) return pending;
 
-  const promise = loadSnapshot(barsService, mailClient)
+  const promise = loadSnapshot(barsService, mailClient, {
+    // Предыдущий снимок: его медленные разделы (приказы/стипендия/книги/рейтинг)
+    // переиспользуются до 6 часов. Без этого зависшая на 30 секунд страница
+    // приказов держала весь pull-to-refresh «Успеваемости» и «Кабинета».
+    previous: cached?.snapshot,
+    previousAt: cached?.at,
+  })
     .then((snapshot) => {
       evictIfNeeded();
       snapshots.set(userId, { snapshot, at: Date.now() });

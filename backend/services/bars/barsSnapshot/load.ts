@@ -24,9 +24,29 @@ import { emptyAcademic, summarizeAcademic } from './summarize.ts';
  * нотификатор (`mailStatusCache`). Параметр оставлен ради совместимости
  * сигнатуры и намеренно не используется.
  */
+export interface SnapshotLoadOptions {
+  /**
+   * Предыдущий снимок. Его «медленные» разделы (приказы, стипендия, книги,
+   * рейтинг) переиспользуются, если им меньше MORE_REUSE_MS.
+   *
+   * Почему. БАРС периодически залипает на одной странице: замер показал
+   * 31 секунду на списке приказов при норме 0.2–1.2 с. Из-за этого весь
+   * pull-to-refresh на «Успеваемости» и в «Кабинете» ждал полминуты, хотя
+   * оценки и пропуски уже пришли. Эти разделы меняются раз в семестр, так что
+   * обновлять их на каждый жест бессмысленно.
+   */
+  previous?: BarsSnapshotResponse;
+  /** Когда предыдущий снимок был собран. */
+  previousAt?: number;
+}
+
+/** Как долго переиспользуем приказы/стипендию/книги/рейтинг. */
+const MORE_REUSE_MS = 6 * 60 * 60 * 1000;
+
 export async function loadSnapshot(
   barsService: BarsService,
   _mailClient: unknown = null,
+  options: SnapshotLoadOptions = {},
 ): Promise<BarsSnapshotResponse> {
   const scraper = barsService.getScraper();
 
@@ -37,13 +57,33 @@ export async function loadSnapshot(
   // и два её cheerio-разбора.
   const gradesPromise = scraper.getCurrentSemesterGrades();
 
-  // Обязательные разделы идут в одном allSettled вместе с необязательными:
-  // рейтинг и успеваемость для /api/bars/more необязательны, а без них
-  // блок отдаётся пустым — потерянный рейтинг лучше пустой полоски.
+  const canReuseMore = Boolean(
+    options.previous?.more &&
+      options.previousAt &&
+      Date.now() - options.previousAt < MORE_REUSE_MS,
+  );
+
+  /*
+   * «Кабинет» не должен страдать из-за одного зависшего раздела.
+   *
+   * grades и attendance обязательны: без них экран бесполезен. Приказы,
+   * стипендия, книги и рейтинг — нет: если БАРС не отдал их за отведённое
+   * время, отдаём прошлые значения или пустые списки, но не роняем весь снимок.
+   */
+  const morePromise = canReuseMore
+    ? Promise.resolve(options.previous!.more)
+    : collectMore(scraper, gradesPromise).catch((err: unknown) => {
+        console.warn(
+          '[BARS] разделы кабинета не обновились, отдаю прошлые/пустые:',
+          err instanceof Error ? err.message : err,
+        );
+        return options.previous?.more ?? emptyMore();
+      });
+
   const [gradesRes, attendanceRes, moreRes] = await Promise.allSettled([
     gradesPromise,
     scraper.getAttendance(),
-    collectMore(scraper, gradesPromise),
+    morePromise,
   ]);
 
   if (gradesRes.status === 'rejected') throw gradesRes.reason;
@@ -94,26 +134,45 @@ async function collectMore(
   // Общий промис страницы успеваемости с loadSnapshot: одна загрузка на снимок.
   gradesPromise: Promise<SemesterGrades>,
 ): Promise<BarsMoreResponse> {
+  /*
+   * Разделы «Кабинета» не обязательны: если БАРС залип на одном из них,
+   * отдаём остальные, а не роняем весь экран. 10 секунд — уже аномалия:
+   * в замерах те же страницы отвечают 0.2–1.2 с.
+   */
+  const withTimeout = <T>(promise: Promise<T>, label: string): Promise<T> =>
+    new Promise<T>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error(`${label}: таймаут 10 с`)), 10_000);
+      promise.then(
+        (value) => {
+          clearTimeout(timer);
+          resolve(value);
+        },
+        (err: unknown) => {
+          clearTimeout(timer);
+          reject(err);
+        },
+      );
+    });
+
   const [orders, scholarship, books, rating, academic] = await Promise.allSettled([
-    scraper.getOrders(),
-    scraper.getScholarship(),
-    scraper.getLibraryBooks(),
-    scraper.getRating(),
+    withTimeout(scraper.getOrders(), 'приказы'),
+    withTimeout(scraper.getScholarship(), 'стипендия'),
+    withTimeout(scraper.getLibraryBooks(), 'библиотека'),
+    withTimeout(scraper.getRating(), 'рейтинг'),
     gradesPromise,
   ]);
 
-  if (orders.status === 'rejected') throw orders.reason;
-  if (scholarship.status === 'rejected') throw scholarship.reason;
-  if (books.status === 'rejected') throw books.reason;
-
-  // Рейтинг и успеваемость необязательны: один недоступный раздел не должен
-  // убирать приказы, стипендию и библиотеку.
   return buildMore({
-    orders: orders.value,
-    scholarship: scholarship.value,
-    books: books.value,
+    orders: orders.status === 'fulfilled' ? orders.value : [],
+    scholarship: scholarship.status === 'fulfilled' ? scholarship.value : { isAppointed: false },
+    books: books.status === 'fulfilled' ? books.value : [],
+    // Рейтинг и успеваемость необязательны: один недоступный раздел не должен
+    // убирать приказы, стипендию и библиотеку.
     rating: rating.status === 'fulfilled' ? rating.value : emptyRating(),
-    academic: academic.status === 'fulfilled' ? summarizeAcademic(academic.value.subjects) : emptyAcademic(),
+    academic:
+      academic.status === 'fulfilled'
+        ? summarizeAcademic(academic.value.subjects)
+        : emptyAcademic(),
   });
 }
 
@@ -228,4 +287,15 @@ function emptyRating(): BarsMoreResponse['rating'] {
     comprehensive: null,
     overall: null,
   };
+}
+
+/** Пустой «Кабинет»: используется, когда разделы не пришли, а прошлого снимка нет. */
+function emptyMore(): BarsMoreResponse {
+  return buildMore({
+    orders: [],
+    scholarship: { isAppointed: false },
+    books: [],
+    rating: emptyRating(),
+    academic: emptyAcademic(),
+  });
 }

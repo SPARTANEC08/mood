@@ -150,7 +150,16 @@ console.log('\n— force пробивает TTL —');
 
   const forced = await getBarsSnapshot('u1', service, null, { force: true });
 
-  check('force ушёл в сеть', barsCalls - before === CALLS_PER_LOAD, String(barsCalls - before));
+  /*
+   * force обновляет только «быстрые» разделы — оценки и пропуски. Приказы,
+   * стипендия, книги и рейтинг живут 6 часов: БАРС на них иногда залипает на
+   * 30 секунд, и раньше из-за этого весь pull-to-refresh ждал полминуты.
+   */
+  check(
+    'force обновляет оценки/пропуски, медленные разделы берёт из кэша',
+    barsCalls - before === 2,
+    String(barsCalls - before),
+  );
   // Ключевое: stale-while-revalidate не должен срабатывать на форсированном
   // запросе — иначе принудительное обновление вернуло бы то, что было до него.
   check('force дождался свежего снимка', forced !== warm);

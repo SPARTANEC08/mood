@@ -606,7 +606,18 @@ console.log('\n— Гостевой режим —');
     parentScheduleName: 'ИЭ-11-26',
     totalLessons: 0,
     dateRange: { start: cacheFormat(cacheStart), finish: cacheFormat(cacheFinish) },
-    days: [],
+    // День обязателен: isUsableSchedule считает расписание без дней сбоем
+    // МЭИ. С пустым массивом тест уходил в сеть и зависел от скорости вуза.
+    days: [
+      {
+        date: `${String(cacheDay.getDate()).padStart(2, '0')}.${String(cacheDay.getMonth() + 1).padStart(2, '0')}.${cacheDay.getFullYear()}`,
+        rawDate: cacheFormat(cacheDay),
+        dayOfWeek: 1,
+        dayName: 'Понедельник',
+        dayShort: 'Пн',
+        slots: [],
+      },
+    ],
   }, Date.now());
 
   // Поиск группы ходит в МЭИ: подменяем только этот внешний запрос.
