@@ -5,8 +5,8 @@
  * заголовок, время и строки деталей должны выглядеть одинаково: человек видит
  * одно и то же событие в двух местах и не должен гадать, почему они разные.
  *
- * Новые события приходят со структурой (`data`) и рисуются карточками: чип КМ,
- * крупный балл, цветная дельта. Старые записи без структуры показываются
+ * Новые события приходят со структурой (`data`) и рисуются карточками: чип КМ
+ * и крупный балл. Старые записи без структуры показываются
  * текстовыми строками — история не должна «пропадать» после обновления.
  */
 
@@ -168,22 +168,9 @@ function GradeDetails({ items }: { items: AppNotificationGradeItem[] }) {
               </p>
             </div>
 
-            <div className="flex shrink-0 items-center gap-1.5">
-              <span className="text-[17px] font-semibold leading-none tabular-nums">
-                {formatScore(item.score)}
-              </span>
-              {item.delta !== null && item.delta !== 0 ? (
-                <span
-                  className="rounded-full px-1.5 py-0.5 text-[11px] font-semibold leading-none tabular-nums"
-                  style={{
-                    background: item.delta > 0 ? 'rgba(52, 199, 89, 0.14)' : 'rgba(255, 59, 48, 0.12)',
-                    color: item.delta > 0 ? 'var(--success)' : 'var(--danger)',
-                  }}
-                >
-                  {formatDelta(item.delta)}
-                </span>
-              ) : null}
-            </div>
+            <span className="shrink-0 text-[17px] font-semibold leading-none tabular-nums">
+              {formatScore(item.score)}
+            </span>
           </div>
         </div>
       ))}
@@ -312,10 +299,6 @@ function formatScore(value: number): string {
 }
 
 /** Дельта со знаком: +5, −0,5. */
-function formatDelta(value: number): string {
-  const sign = value > 0 ? '+' : '';
-  return `${sign}${formatScore(value)}`;
-}
 
 /**
  * Действие под уведомлением.
