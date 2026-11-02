@@ -21,6 +21,7 @@ import {
   maxPossible,
   minimumPlan,
   requiredAverage,
+  weightSums,
 } from '@/lib/gradeCalc';
 import { formatScore } from '@/lib/gradeDetails';
 import { haptic } from '@/lib/env';
@@ -94,6 +95,12 @@ export function GradeCalculatorSheet({
       ),
     [subject],
   );
+
+  const gradedPct = useMemo(() => {
+    if (!subject) return 0;
+    const sums = weightSums(subject);
+    return sums.total > 0 ? Math.round((sums.graded / sums.total) * 100) : 0;
+  }, [subject]);
 
   // При смене предмета порог встаёт на текущий средний: понятная точка старта.
   useEffect(() => {
@@ -171,25 +178,44 @@ export function GradeCalculatorSheet({
           </div>
 
           {/* 1. Текущие баллы и один итог по весам. */}
-          <section>
-            <div className="flex items-end justify-between gap-3 px-1">
-              <div>
-                <p className="text-[12px] font-semibold text-[var(--text-secondary)]">
-                  Текущие баллы
-                </p>
-                <p className="mt-0.5 text-[11px] text-[var(--text-tertiary)]">
+          <section className="space-y-3">
+            <div
+              className="relative overflow-hidden rounded-[20px] px-4 py-4"
+              style={{
+                background:
+                  'linear-gradient(135deg, var(--accent-soft), rgba(124,77,255,0.02) 72%)',
+                border: '1px solid var(--separator-soft)',
+              }}
+            >
+              <div className="flex items-end justify-between gap-4">
+                <div className="min-w-0">
+                  <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-[var(--text-tertiary)]">
+                    Текущий балл
+                  </p>
+                  <p className="mt-1 text-[46px] font-bold leading-none tracking-[-0.02em] tabular-nums">
+                    {formatScore(totalScore, 2)}
+                  </p>
+                </div>
+                <span
+                  className="shrink-0 rounded-full px-2.5 py-1 text-[10px] font-medium"
+                  style={{ background: 'var(--surface)', color: 'var(--text-tertiary)' }}
+                >
                   Σ балл × вес
-                </p>
+                </span>
               </div>
-              <p
-                className="text-[36px] font-bold leading-none tracking-[-0.02em] tabular-nums"
-                style={{ color: 'var(--accent)' }}
-              >
-                {formatScore(totalScore, 2)}
+
+              <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-[var(--separator-soft)]">
+                <div
+                  className="h-full rounded-full transition-[width] duration-500"
+                  style={{ width: `${gradedPct}%`, background: 'var(--accent)' }}
+                />
+              </div>
+              <p className="mt-1.5 text-[11px] text-[var(--text-tertiary)]">
+                закрыто {gradedPct}% веса
               </p>
             </div>
 
-            <div className="mt-3 overflow-hidden rounded-[16px] border border-[var(--separator-soft)]">
+            <div className="overflow-hidden rounded-[16px] border border-[var(--separator-soft)]">
               {subject.controlPoints.map((point) => (
                 <div
                   key={point.number}
@@ -223,20 +249,23 @@ export function GradeCalculatorSheet({
           </section>
 
           {/* 2. Простой ползунок порога. */}
-          <section>
-            <div className="mb-2 flex items-end justify-between gap-3 px-1">
-              <span className="text-[12px] font-semibold text-[var(--text-secondary)]">
+          <section
+            className="rounded-[20px] px-4 py-4"
+            style={{ background: 'var(--surface)', border: '1px solid var(--separator-soft)' }}
+          >
+            <div className="flex items-end justify-between gap-3">
+              <span className="text-[11px] font-medium uppercase tracking-[0.08em] text-[var(--text-tertiary)]">
                 Порог автомата
               </span>
               <span
-                className="text-[30px] font-bold leading-none tracking-[-0.02em] tabular-nums"
+                className="text-[34px] font-bold leading-none tracking-[-0.02em] tabular-nums"
                 style={{ color: 'var(--accent)' }}
               >
                 {formatScore(target, 1)}
               </span>
             </div>
 
-            <div className="relative h-10">
+            <div className="relative mt-3 h-10">
               <div
                 className="absolute inset-x-0 top-1/2 h-2 -translate-y-1/2 rounded-full"
                 style={{ background: sliderBackground }}
@@ -292,12 +321,16 @@ export function GradeCalculatorSheet({
               tone="success"
             />
           ) : (
-            <section>
-              <div className="mb-2 flex items-baseline justify-between gap-3 px-1">
-                <p className="text-[12px] font-semibold text-[var(--text-secondary)]">
-                  Что написать
-                </p>
-                <span className="text-[11px] tabular-nums text-[var(--text-tertiary)]">
+            <section
+              className="overflow-hidden rounded-[20px] px-4 py-4"
+              style={{
+                background: 'linear-gradient(135deg, var(--accent) 0%, var(--accent-fade-3) 100%)',
+                color: 'var(--accent-text)',
+              }}
+            >
+              <div className="mb-3 flex items-baseline justify-between gap-3">
+                <p className="text-[12px] font-semibold opacity-80">Что написать</p>
+                <span className="text-[11px] tabular-nums opacity-70">
                   {pending.length} КМ
                 </span>
               </div>
@@ -305,24 +338,26 @@ export function GradeCalculatorSheet({
                 {plan?.items.map((item) => (
                   <div
                     key={item.point.number}
-                    className="flex items-center gap-3 rounded-[14px] px-3.5 py-3"
-                    style={{ background: 'var(--surface-grouped)' }}
+                    className="flex items-center gap-3 rounded-[14px] px-3 py-2.5"
+                    style={{ background: 'rgba(255,255,255,0.14)' }}
                   >
                     <span
                       className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[12px] font-bold tabular-nums"
-                      style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}
+                      style={{ background: 'rgba(255,255,255,0.2)' }}
                     >
                       {item.point.number}
                     </span>
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-[14px]">{item.point.title ?? 'Без названия'}</p>
-                      <p className="mt-0.5 text-[11px] tabular-nums text-[var(--text-tertiary)]">
+                      <p className="truncate text-[14px] font-medium">
+                        {item.point.title ?? 'Без названия'}
+                      </p>
+                      <p className="mt-0.5 text-[11px] tabular-nums opacity-70">
                         вес {formatScore(item.point.weight, 0)}%
                       </p>
                     </div>
                     <span
                       className="shrink-0 rounded-full px-3 py-1.5 text-[13px] font-bold tabular-nums"
-                      style={{ background: 'var(--accent)', color: 'var(--accent-text)' }}
+                      style={{ background: 'var(--accent-text)', color: 'var(--accent)' }}
                     >
                       ≥ {formatScore(item.score, 0)}
                     </span>
