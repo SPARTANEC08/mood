@@ -11,7 +11,7 @@ import type { ConsentSnapshot, LegalDocId, LegalDocument } from './types.ts';
 export const LEGAL_DOCUMENTS: Record<LegalDocId, LegalDocument> = {
   processing: {
     id: 'processing',
-    version: '1.0',
+    version: '1.1',
     title: 'Согласие на обработку персональных данных',
     shortTitle: 'Обработка персональных данных',
     url: '/legal/consent-processing.html',
@@ -19,7 +19,7 @@ export const LEGAL_DOCUMENTS: Record<LegalDocId, LegalDocument> = {
   },
   dissemination: {
     id: 'dissemination',
-    version: '1.0',
+    version: '1.1',
     title: 'Согласие на предоставление данных одногруппникам',
     shortTitle: 'Данные в материалах группы',
     url: '/legal/consent-dissemination.html',
@@ -27,7 +27,7 @@ export const LEGAL_DOCUMENTS: Record<LegalDocId, LegalDocument> = {
   },
   push: {
     id: 'push',
-    version: '1.0',
+    version: '1.1',
     title: 'Согласие на уведомления в приложении (Web Push)',
     shortTitle: 'Push-уведомления',
     url: '/legal/consent-push.html',
@@ -35,7 +35,7 @@ export const LEGAL_DOCUMENTS: Record<LegalDocId, LegalDocument> = {
   },
   terms: {
     id: 'terms',
-    version: '1.0',
+    version: '1.1',
     title: 'Пользовательское соглашение',
     shortTitle: 'Пользовательское соглашение',
     url: '/legal/terms.html',
@@ -43,7 +43,7 @@ export const LEGAL_DOCUMENTS: Record<LegalDocId, LegalDocument> = {
   },
   guest: {
     id: 'guest',
-    version: '1.0',
+    version: '1.1',
     title: 'Согласие для гостевого режима',
     shortTitle: 'Гостевой режим',
     url: '/legal/consent-guest.html',
@@ -51,7 +51,7 @@ export const LEGAL_DOCUMENTS: Record<LegalDocId, LegalDocument> = {
   },
   age: {
     id: 'age',
-    version: '1.0',
+    version: '1.1',
     title: 'Подтверждение возраста 18+',
     shortTitle: 'Подтверждение 18+',
     url: '/legal/age-18.html',
@@ -62,7 +62,7 @@ export const LEGAL_DOCUMENTS: Record<LegalDocId, LegalDocument> = {
 /** Политика — информационный документ, галочки не требует. */
 export const POLICY_DOCUMENT = {
   id: 'privacy',
-  version: '1.0',
+  version: '1.1',
   title: 'Политика обработки персональных данных',
   url: '/legal/privacy-policy.html',
 } as const;

@@ -385,14 +385,14 @@ const legal: LegalStatus = {
   consentRequired: false,
   missing: [],
   accepted: [
-    { id: 'processing', version: '1.0', acceptedAt: new Date(nowMs - 10 * DAY).toISOString() },
-    { id: 'terms', version: '1.0', acceptedAt: new Date(nowMs - 10 * DAY).toISOString() },
-    { id: 'age', version: '1.0', acceptedAt: new Date(nowMs - 10 * DAY).toISOString() },
+    { id: 'processing', version: '1.1', acceptedAt: new Date(nowMs - 10 * DAY).toISOString() },
+    { id: 'terms', version: '1.1', acceptedAt: new Date(nowMs - 10 * DAY).toISOString() },
+    { id: 'age', version: '1.1', acceptedAt: new Date(nowMs - 10 * DAY).toISOString() },
   ],
   documents: [
     {
       id: 'processing',
-      version: '1.0',
+      version: '1.1',
       title: 'Согласие на обработку персональных данных',
       shortTitle: 'Обработка персональных данных',
       url: '/legal/consent-processing.html',
@@ -400,7 +400,7 @@ const legal: LegalStatus = {
     },
     {
       id: 'dissemination',
-      version: '1.0',
+      version: '1.1',
       title: 'Согласие на предоставление данных одногруппникам',
       shortTitle: 'Данные в материалах группы',
       url: '/legal/consent-dissemination.html',
@@ -408,7 +408,7 @@ const legal: LegalStatus = {
     },
     {
       id: 'push',
-      version: '1.0',
+      version: '1.1',
       title: 'Согласие на уведомления в приложении (Web Push)',
       shortTitle: 'Push-уведомления',
       url: '/legal/consent-push.html',
@@ -416,7 +416,7 @@ const legal: LegalStatus = {
     },
     {
       id: 'terms',
-      version: '1.0',
+      version: '1.1',
       title: 'Пользовательское соглашение',
       shortTitle: 'Пользовательское соглашение',
       url: '/legal/terms.html',
@@ -424,7 +424,7 @@ const legal: LegalStatus = {
     },
     {
       id: 'age',
-      version: '1.0',
+      version: '1.1',
       title: 'Подтверждение возраста 18+',
       shortTitle: 'Подтверждение 18+',
       url: '/legal/age-18.html',
@@ -433,7 +433,7 @@ const legal: LegalStatus = {
   ],
   policy: {
     id: 'privacy',
-    version: '1.0',
+    version: '1.1',
     title: 'Политика обработки персональных данных',
     url: '/legal/privacy-policy.html',
   },
