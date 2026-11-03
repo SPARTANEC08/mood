@@ -19,10 +19,12 @@
       .muted { color: #aaa; }
       .box { border-color: #333; background: #1d1a29; }
     }
+  .legal-back{display:inline-flex;align-items:center;gap:6px;margin:0 0 14px;padding:6px 11px;border:1px solid #ddd;border-radius:999px;font-size:14px;line-height:1;text-decoration:none;color:#555}.legal-back:hover{border-color:#7c4dff;color:#7c4dff}@media (prefers-color-scheme:dark){.legal-back{border-color:#3a3450;color:#bbb}.legal-back:hover{border-color:#b79bff;color:#b79bff}}
   </style>
 </head>
 <body>
 <main>
+  <a class="legal-back" href="/legal/archive/" data-fallback="/legal/archive/" aria-label="Назад">← Назад</a>
   <h1>Согласие для гостевого режима</h1>
   <p class="muted">Архивная редакция. Не действует. Действующие документы — в разделе <a href="/legal/privacy-policy.html">/legal/</a>.</p>
   <p class="muted">Версия 1.0. Документ действует с момента акцепта в приложении Mood.</p>
@@ -59,5 +61,6 @@
   <h2>5. Акцепт</h2>
   <p>Согласие оформляется отдельно от иных документов и подтверждается отдельной галочкой. Фиксируются версия, дата и время акцепта, IP-адрес и способ.</p>
 </main>
+  <script src="/legal/back.js" defer></script>
 </body>
 </html>
