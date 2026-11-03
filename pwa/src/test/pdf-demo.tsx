@@ -40,6 +40,7 @@ type Platform = 'ios' | 'android';
 const SRC = '/preview/sample.pdf';
 const FILE_NAME = 'Сборник задач по физике.pdf';
 const MAX_PAGE_WIDTH = 620;
+const MAX_CANVAS_WIDTH = 1400;
 const MIN_ZOOM = 1;
 const MAX_ZOOM = 4;
 const DOUBLE_TAP_ZOOM = 2.5;
@@ -119,6 +120,8 @@ function PdfReader({
   const baseWidthRef = useRef(340);
   const zoomRef = useRef(MIN_ZOOM);
   const pendingAnchorRef = useRef<PendingAnchor | null>(null);
+  const currentPageRef = useRef(1);
+  const visibilityRef = useRef(new Map<number, boolean>());
 
   const [numPages, setNumPages] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
@@ -133,6 +136,7 @@ function PdfReader({
   const [sharing, setSharing] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  currentPageRef.current = currentPage;
 
   const showNotice = useCallback((text: string) => {
     setNotice(text);
@@ -441,28 +445,39 @@ function PdfReader({
     const root = scrollRef.current;
     if (!root || numPages === 0) return undefined;
 
+    visibilityRef.current.clear();
+    setVisiblePages(new Set([currentPageRef.current]));
+
+    const limit = zoom > 1.05 ? 3 : 4;
     const observer = new IntersectionObserver(
       (entries) => {
-        setVisiblePages((previous) => {
-          const next = new Set(previous);
-          for (const entry of entries) {
-            const page = Number((entry.target as HTMLElement).dataset.page);
-            if (!Number.isFinite(page) || page <= 0) continue;
-            if (entry.isIntersecting) {
-              next.add(page);
-            } else if (next.size > 8) {
-              next.delete(page);
-            }
+        for (const entry of entries) {
+          const page = Number((entry.target as HTMLElement).dataset.page);
+          if (Number.isFinite(page) && page > 0) {
+            visibilityRef.current.set(page, entry.isIntersecting);
           }
-          return next;
-        });
+        }
+
+        const visible = [...visibilityRef.current.entries()]
+          .filter(([, isVisible]) => isVisible)
+          .map(([page]) => page);
+
+        if (visible.length === 0) visible.push(currentPageRef.current);
+        visible.sort(
+          (a, b) => Math.abs(a - currentPageRef.current) - Math.abs(b - currentPageRef.current),
+        );
+        setVisiblePages(new Set(visible.slice(0, limit)));
       },
-      { root, rootMargin: '900px 0px 900px 0px', threshold: 0.01 },
+      {
+        root,
+        rootMargin: zoom > 1.05 ? '320px 0px' : '800px 0px',
+        threshold: 0.01,
+      },
     );
 
     root.querySelectorAll<HTMLElement>('[data-page]').forEach((node) => observer.observe(node));
     return () => observer.disconnect();
-  }, [numPages, pageWidth]);
+  }, [numPages, pageWidth, zoom]);
 
   const updateCurrentPage = useCallback(() => {
     const root = scrollRef.current;
@@ -558,6 +573,11 @@ function PdfReader({
 
   const pages = useMemo(() => Array.from({ length: numPages }, (_, index) => index + 1), [numPages]);
   const estimatedHeight = Math.round(pageWidth * 1.414);
+  const renderDpr = Math.min(
+    2,
+    Math.max(0.5, MAX_CANVAS_WIDTH / pageWidth),
+    window.devicePixelRatio || 1,
+  );
 
   return (
     <div
@@ -668,7 +688,7 @@ function PdfReader({
                     <Page
                       pageNumber={page}
                       width={pageWidth}
-                      devicePixelRatio={Math.min(2, window.devicePixelRatio || 1)}
+                      devicePixelRatio={renderDpr}
                       renderTextLayer={false}
                       renderAnnotationLayer={false}
                       loading={null}
