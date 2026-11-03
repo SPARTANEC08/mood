@@ -19,7 +19,6 @@ import { Page } from '@/components/Page';
 import { Card, SkeletonCard, Toast } from '@/components/ui';
 import { RefreshIndicator } from '@/components/RefreshIndicator';
 import { usePullToRefresh } from '@/components/PullToRefresh';
-import { GameOverlay } from '@/components/games/GameOverlay';
 import { DeleteAccountCard } from '@/components/profile/DeleteAccountCard';
 import { HiddenMenuScreen } from '@/components/profile/HiddenMenuScreen';
 import { SettingsCard } from '@/components/profile/SettingsCard';
@@ -67,7 +66,6 @@ export function ProfilePage({ profile }: { profile: BootstrapResponse }) {
   } = useAppData();
 
   const [toast, setToast] = useState<string | null>(null);
-  const [gameOpen, setGameOpen] = useState(false);
 
   /**
    * Скрытый экран: десять быстрых тапов по карточке профиля.
@@ -578,7 +576,7 @@ export function ProfilePage({ profile }: { profile: BootstrapResponse }) {
               type="button"
               onClick={() => {
                 haptic('light');
-                setGameOpen(true);
+                openLink('https://109-120-129-61.sslip.io/games/block-blast/');
               }}
               className="pressable flex w-full items-center gap-3 px-4 py-3 text-left active:pressable-active"
             >
@@ -595,10 +593,10 @@ export function ProfilePage({ profile }: { profile: BootstrapResponse }) {
               <span className="min-w-0 flex-1">
                 <span className="block text-[14px] font-medium">Block Pop</span>
                 <span className="block text-[12px] text-[var(--text-tertiary)]">
-                  Головоломка · играть внутри Mood
+                  Головоломка · откроется на отдельном сайте
                 </span>
               </span>
-              <ChevronRight size={16} className="shrink-0" style={{ color: 'var(--accent)' }} aria-hidden />
+              <ArrowUpRight size={16} className="shrink-0" style={{ color: 'var(--accent)' }} aria-hidden />
             </button>
           </Card>
 
@@ -623,7 +621,6 @@ export function ProfilePage({ profile }: { profile: BootstrapResponse }) {
         </div>
       </Page>
 
-      {gameOpen ? <GameOverlay onClose={() => setGameOpen(false)} /> : null}
       {toast ? <Toast text={toast} onClose={() => setToast(null)} /> : null}
     </>
   );
