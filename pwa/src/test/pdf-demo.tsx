@@ -122,6 +122,7 @@ function PdfReader({
   const pendingAnchorRef = useRef<PendingAnchor | null>(null);
   const currentPageRef = useRef(1);
   const visibilityRef = useRef(new Map<number, boolean>());
+  const previewSlotRef = useRef<HTMLElement | null>(null);
 
   const [numPages, setNumPages] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
@@ -161,13 +162,17 @@ function PdfReader({
     return () => observer.disconnect();
   }, []);
 
-  const clearContentTransform = useCallback(() => {
-    const content = contentRef.current;
-    if (!content) return;
-    content.style.transition = 'none';
-    content.style.transform = '';
-    content.style.transformOrigin = '';
-    content.style.willChange = 'auto';
+  const clearPreviewTransform = useCallback(() => {
+    const slot = previewSlotRef.current;
+    if (!slot) return;
+    slot.style.transition = 'none';
+    slot.style.transform = '';
+    slot.style.transformOrigin = '';
+    slot.style.willChange = 'auto';
+    slot.style.zIndex = '';
+    slot.style.position = '';
+    slot.style.overflow = '';
+    previewSlotRef.current = null;
   }, []);
 
   /**
@@ -182,14 +187,14 @@ function PdfReader({
 
       const nextZoom = clamp(targetZoom, MIN_ZOOM, MAX_ZOOM);
       if (Math.abs(nextZoom - zoomRef.current) < 0.001) {
-        clearContentTransform();
+        clearPreviewTransform();
         return;
       }
 
       const rootRect = root.getBoundingClientRect();
       const nextWidth = Math.round(baseWidthRef.current * nextZoom);
       if (nextWidth === pageWidthRef.current) {
-        clearContentTransform();
+        clearPreviewTransform();
         return;
       }
 
@@ -205,7 +210,7 @@ function PdfReader({
       setZoom(nextZoom);
       setPageWidth(nextWidth);
     },
-    [clearContentTransform],
+    [clearPreviewTransform],
   );
 
   const toggleZoomAt = useCallback(
@@ -237,8 +242,8 @@ function PdfReader({
     const maxTop = Math.max(0, root.scrollHeight - root.clientHeight);
     root.scrollLeft = clamp(pending.originX * pending.ratio - pending.midX, 0, maxLeft);
     root.scrollTop = clamp(pending.originY * pending.ratio - pending.midY, 0, maxTop);
-    clearContentTransform();
-  }, [pageWidth, clearContentTransform]);
+    clearPreviewTransform();
+  }, [pageWidth, clearPreviewTransform]);
 
   /**
    * Pinch и двойной тап.
@@ -296,9 +301,23 @@ function PdfReader({
         };
         tapStart = null;
         moved = false;
-        content.style.transition = 'none';
-        content.style.transformOrigin = `${pinch.originX}px ${pinch.originY}px`;
-        content.style.willChange = 'transform';
+
+        // Во время жеста увеличиваем только страницу под пальцами, а не весь
+        // контент из 91 страницы: огромный transform-слой — это и есть OOM.
+        const slot = (document.elementFromPoint(mid.x, mid.y) as HTMLElement | null)?.closest<HTMLElement>(
+          '[data-page]',
+        );
+        if (slot) {
+          const slotRect = slot.getBoundingClientRect();
+          previewSlotRef.current = slot;
+          slot.style.position = 'relative';
+          slot.style.overflow = 'visible';
+          slot.style.zIndex = '30';
+          slot.style.transition = 'none';
+          slot.style.transformOrigin = `${mid.x - slotRect.left}px ${mid.y - slotRect.top}px`;
+          slot.style.willChange = 'transform';
+        }
+
         event.preventDefault();
       } else if (event.touches.length === 1) {
         const touch = event.touches[0];
@@ -321,7 +340,10 @@ function PdfReader({
         const dx = mid.x - pinch.midX;
         const dy = mid.y - pinch.midY;
 
-        content.style.transform = `translate3d(${dx}px, ${dy}px, 0) scale(${visualScale})`;
+        const slot = previewSlotRef.current;
+        if (slot) {
+          slot.style.transform = `translate3d(${dx}px, ${dy}px, 0) scale(${visualScale})`;
+        }
         pinch.lastScale = visualScale;
         pinch.lastDx = dx;
         pinch.lastDy = dy;
@@ -343,11 +365,11 @@ function PdfReader({
         const rootRect = root.getBoundingClientRect();
 
         if (Math.abs(targetZoom - pinch.startZoom) < 0.001) {
-          clearContentTransform();
+          clearPreviewTransform();
         } else {
           const nextWidth = Math.round(baseWidthRef.current * targetZoom);
           if (nextWidth === pageWidthRef.current) {
-            clearContentTransform();
+            clearPreviewTransform();
           } else {
             pendingAnchorRef.current = {
               originX: pinch.originX,
@@ -393,7 +415,7 @@ function PdfReader({
 
     const onTouchCancel = () => {
       if (pinch) {
-        clearContentTransform();
+        clearPreviewTransform();
         pinch = null;
       }
       tapStart = null;
@@ -417,7 +439,7 @@ function PdfReader({
       root.removeEventListener('gesturestart', preventSafariGesture);
       root.removeEventListener('gesturechange', preventSafariGesture);
     };
-  }, [clearContentTransform, toggleZoomAt, numPages]);
+  }, [clearPreviewTransform, toggleZoomAt, numPages]);
 
   useEffect(() => {
     if (numPages > 0) showNotice('Pinch или двойной тап — масштаб');
@@ -697,11 +719,11 @@ function PdfReader({
                         <Page
                           pageNumber={page}
                           width={RENDER_WIDTH}
-                          devicePixelRatio={1}
+                          renderMode="svg"
                           renderTextLayer={false}
                           renderAnnotationLayer={false}
                           loading={null}
-                          onRenderSuccess={(pageInfo) => {
+                          onLoadSuccess={(pageInfo) => {
                             setPageHeights((previous) =>
                               previous[page] === pageInfo.height
                                 ? previous
