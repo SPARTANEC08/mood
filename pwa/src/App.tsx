@@ -83,16 +83,30 @@ function clearLoginQuery(): void {
  * текущий URL, а не ссылка с query-параметром). ?install=1 оставлен для
  * старых ссылок.
  */
+function isSetupPath(): boolean {
+  return window.location.pathname === '/setup' || window.location.pathname === '/setup/';
+}
+
 function isInstallRequested(): boolean {
-  if (window.location.pathname === '/setup') return true;
+  if (isSetupPath()) return true;
   return new URLSearchParams(window.location.search).get('install') === '1';
+}
+
+/**
+ * Явный /setup должен показывать инструкцию даже внутри standalone-оболочки.
+ * Старые PWA и закэшированный редирект на /setup/ иначе приводят к входу.
+ */
+function isExplicitSetup(): boolean {
+  return isSetupPath();
 }
 
 export default function App() {
   const [phase, setPhase] = useState<Phase>(() => {
     // В уже установленном приложении ?install=1 мог остаться в адресе иконки
-    // (iOS сохраняет текущий URL). Не показываем установку повторно.
-    if (isInstallRequested() && !isStandalone()) return 'install';
+    // (iOS сохраняет текущий URL). Не показываем установку повторно. Но явный
+    // /setup с лендинга — показываем всегда: старые PWA открывают его внутри
+    // standalone-контекста, и человек должен увидеть инструкцию, а не вход.
+    if (isInstallRequested() && (!isStandalone() || isExplicitSetup())) return 'install';
     return hasUsablePwaToken() ? 'ready' : 'welcome';
   });
   /** null — конфиг ещё грузится; false — рубильник регистрации закрыт. */
@@ -120,8 +134,9 @@ export default function App() {
 
     // ?install=1 важнее токена, но только в браузере. В установленном
     // приложении этот параметр мог остаться в адресе иконки — тогда нужен
-    // обычный вход, а не повторная установка.
-    if (isInstallRequested() && !isStandalone()) return;
+    // обычный вход, а не повторная установка. Явный /setup — исключение:
+    // его открывает лендинг, и инструкция нужна даже в standalone.
+    if (isInstallRequested() && (!isStandalone() || isExplicitSetup())) return;
 
     setPhase(hasUsablePwaToken() ? 'ready' : 'welcome');
   }, []);
@@ -131,7 +146,7 @@ export default function App() {
     // «На экран Домой» сохраняет ТЕКУЩИЙ URL, поэтому иконка должна получить
     // «/», а не «/setup» или «/?install=1». Сам экран установки при этом
     // остаётся на месте: фаза уже зафиксирована в состоянии.
-    if (window.location.pathname === '/setup') {
+    if (isSetupPath()) {
       window.history.replaceState(null, '', '/');
       return;
     }
