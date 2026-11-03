@@ -20,8 +20,15 @@ import {
   toMoscowRaw,
 } from '@/components/schedule/helpers';
 import { useAppData } from '@/lib/dataContext';
-import { formatRawDate, formatTargetDate, parseRawDate } from '@/lib/dates';
-import { readLastDay, writeLastDay } from '@/lib/lastDay';
+import {
+  formatRawDate,
+  formatTargetDate,
+  isSameWeekRaw,
+  isWeekBeforeRaw,
+  parseRawDate,
+  weekStartRaw,
+} from '@/lib/dates';
+import { clearLastDay, readLastDay, writeLastDay } from '@/lib/lastDay';
 import { perfLog } from '@/lib/perf';
 import type { ApiHomework, ApiSubjectGrade } from '@/types/api';
 import { haptic } from '@/lib/env';
@@ -135,7 +142,15 @@ export function SchedulePage({
   // сегодняшнего. Восстанавливается из localStorage ДО первого рендера, чтобы
   // после перезагрузки и смены вкладки человек сразу видел свой день — без
   // анимации «приезда» от чужой страницы.
-  const [selectedDate, setSelectedDate] = useState<string | null>(() => readLastDay(userId));
+  //
+  // Восстанавливаем ТОЛЬКО день текущей недели. Иначе приложение через неделю
+  // открывалось на том же дне недели, но с прошлым расписанием: у ИЭ-43-26
+  // вторник отличается одной парой (Математика ↔ Проектная деятельность), и
+  // человек видел «сегодня» чужой предмет, хотя данные с сервера верные.
+  const [selectedDate, setSelectedDate] = useState<string | null>(() => {
+    const saved = readLastDay(userId);
+    return saved && isSameWeekRaw(saved, toMoscowRaw()) ? saved : null;
+  });
 
   /** Смена дня человеком: помним её между открытиями приложения. */
   const chooseDay = useCallback(
@@ -270,14 +285,55 @@ export function SchedulePage({
    * то же самое, а React на то же значение дерево не перерисовывает.
    */
   useEffect(() => {
-    const timer = setInterval(() => {
+    const syncToday = (): void => {
       const current = toMoscowRaw();
       setToday((prev) => (prev === current ? prev : current));
       setNow(Date.now());
-    }, 60_000);
+    };
 
-    return () => clearInterval(timer);
+    // Возврат в приложение: пока вкладка была в фоне, интервал мог не тикать,
+    // а день (и неделя) уже сменились. Проверяем сразу, не ждём минуту.
+    const onVisible = (): void => {
+      if (document.visibilityState === 'visible') syncToday();
+    };
+
+    document.addEventListener('visibilitychange', onVisible);
+    const timer = setInterval(syncToday, 60_000);
+
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      clearInterval(timer);
+    };
   }, []);
+
+  /**
+   * День из прошлой недели больше не показываем.
+   *
+   * Приложение может висеть открытым (или стоять в фоне) несколько дней. Тогда
+   * «сегодня» уже в новой неделе, а выбранный день остался в старой — и лента
+   * показывает прошлый вторник как сегодняшний. Это не безобидно: недельное
+   * расписание повторяется, и отличается всего одна пара, поэтому подмена
+   * незаметна. Сбрасываем выбор: `effectiveDate` сам возьмёт ближайший день.
+   *
+   * Реагируем именно на СМЕНУ недели, а не на «выбран день из прошлой недели»:
+   * пролистать на прошлую неделю в пределах окна −14…+90 дней — законное
+   * действие, и такой выбор отбирать нельзя. Дни будущих недель тоже не трогаем.
+   */
+  const todayWeekRef = useRef<string | null>(null);
+  useEffect(() => {
+    const currentWeek = weekStartRaw(today);
+    const previousWeek = todayWeekRef.current;
+    todayWeekRef.current = currentWeek;
+
+    // Первый прогон (монтирование) или неразобранная дата: сбрасывать нечего.
+    if (!currentWeek || !previousWeek || previousWeek === currentWeek) return;
+
+    if (!selectedDate) return;
+    if (!isWeekBeforeRaw(selectedDate, today)) return;
+
+    setSelectedDate(null);
+    clearLastDay(userId);
+  }, [selectedDate, today, userId]);
 
 
   /**

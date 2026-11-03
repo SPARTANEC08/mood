@@ -126,6 +126,35 @@ export function shiftRawDate(raw: string, days: number): string {
 }
 
 /**
+ * Понедельник недели, в которую попадает дата «YYYY.MM.DD».
+ *
+ * Нужен, чтобы сверять календарные недели, а не отдельные дни: расписание
+ * студента живёт неделями, и «тот же день недели» через семь дней — это уже
+ * другое расписание, хотя номер пары и время совпадают.
+ *
+ * Возвращает «YYYY.MM.DD» в UTC-полночь или null, если дата не разобралась.
+ */
+export function weekStartRaw(raw: string): string | null {
+  const date = parseRawDate(raw);
+  if (!date) return null;
+  date.setUTCDate(date.getUTCDate() - ((date.getUTCDay() + 6) % 7)); // 0 = Пн
+  return formatRawDate(date);
+}
+
+/** Одна ли календарная неделя (пн–вс) у двух дат «YYYY.MM.DD». */
+export function isSameWeekRaw(a: string, b: string): boolean {
+  const left = weekStartRaw(a);
+  return left !== null && left === weekStartRaw(b);
+}
+
+/** Дата `a` лежит в неделе строго раньше недели `b`. */
+export function isWeekBeforeRaw(a: string, b: string): boolean {
+  const left = weekStartRaw(a);
+  const right = weekStartRaw(b);
+  return left !== null && right !== null && left < right;
+}
+
+/**
  * Московское время события: «14:32».
  *
  * Часовой пояс устройства здесь не подходит: сервер и все данные живут по

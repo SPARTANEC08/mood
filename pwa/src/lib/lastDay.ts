@@ -31,3 +31,20 @@ export function writeLastDay(userId: string, rawDate: string): void {
     // см. readLastDay
   }
 }
+
+/**
+ * Забывает запомненный день.
+ *
+ * Нужен, когда сохранённая дата перестала быть актуальной: приложение открыли
+ * через неделю, и «последний день» указывает на прошлую неделю. Оставлять его
+ * в хранилище нельзя — иначе при следующем запуске он снова будет прочитан
+ * (хотя при чтении дата всё равно проверяется на текущую неделю).
+ */
+export function clearLastDay(userId: string): void {
+  if (!userId) return;
+  try {
+    window.localStorage.removeItem(PREFIX + userId);
+  } catch {
+    // см. readLastDay
+  }
+}

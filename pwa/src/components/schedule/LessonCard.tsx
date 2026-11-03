@@ -1,21 +1,61 @@
 /**
  * Карточка пары и карточка перерыва для ленты расписания.
  *
- * Презентационные компоненты без собственного состояния и запросов: всё
- * приходит пропами, обработчики поднимаются на страницу. Вынесены из
- * SchedulePage, чтобы страница не разрасталась разметкой карточки.
+ * Данные и обработчики приходят пропами, запросов внутри нет. Единственное
+ * собственное состояние — выбранный вариант пары по подгруппам: какой из них
+ * смотреть, знает только человек. Вынесены из SchedulePage, чтобы страница не
+ * разрасталась разметкой карточки.
  */
 
-import { memo, type MouseEvent } from 'react';
+import { memo, useState, type MouseEvent } from 'react';
 
 import { ChevronRight, MapPin, StickyNote, User } from 'lucide-react';
 
 import { FileAttachmentList } from '@/components/FileAttachmentList';
 import { Card, KindBadge, Row } from '@/components/ui';
-import { plural } from '@/lib/dates';
 import { shortKindLabel } from '@/lib/format';
-import type { ApiHomework, ApiLessonSlot } from '@/types/api';
+import type { ApiHomework, ApiLessonSlot, ApiLessonVariant } from '@/types/api';
 import { truncatePreview } from './helpers';
+
+/**
+ * Подпись варианта на чипе.
+ *
+ * `subgroup` приходит из МЭИ строкой вида «ИЭ-43-26\2п.». Показывать её целиком
+ * в чипе бессмысленно: номер группы повторяется в шапке расписания. Достаём
+ * номер подгруппы, а если его в строке нет — нумеруем варианты по порядку.
+ */
+function variantLabel(subgroup: string | undefined, index: number): string {
+  const match = subgroup ? /(\d+)\s*п\.?\s*$/i.exec(subgroup.trim()) : null;
+  return match ? `${match[1]} п.` : `Вариант ${index + 1}`;
+}
+
+/** Чип варианта: обычная button, поэтому клик по нему не открывает предмет. */
+function VariantChip({
+  variant,
+  index,
+  active,
+  onSelect,
+}: {
+  variant: ApiLessonVariant;
+  index: number;
+  active: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      onClick={onSelect}
+      className="pressable rounded-full px-2 py-0.5 text-[12px] font-semibold active:pressable-active"
+      style={{
+        background: active ? 'var(--accent)' : 'var(--accent-soft)',
+        color: active ? '#fff' : 'var(--accent)',
+      }}
+    >
+      {variantLabel(variant.subgroup, index)}
+    </button>
+  );
+}
 
 /**
  * Вложенные интерактивные элементы карточки.
@@ -56,8 +96,24 @@ export const LessonCard = memo(function LessonCard({
   isNow = false,
   minutesLeft = 0,
 }: LessonCardProps) {
-  const variant = slot.variants[0];
+  /**
+   * Вариант пары, который показан.
+   *
+   * Пара по подгруппам приходит несколькими вариантами (у 1-й и 2-й подгруппы
+   * разные преподаватели, аудитории, а иногда и предметы). Раньше карточка
+   * всегда брала первый вариант — и вторая подгруппа видела чужого
+   * преподавателя, а при разных дисциплинах ещё и чужой предмет. Теперь
+   * варианты переключаются чипами; по умолчанию первый, как и раньше.
+   *
+   * Состояние локальное и переживает обновление расписания: индекс
+   * подрезается, если вариантов стало меньше.
+   */
+  const [variantIndex, setVariantIndex] = useState(0);
+  const activeIndex = slot.variants[variantIndex] ? variantIndex : 0;
+  const variant = slot.variants[activeIndex];
   const extraCount = slot.variants.length - 1;
+  /** Варианты пришли как подгруппы или как просто разные записи одной пары. */
+  const bySubgroups = slot.variants.some((item) => Boolean(item.subgroup));
 
   if (!variant) {
     return (
@@ -177,11 +233,28 @@ export const LessonCard = memo(function LessonCard({
             ) : null}
           </div>
 
-          {/* Пара по подгруппам: показываем, что вариантов больше одного */}
+          {/* Пара по подгруппам: переключение вариантов. Раньше здесь была
+              строка «N подгруппы по вариантам», но посмотреть второй вариант
+              было нельзя — показывался всегда первый. */}
           {extraCount > 0 ? (
-            <p className="mt-1 text-[12px] text-[var(--text-tertiary)]">
-              {extraCount} {plural(extraCount, 'подгруппа', 'подгруппы', 'подгрупп')} по вариантам
-            </p>
+            <div
+              className="mt-2 flex flex-wrap items-center gap-1.5"
+              role="group"
+              aria-label="Варианты занятия по подгруппам"
+            >
+              <span className="text-[12px] text-[var(--text-tertiary)]">
+                {bySubgroups ? 'Подгруппа:' : 'Вариант:'}
+              </span>
+              {slot.variants.map((item, index) => (
+                <VariantChip
+                  key={`${item.subgroup ?? 'variant'}-${index}`}
+                  variant={item}
+                  index={index}
+                  active={index === activeIndex}
+                  onSelect={() => setVariantIndex(index)}
+                />
+              ))}
+            </div>
           ) : null}
 
           {variant.note ? (
