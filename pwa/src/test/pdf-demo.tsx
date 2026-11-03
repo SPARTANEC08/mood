@@ -24,23 +24,19 @@ import {
   Send,
   Share2,
 } from 'lucide-react';
-import { Document, Page, pdfjs } from 'react-pdf';
 
 import { initDocument } from '@/lib/env';
 import { initTheme } from '@/lib/theme';
 import { bindViewportHeight } from '@/lib/viewport';
-import workerSrc from 'pdfjs-dist/build/pdf.worker.min.js?url';
 
 import '../styles.css';
-
-pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
 
 type Platform = 'ios' | 'android';
 
 const SRC = '/preview/sample.pdf';
 const FILE_NAME = 'Сборник задач по физике.pdf';
+const TOTAL_PAGES = 91;
 const MAX_PAGE_WIDTH = 620;
-const RENDER_WIDTH = 1280;
 const MIN_ZOOM = 1;
 const MAX_ZOOM = 4;
 const DOUBLE_TAP_ZOOM = 2.5;
@@ -57,20 +53,9 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
-/* pdf.js 3.11 использует Promise.withResolvers; в старых WebView его нет. */
-if (
-  typeof Promise !== 'undefined' &&
-  typeof (Promise as unknown as { withResolvers?: unknown }).withResolvers !== 'function'
-) {
-  (Promise as unknown as { withResolvers: () => unknown }).withResolvers = () => {
-    let resolve: (value: unknown) => void = () => undefined;
-    let reject: (reason?: unknown) => void = () => undefined;
-    const promise = new Promise((res, rej) => {
-      resolve = res as (value: unknown) => void;
-      reject = rej;
-    });
-    return { promise, resolve, reject };
-  };
+/** Готовые страницы: в проде их рендерит сервер, здесь — статический набор. */
+function pageImageUrl(page: number): string {
+  return `/preview/pages/page-${String(page).padStart(3, '0')}.webp`;
 }
 
 initDocument();
@@ -124,11 +109,10 @@ function PdfReader({
   const visibilityRef = useRef(new Map<number, boolean>());
   const previewSlotRef = useRef<HTMLElement | null>(null);
 
-  const [numPages, setNumPages] = useState(0);
+  const [numPages] = useState(TOTAL_PAGES);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageWidth, setPageWidth] = useState(340);
   const [zoom, setZoom] = useState(MIN_ZOOM);
-  const [pageHeights, setPageHeights] = useState<Record<number, number>>({});
   const pageWidthRef = useRef(340);
   pageWidthRef.current = pageWidth;
   const [visiblePages, setVisiblePages] = useState<Set<number>>(() => new Set([1, 2, 3]));
@@ -137,7 +121,6 @@ function PdfReader({
   const [shareOpen, setShareOpen] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
   currentPageRef.current = currentPage;
 
   const showNotice = useCallback((text: string) => {
@@ -543,23 +526,6 @@ function PdfReader({
     [numPages],
   );
 
-  const onDocumentLoad = useCallback((document: { numPages: number }) => {
-    setNumPages(document.numPages);
-    setVisiblePages(new Set([1, 2, 3]));
-    setError(null);
-  }, []);
-
-  const download = useCallback(() => {
-    const link = document.createElement('a');
-    link.href = SRC;
-    link.download = FILE_NAME;
-    link.rel = 'noopener';
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    showNotice('Скачивание началось');
-  }, [showNotice]);
-
   const share = useCallback(async () => {
     setSharing(true);
     let systemShare = false;
@@ -665,89 +631,42 @@ function PdfReader({
           WebkitOverflowScrolling: 'touch',
         }}
       >
-        {error ? (
-          <div className="flex h-full items-center justify-center px-6">
-            <div className="w-full max-w-[360px] rounded-[16px] bg-white/5 p-5 text-center">
-              <FileText size={28} className="mx-auto opacity-60" aria-hidden />
-              <p className="mt-3 text-[14px]">{error}</p>
-              <button
-                type="button"
-                onClick={download}
-                className="mt-4 rounded-[12px] px-5 py-2.5 text-[14px] font-semibold text-white"
-                style={{ background: isIOS ? '#0a84ff' : '#8ab4f8' }}
-              >
-                Скачать PDF
-              </button>
+        <div ref={contentRef} className="px-3 pb-28 pt-3" style={{ minWidth: pageWidth + 24 }}>
+          {pages.map((page) => (
+            <div
+              key={page}
+              data-page={page}
+              className="mx-auto mb-3 overflow-hidden rounded-[3px] bg-white shadow-[0_10px_30px_rgba(0,0,0,0.28)]"
+              style={{ width: pageWidth, height: estimatedHeight }}
+            >
+              {visiblePages.has(page) ? (
+                <img
+                  src={pageImageUrl(page)}
+                  alt={`Страница ${page}`}
+                  draggable={false}
+                  decoding="async"
+                  loading={page <= currentPage + 2 ? 'eager' : 'lazy'}
+                  style={{
+                    display: 'block',
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'fill',
+                    userSelect: 'none',
+                  }}
+                />
+              ) : (
+                <div
+                  className="animate-pulse"
+                  style={{
+                    height: estimatedHeight,
+                    background:
+                      'repeating-linear-gradient(180deg, #f4f4f5 0px, #f4f4f5 9px, #ececee 10px, #ececee 11px)',
+                  }}
+                />
+              )}
             </div>
-          </div>
-        ) : (
-          <Document
-            file={SRC}
-            onLoadSuccess={onDocumentLoad}
-            onLoadError={() => setError('Не удалось открыть PDF. Попробуйте скачать файл.')}
-            loading={
-              <div className="flex h-full items-center justify-center">
-                <div className="flex items-center gap-2.5 rounded-full bg-white/8 px-4 py-2.5 text-[13px] text-white/70">
-                  <Loader2 size={17} className="animate-spin" aria-hidden />
-                  Загрузка PDF…
-                </div>
-              </div>
-            }
-          >
-            <div ref={contentRef} className="px-3 pb-28 pt-3" style={{ minWidth: pageWidth + 24 }}>
-              {pages.map((page) => {
-                const scale = pageWidth / RENDER_WIDTH;
-                const slotHeight = pageHeights[page]
-                  ? Math.round(pageHeights[page] * scale)
-                  : estimatedHeight;
-
-                return (
-                  <div
-                    key={page}
-                    data-page={page}
-                    className="mx-auto mb-3 overflow-hidden rounded-[3px] bg-white shadow-[0_10px_30px_rgba(0,0,0,0.28)]"
-                    style={{ width: pageWidth, height: slotHeight }}
-                  >
-                    {visiblePages.has(page) ? (
-                      <div
-                        style={{
-                          width: RENDER_WIDTH,
-                          transform: `scale(${scale})`,
-                          transformOrigin: 'top left',
-                        }}
-                      >
-                        <Page
-                          pageNumber={page}
-                          width={RENDER_WIDTH}
-                          renderMode="svg"
-                          renderTextLayer={false}
-                          renderAnnotationLayer={false}
-                          loading={null}
-                          onLoadSuccess={(pageInfo) => {
-                            setPageHeights((previous) =>
-                              previous[page] === pageInfo.height
-                                ? previous
-                                : { ...previous, [page]: pageInfo.height },
-                            );
-                          }}
-                        />
-                      </div>
-                    ) : (
-                      <div
-                        className="animate-pulse"
-                        style={{
-                          height: slotHeight,
-                          background:
-                            'repeating-linear-gradient(180deg, #f4f4f5 0px, #f4f4f5 9px, #ececee 10px, #ececee 11px)',
-                        }}
-                      />
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </Document>
-        )}
+          ))}
+        </div>
       </div>
 
       {/* Плавающая навигация по страницам — вне скролла, всегда на экране */}
@@ -955,8 +874,8 @@ function DesktopDemo() {
           </h1>
           <p className="mt-2 max-w-[720px] text-[14px] leading-relaxed text-white/55">
             Так PDF будет выглядеть в приложении: непрерывный скролл, только видимые страницы,
-            свой тулбар и системное «Поделиться». Переключите рамки или откройте страницу на
-            телефоне.
+            свой тулбар и системное «Поделиться». Страницы здесь — готовые изображения:
+            телефон не парсит PDF и не пересчитывает разрешение при зуме.
           </p>
           <p className="mt-3 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[12px] text-white/60">
             <Check size={14} className="text-emerald-400" aria-hidden />
