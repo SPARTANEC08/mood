@@ -106,6 +106,89 @@
         line-height: 1.65;
       }
 
+      .browser-hint {
+        margin: 16px 0 0;
+        padding: 12px 14px;
+        border: 1px solid rgba(251, 191, 36, 0.28);
+        border-radius: 13px;
+        background: rgba(251, 191, 36, 0.07);
+        color: #fde68a;
+        font-size: 13px;
+        line-height: 1.55;
+      }
+
+      .modal[hidden] { display: none; }
+
+      .modal {
+        position: fixed;
+        inset: 0;
+        z-index: 50;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+        background: rgba(0, 0, 0, 0.62);
+        backdrop-filter: blur(8px);
+      }
+
+      .modal-card {
+        width: min(420px, 100%);
+        padding: 22px;
+        border: 1px solid var(--line);
+        border-radius: 22px;
+        background: #1b1b21;
+        box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55);
+      }
+
+      .modal-card h2 {
+        margin: 0 0 10px;
+        font-size: 21px;
+        letter-spacing: -0.02em;
+      }
+
+      .modal-card p {
+        margin: 0 0 16px;
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.6;
+      }
+
+      .modal-actions {
+        display: grid;
+        gap: 9px;
+      }
+
+      .modal-actions button,
+      .modal-actions a {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 46px;
+        padding: 11px 14px;
+        border: 0;
+        border-radius: 13px;
+        font: inherit;
+        font-size: 15px;
+        font-weight: 700;
+        text-decoration: none;
+        cursor: pointer;
+      }
+
+      .modal-actions .primary {
+        background: linear-gradient(145deg, #9f7aea, #6d28d9);
+        color: #fff;
+      }
+
+      .modal-actions .secondary {
+        background: rgba(255, 255, 255, 0.07);
+        color: var(--text);
+      }
+
+      .modal-actions .ghost {
+        background: transparent;
+        color: var(--muted);
+      }
+
       .actions {
         display: grid;
         gap: 10px;
@@ -238,8 +321,14 @@
           приложение с нового сайта.
         </p>
 
+        <p class="browser-hint">
+          Ссылку нужно открыть в браузере — Safari или Chrome, а не внутри старого
+          приложения. Если сайт открылся внутри Mood, нажмите «…» и выберите
+          «Открыть в Safari/браузере».
+        </p>
+
         <div class="actions">
-          <a class="btn btn-primary" href="https://mood-app.ru/landing.html?from=migration">Перейти на mood-app.ru</a>
+          <a class="btn btn-primary" href="https://mood-app.ru">Перейти на mood-app.ru</a>
           <a class="btn btn-secondary" href="https://t.me/mood_mpei" target="_blank" rel="noopener noreferrer">
             Телеграм-канал
           </a>
@@ -252,7 +341,7 @@
           <p>Удалять приложение не нужно.</p>
           <div class="step">
             <span class="step-num">1</span>
-            <div>Откройте <a href="https://mood-app.ru/landing.html?from=migration" target="_blank" rel="noopener noreferrer"><b>mood-app.ru</b></a> и скачайте новый APK.</div>
+            <div>Откройте <a href="https://mood-app.ru" target="_blank" rel="noopener noreferrer"><b>mood-app.ru</b></a> и скачайте новый APK.</div>
           </div>
           <div class="step">
             <span class="step-num">2</span>
@@ -270,7 +359,7 @@
           <div class="step">
             <span class="step-num">2</span>
             <div>
-              Откройте <a href="https://mood-app.ru/landing.html?from=migration" target="_blank" rel="noopener noreferrer"><b>mood-app.ru</b></a> в Safari → «Поделиться» → «На экран “Домой”».
+              Откройте <a href="https://mood-app.ru" target="_blank" rel="noopener noreferrer"><b>mood-app.ru</b></a> в Safari → «Поделиться» → «На экран “Домой”».
             </div>
           </div>
         </section>
@@ -298,15 +387,34 @@
         </p>
         <div class="note">
           Старая версия и её сервер отключены. Откройте
-          <a href="https://mood-app.ru/landing.html?from=migration">mood-app.ru</a>, чтобы установить актуальное
+          <a href="https://mood-app.ru">mood-app.ru</a>, чтобы установить актуальное
           приложение.
         </div>
       </section>
 
       <p class="footer">
-        Mood · НИУ МЭИ · <a href="https://mood-app.ru/landing.html?from=migration">mood-app.ru</a> ·
+        Mood · НИУ МЭИ · <a href="https://mood-app.ru">mood-app.ru</a> ·
         <a href="https://t.me/mood_mpei" target="_blank" rel="noopener noreferrer">Telegram</a>
       </p>
     </main>
+
+    <div class="modal" id="browser-modal" hidden>
+      <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="browser-modal-title">
+        <h2 id="browser-modal-title">Откройте сайт в браузере</h2>
+        <p>
+          Ссылка должна открыться в Safari или Chrome, а не внутри старого
+          приложения. Если открылась внутри Mood — нажмите «…» и выберите
+          «Открыть в Safari/браузере».
+        </p>
+        <div class="modal-actions">
+          <button type="button" class="primary" id="browser-modal-copy">Скопировать mood-app.ru</button>
+          <a class="secondary" id="browser-modal-open" href="https://mood-app.ru">Открыть всё равно</a>
+          <button type="button" class="ghost" id="browser-modal-close">Отмена</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="/migration.js" defer></script>
   </body>
 </html>
+

@@ -24,13 +24,6 @@
       return;
     }
 
-    // Ссылка из статьи переезда должна показывать лендинг даже внутри
-    // standalone-оболочки старой PWA, а не экран авторизации.
-    if (params.get('from') === 'migration') {
-      window.location.replace('/landing.html?from=migration' + window.location.hash);
-      return;
-    }
-
     // Установленное приложение не должно открывать маркетинговый лендинг:
     // без токена ему нужен обычный экран входа.
     var standalone =
