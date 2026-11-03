@@ -58,7 +58,7 @@ section('Разбор HEX');
 
 section('Пресеты');
 {
-  check('восемь оттенков', ACCENT_PRESETS.length === 8, String(ACCENT_PRESETS.length));
+  check('семь оттенков — все в одну строку', ACCENT_PRESETS.length === 7, String(ACCENT_PRESETS.length));
   check('id уникальны', new Set(ACCENT_PRESETS.map((p) => p.id)).size === ACCENT_PRESETS.length);
   check('цвета уникальны', new Set(ACCENT_PRESETS.map((p) => p.hex)).size === ACCENT_PRESETS.length);
   check(

@@ -51,7 +51,6 @@ export const ACCENT_PRESETS: AccentPreset[] = [
   { id: 'green', name: 'Зелёный', hex: '#34c759' },
   { id: 'orange', name: 'Оранжевый', hex: '#ff9500' },
   { id: 'pink', name: 'Розовый', hex: '#ff2d55' },
-  { id: 'coral', name: 'Коралловый', hex: '#ff6961' },
 ];
 
 export interface AccentVars {

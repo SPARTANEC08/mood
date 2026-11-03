@@ -310,9 +310,9 @@ export function SettingsCard({
       </div>
 
       {/* ── Акцент ──────────────────────────────────────────────────────────
-          Настройка живёт рядом с темой: обе меняют оформление и обе — только
-          для этого устройства. Цвет применяется сразу, превью показывает и
-          заливку с текстом на ней, и мягкий фон акцента. */}
+          Компактный блок: строка заголовка, один ряд кружков (все пресеты
+          помещаются на любой ширине) и поле HEX. Никаких демо-карточек —
+          цвет виден прямо на интерфейсе, как только его выбрали. */}
       <div
         className="flex items-center gap-3 border-t px-4 py-3.5"
         style={{ borderColor: 'var(--separator-soft)' }}
@@ -330,18 +330,33 @@ export function SettingsCard({
             {accentLabel}
           </p>
         </div>
-        <span
-          className="h-6 w-6 shrink-0 rounded-full"
-          style={{ background: accent, boxShadow: 'inset 0 0 0 1px var(--separator)' }}
-          aria-hidden
-        />
+
+        {accent === DEFAULT_ACCENT ? (
+          <span
+            className="h-5 w-5 shrink-0 rounded-full"
+            style={{ background: accent, boxShadow: 'inset 0 0 0 1px var(--separator)' }}
+            aria-hidden
+          />
+        ) : (
+          <button
+            type="button"
+            onClick={() => {
+              haptic('light');
+              resetAccent();
+            }}
+            className="pressable shrink-0 rounded-full px-2.5 py-1 text-[12px] font-semibold active:pressable-active"
+            style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}
+          >
+            Сбросить
+          </button>
+        )}
       </div>
 
       <div className="mx-4 mb-3.5">
         <div
           role="radiogroup"
           aria-label="Акцентный цвет"
-          className="flex flex-wrap items-center gap-2"
+          className="flex items-center justify-between"
         >
           {ACCENT_PRESETS.map((preset) => {
             const active = preset.hex === accent;
@@ -355,29 +370,29 @@ export function SettingsCard({
                 aria-label={preset.name}
                 title={preset.name}
                 onClick={() => pickAccent(preset.hex)}
-                className="pressable relative flex h-9 w-9 items-center justify-center rounded-full active:pressable-active"
+                className="pressable relative flex h-8 w-8 items-center justify-center rounded-full active:pressable-active"
                 style={{
                   background: preset.hex,
                   boxShadow: active
-                    ? `0 0 0 2px var(--surface), 0 0 0 4px ${preset.hex}`
+                    ? `0 0 0 2px var(--surface), 0 0 0 3.5px ${preset.hex}`
                     : 'inset 0 0 0 1px var(--separator)',
                 }}
               >
                 {active ? (
-                  <Check size={16} strokeWidth={3} style={{ color: contrastText(preset.hex) }} aria-hidden />
+                  <Check size={14} strokeWidth={3} style={{ color: contrastText(preset.hex) }} aria-hidden />
                 ) : null}
               </button>
             );
           })}
 
-          {/* Свой цвет: нативный пикер поверх круглой кнопки. Так работает и
-              на iOS Safari, и на Android без собственной палитры. */}
+          {/* Свой цвет: нативный пикер поверх кружка. Так работает и на iOS
+              Safari, и на Android без собственной палитры. */}
           <label
-            className="relative flex h-9 w-9 cursor-pointer items-center justify-center rounded-full"
+            className="relative flex h-8 w-8 cursor-pointer items-center justify-center rounded-full"
             style={{
               background: 'var(--surface-grouped)',
               boxShadow: customAccent
-                ? '0 0 0 2px var(--surface), 0 0 0 4px var(--accent)'
+                ? '0 0 0 2px var(--surface), 0 0 0 3.5px var(--accent)'
                 : 'inset 0 0 0 1px var(--separator)',
             }}
             title="Свой цвет"
@@ -390,7 +405,7 @@ export function SettingsCard({
               className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
             />
             <Palette
-              size={16}
+              size={14}
               style={{ color: customAccent ? 'var(--accent)' : 'var(--text-secondary)' }}
               aria-hidden
             />
@@ -413,53 +428,17 @@ export function SettingsCard({
             spellCheck={false}
             autoCapitalize="characters"
             autoComplete="off"
-            className="w-[104px] rounded-[9px] border bg-[var(--surface)] px-2.5 py-1.5 text-[13px] tabular-nums outline-none"
+            className="w-[92px] rounded-[8px] border bg-[var(--surface)] px-2 py-1 text-[12px] tabular-nums outline-none"
             style={{
               borderColor: hexValid ? 'var(--separator-soft)' : 'var(--danger)',
               color: 'var(--text-primary)',
             }}
           />
           <span
-            className="text-[12px]"
+            className="text-[11px]"
             style={{ color: hexValid ? 'var(--text-tertiary)' : 'var(--danger)' }}
           >
             {hexValid ? 'HEX' : 'Формат #RRGGBB'}
-          </span>
-
-          <button
-            type="button"
-            disabled={accent === DEFAULT_ACCENT}
-            onClick={() => {
-              haptic('light');
-              resetAccent();
-            }}
-            className="pressable ml-auto rounded-full px-3 py-1.5 text-[12px] font-semibold active:pressable-active disabled:opacity-40"
-            style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}
-          >
-            По умолчанию
-          </button>
-        </div>
-
-        {/* Превью: чип пары показывает контраст текста на заливке, кнопка —
-            мягкий фон. Так видно, что получится, не уходя из настроек. */}
-        <div
-          className="mt-3 flex items-center gap-2 rounded-[11px] px-3 py-2.5"
-          style={{ background: 'var(--surface-grouped)' }}
-        >
-          <span
-            className="rounded-md px-1.5 py-0.5 text-[11px] font-semibold"
-            style={{ background: 'var(--accent)', color: 'var(--accent-text)' }}
-          >
-            1 пара
-          </span>
-          <span className="text-[12px] tabular-nums" style={{ color: 'var(--text-secondary)' }}>
-            09:20 — 10:55
-          </span>
-          <span
-            className="ml-auto rounded-full px-2.5 py-1 text-[12px] font-semibold"
-            style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}
-          >
-            Готово
           </span>
         </div>
       </div>
