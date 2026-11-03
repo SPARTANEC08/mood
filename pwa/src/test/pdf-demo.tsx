@@ -40,7 +40,7 @@ type Platform = 'ios' | 'android';
 const SRC = '/preview/sample.pdf';
 const FILE_NAME = 'Сборник задач по физике.pdf';
 const MAX_PAGE_WIDTH = 620;
-const MAX_CANVAS_WIDTH = 1400;
+const RENDER_WIDTH = 1280;
 const MIN_ZOOM = 1;
 const MAX_ZOOM = 4;
 const DOUBLE_TAP_ZOOM = 2.5;
@@ -127,6 +127,7 @@ function PdfReader({
   const [currentPage, setCurrentPage] = useState(1);
   const [pageWidth, setPageWidth] = useState(340);
   const [zoom, setZoom] = useState(MIN_ZOOM);
+  const [pageHeights, setPageHeights] = useState<Record<number, number>>({});
   const pageWidthRef = useRef(340);
   pageWidthRef.current = pageWidth;
   const [visiblePages, setVisiblePages] = useState<Set<number>>(() => new Set([1, 2, 3]));
@@ -448,7 +449,7 @@ function PdfReader({
     visibilityRef.current.clear();
     setVisiblePages(new Set([currentPageRef.current]));
 
-    const limit = zoom > 1.05 ? 3 : 4;
+    const limit = zoom > 1.05 ? 2 : 3;
     const observer = new IntersectionObserver(
       (entries) => {
         for (const entry of entries) {
@@ -573,11 +574,6 @@ function PdfReader({
 
   const pages = useMemo(() => Array.from({ length: numPages }, (_, index) => index + 1), [numPages]);
   const estimatedHeight = Math.round(pageWidth * 1.414);
-  const renderDpr = Math.min(
-    2,
-    Math.max(0.5, MAX_CANVAS_WIDTH / pageWidth),
-    window.devicePixelRatio || 1,
-  );
 
   return (
     <div
@@ -677,34 +673,56 @@ function PdfReader({
             }
           >
             <div ref={contentRef} className="px-3 pb-28 pt-3" style={{ minWidth: pageWidth + 24 }}>
-              {pages.map((page) => (
-                <div
-                  key={page}
-                  data-page={page}
-                  className="mx-auto mb-3 overflow-hidden rounded-[3px] bg-white shadow-[0_10px_30px_rgba(0,0,0,0.28)]"
-                  style={{ minHeight: estimatedHeight, width: pageWidth }}
-                >
-                  {visiblePages.has(page) ? (
-                    <Page
-                      pageNumber={page}
-                      width={pageWidth}
-                      devicePixelRatio={renderDpr}
-                      renderTextLayer={false}
-                      renderAnnotationLayer={false}
-                      loading={null}
-                    />
-                  ) : (
-                    <div
-                      className="animate-pulse"
-                      style={{
-                        height: estimatedHeight,
-                        background:
-                          'repeating-linear-gradient(180deg, #f4f4f5 0px, #f4f4f5 9px, #ececee 10px, #ececee 11px)',
-                      }}
-                    />
-                  )}
-                </div>
-              ))}
+              {pages.map((page) => {
+                const scale = pageWidth / RENDER_WIDTH;
+                const slotHeight = pageHeights[page]
+                  ? Math.round(pageHeights[page] * scale)
+                  : estimatedHeight;
+
+                return (
+                  <div
+                    key={page}
+                    data-page={page}
+                    className="mx-auto mb-3 overflow-hidden rounded-[3px] bg-white shadow-[0_10px_30px_rgba(0,0,0,0.28)]"
+                    style={{ width: pageWidth, height: slotHeight }}
+                  >
+                    {visiblePages.has(page) ? (
+                      <div
+                        style={{
+                          width: RENDER_WIDTH,
+                          transform: `scale(${scale})`,
+                          transformOrigin: 'top left',
+                        }}
+                      >
+                        <Page
+                          pageNumber={page}
+                          width={RENDER_WIDTH}
+                          devicePixelRatio={1}
+                          renderTextLayer={false}
+                          renderAnnotationLayer={false}
+                          loading={null}
+                          onRenderSuccess={(pageInfo) => {
+                            setPageHeights((previous) =>
+                              previous[page] === pageInfo.height
+                                ? previous
+                                : { ...previous, [page]: pageInfo.height },
+                            );
+                          }}
+                        />
+                      </div>
+                    ) : (
+                      <div
+                        className="animate-pulse"
+                        style={{
+                          height: slotHeight,
+                          background:
+                            'repeating-linear-gradient(180deg, #f4f4f5 0px, #f4f4f5 9px, #ececee 10px, #ececee 11px)',
+                        }}
+                      />
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </Document>
         )}
