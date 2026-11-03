@@ -576,7 +576,7 @@ export function ProfilePage({ profile }: { profile: BootstrapResponse }) {
               type="button"
               onClick={() => {
                 haptic('light');
-                openLink('https://109-120-129-61.sslip.io/games/block-blast/');
+                openLink('https://mood-app.online/');
               }}
               className="pressable flex w-full items-center gap-3 px-4 py-3 text-left active:pressable-active"
             >
@@ -591,9 +591,9 @@ export function ProfilePage({ profile }: { profile: BootstrapResponse }) {
                 <Gamepad2 size={18} />
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block text-[14px] font-medium">Block Pop</span>
+                <span className="block text-[14px] font-medium">Mood Games</span>
                 <span className="block text-[12px] text-[var(--text-tertiary)]">
-                  Головоломка · откроется на отдельном сайте
+                  Block Pop и другие игры · отдельный сайт
                 </span>
               </span>
               <ArrowUpRight size={16} className="shrink-0" style={{ color: 'var(--accent)' }} aria-hidden />
