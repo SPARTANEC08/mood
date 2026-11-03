@@ -35,7 +35,9 @@
 
     var token = window.localStorage.getItem('mood_pwa_token');
     if (!token) {
-      window.location.replace('/landing.html');
+      // Хэш сохраняем: ссылки вида /#install должны открывать раздел установки,
+      // а не начало лендинга.
+      window.location.replace('/landing.html' + window.location.hash);
     }
   } catch (error) {
     // Приватный режим или отключённое хранилище: показываем обычный экран входа.
