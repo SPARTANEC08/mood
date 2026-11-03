@@ -11,13 +11,7 @@ import { BellOff, BellRing, Check, Monitor, Palette } from 'lucide-react';
 import { Card } from '@/components/ui';
 import { PushHelpSheet } from '@/components/profile/PushHelpSheet';
 import { PushConsentSheet } from '@/components/legal/PushConsentSheet';
-import {
-  ACCENT_PRESETS,
-  DEFAULT_ACCENT,
-  contrastText,
-  normalizeHex,
-  useAccent,
-} from '@/lib/accent';
+import { ACCENT_PRESETS, DEFAULT_ACCENT, contrastText, useAccent } from '@/lib/accent';
 import { api } from '@/lib/api';
 import { haptic } from '@/lib/env';
 import { enablePush, pushPermission, pushSupport, syncPush } from '@/lib/push';
@@ -39,21 +33,6 @@ export function SettingsCard({
 }) {
   const [mode, setMode] = useTheme();
   const [accent, setAccent, resetAccent] = useAccent();
-
-  /**
-   * Черновик HEX-поля.
-   *
-   * Ввод идёт в состояние, а не сразу в localStorage: человек набирает «#7c4…»
-   * по символу, и применять недописанный цвет нельзя. Как только строка стала
-   * валидным цветом — применяем сразу, чтобы выбор был «живым».
-   */
-  const [hexDraft, setHexDraft] = useState(accent);
-  const [hexValid, setHexValid] = useState(true);
-
-  useEffect(() => {
-    setHexDraft(accent);
-    setHexValid(true);
-  }, [accent]);
 
   const [pushEnabled, setPushEnabled] = useState<boolean>(profile.pushEnabled !== false);
   const [pushDevices, setPushDevices] = useState<number>(profile.pushDevices ?? 0);
@@ -188,13 +167,6 @@ export function SettingsCard({
     setAccent(hex);
   };
 
-  const onHexChange = (value: string): void => {
-    setHexDraft(value);
-    const normalized = normalizeHex(value);
-    setHexValid(normalized !== null);
-    if (normalized) setAccent(normalized);
-  };
-
   return (
     <>
     <Card className="overflow-hidden p-0">
@@ -310,9 +282,10 @@ export function SettingsCard({
       </div>
 
       {/* ── Акцент ──────────────────────────────────────────────────────────
-          Компактный блок: строка заголовка, один ряд кружков (все пресеты
-          помещаются на любой ширине) и поле HEX. Никаких демо-карточек —
-          цвет виден прямо на интерфейсе, как только его выбрали. */}
+          Компактный блок: строка заголовка и один ряд кружков (все пресеты
+          помещаются на любой ширине). Свой цвет — последний кружок с нативным
+          пикером. Никаких демо-карточек и полей ввода: цвет виден прямо на
+          интерфейсе, как только его выбрали. */}
       <div
         className="flex items-center gap-3 border-t px-4 py-3.5"
         style={{ borderColor: 'var(--separator-soft)' }}
@@ -410,36 +383,6 @@ export function SettingsCard({
               aria-hidden
             />
           </label>
-        </div>
-
-        <div className="mt-2.5 flex items-center gap-2">
-          <input
-            type="text"
-            value={hexDraft}
-            onChange={(event) => onHexChange(event.target.value)}
-            onBlur={() => {
-              // Недописанный/битый ввод не применяем и возвращаем актуальный
-              // цвет, чтобы поле не расходилось с реальным состоянием.
-              if (hexValid) return;
-              setHexDraft(accent);
-              setHexValid(true);
-            }}
-            aria-label="Акцент, HEX"
-            spellCheck={false}
-            autoCapitalize="characters"
-            autoComplete="off"
-            className="w-[92px] rounded-[8px] border bg-[var(--surface)] px-2 py-1 text-[12px] tabular-nums outline-none"
-            style={{
-              borderColor: hexValid ? 'var(--separator-soft)' : 'var(--danger)',
-              color: 'var(--text-primary)',
-            }}
-          />
-          <span
-            className="text-[11px]"
-            style={{ color: hexValid ? 'var(--text-tertiary)' : 'var(--danger)' }}
-          >
-            {hexValid ? 'HEX' : 'Формат #RRGGBB'}
-          </span>
         </div>
       </div>
 
