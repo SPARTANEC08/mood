@@ -3,14 +3,14 @@
  *
  * Бот — самостоятельный процесс и НЕ импортирует ничего из `backend/` или
  * `db/`: ему не нужны ни база, ни БАРС, ни почта, ни ключи шифрования. Он умеет
- * только одно — раздавать ссылки: на PWA, канал, GitHub, поддержку и APK.
+ * только одно — раздавать ссылки: на установку, канал, GitHub и поддержку.
  *
  * Поэтому здесь нет ни запуска REST API, ни фонового нотификатора, ни ночного
  * отчёта. Всё это живёт в отдельном процессе `backend/server/main.ts`
  * (`dist/app.js`), а бот запускается из `tg/bot.ts` (`dist/bot.js`).
  */
 
-import { Bot, InputFile } from 'grammy';
+import { Bot } from 'grammy';
 
 import { processTelegramCallback, processTelegramMessage } from './botEngine.ts';
 import { botSubscribers } from './subscribers.ts';
@@ -59,20 +59,7 @@ function startPolling(bot: Bot): void {
 }
 
 async function sendView(bot: Bot, chatId: number, view: BotViewResult): Promise<void> {
-  if (view.text) {
-    await bot.api.sendMessage(chatId, view.text, replyTextParams(view.keyboard));
-  }
-
-  if (!view.document) return;
-
-  try {
-    await bot.api.sendDocument(chatId, new InputFile(view.document.path as string), {
-      caption: 'Mood — установочный файл',
-    });
-  } catch (err: unknown) {
-    console.warn('[Telegram Bot] Не удалось отправить файл:', safeErrorMessage(err));
-    await bot.api.sendMessage(chatId, 'Файл недоступен. Установите PWA из Chrome.', replyTextParams(view.keyboard));
-  }
+  await bot.api.sendMessage(chatId, view.text, replyTextParams(view.keyboard));
 }
 
 export async function initTelegramBot(): Promise<void> {
@@ -153,12 +140,6 @@ export async function initTelegramBot(): Promise<void> {
         await ctx.answerCallbackQuery(result.toast ? { text: result.toast } : undefined);
       } catch {
         // ignore
-      }
-
-      // Документ нельзя «вписать» в правку текста — отправляем новым сообщением.
-      if (result.view.document) {
-        await sendView(bot, chatId, result.view);
-        return;
       }
 
       try {

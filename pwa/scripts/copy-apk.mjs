@@ -1,13 +1,16 @@
 /**
  * Копирует свежий APK из корневого apk/ в public/apk/ перед сборкой PWA.
  *
- * Зачем: на лендинге должна работать прямая ссылка «Скачать с сайта».
- * Имя mood-latest.apk стабильное, поэтому ссылку не нужно править при
- * каждом релизе. Сам APK в git не попадает (apk/ в .gitignore), но в
- * собранный dist/ и на сервер — попадает.
+ * Имя файла сохраняется как у собранного APK (`mood-1.1.0.apk`), без
+ * обезличенного `mood-latest.apk`: при скачивании пользователь видит рабочую
+ * версию, а не служебное имя. При выпуске новой версии ссылку на лендинге и
+ * в InstallScreen нужно обновить вместе с APK.
+ *
+ * Сам APK в git не попадает (apk/ в .gitignore), но в собранный dist/ и на
+ * сервер — попадает.
  */
 
-import { copyFileSync, existsSync, mkdirSync, readdirSync, statSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -30,14 +33,22 @@ function pickLatestApk() {
 try {
   const latest = pickLatestApk();
   if (!latest) {
-    console.warn('[apk] apk/*.apk не найден — ссылка «Скачать с сайта» останется без файла');
+    console.warn('[apk] apk/*.apk не найден — ссылка «Скачать APK» останется без файла');
     process.exit(0);
   }
 
   mkdirSync(outDir, { recursive: true });
-  copyFileSync(join(apkDir, latest), join(outDir, 'mood-latest.apk'));
+
+  // Не копим старые версии и не оставляем mood-latest.apk: в public/apk
+  // должен лежать ровно один файл — тот, на который ссылается интерфейс.
+  for (const name of readdirSync(outDir)) {
+    if (name.toLowerCase().endsWith('.apk') && name !== latest) {
+      rmSync(join(outDir, name), { force: true });
+    }
+  }
+
   copyFileSync(join(apkDir, latest), join(outDir, latest));
-  console.log(`[apk] ${latest} → public/apk/mood-latest.apk`);
+  console.log(`[apk] ${latest} → public/apk/${latest}`);
 } catch (error) {
   console.warn('[apk] не удалось подготовить APK:', error instanceof Error ? error.message : error);
 }

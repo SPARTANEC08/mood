@@ -1,19 +1,18 @@
 # /etc/systemd/system/mood-bot.service
-# Telegram-бот поддержки Mood: только ссылки и APK.
+# Telegram-бот поддержки Mood: только ссылки.
 #
 # Это самостоятельный процесс. Он НЕ открывает базу, не ходит в БАРС/OWA и не
 # поднимает API — поэтому его можно держать на другом сервере и с отдельным
 # набором секретов.
 #
 # Установка:
-#   sudo mkdir -p /opt/mood-bot/dist /opt/mood-bot/tg/apk
+#   sudo mkdir -p /opt/mood-bot/dist
 #   # bot.env — только две переменные, без ключей приложения:
 #   sudo install -m 600 -o mood -g mood /dev/null /opt/mood-bot/bot.env
 #   #   TELEGRAM_BOT_TOKEN=...
 #   #   PWA_URL=https://...
-#   #   MOOD_APK_DIR=/opt/mood-bot/tg/apk   (необязательно)
+#   #   TELEGRAM_APK_POST_URL=https://t.me/mood_mpei/15   (необязательно)
 #   sudo cp dist/bot.js /opt/mood-bot/dist/
-#   sudo cp tg/apk/*.apk /opt/mood-bot/tg/apk/
 #   sudo cp backend/deploy/mood-bot.service /etc/systemd/system/
 #   sudo systemctl daemon-reload && sudo systemctl enable --now mood-bot
 
@@ -58,7 +57,6 @@ RestartSec=10
 
 EnvironmentFile=/opt/mood-bot/bot.env
 Environment=NODE_ENV=production
-Environment=MOOD_APK_DIR=/opt/mood-bot/tg/apk
 
 StandardOutput=journal
 StandardError=journal

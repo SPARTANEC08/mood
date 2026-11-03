@@ -18,7 +18,7 @@
 ## 🔗 Ссылки
 
 - 🌐 **PWA (открыть в браузере / поставить на телефон):** https://109-120-129-61.sslip.io
-- 📦 **Android APK:** вкладка [Releases](https://github.com/SPARTANEC08/mood/releases) этого репозитория или напрямую [mood-latest.apk](https://mood-app.ru/apk/mood-latest.apk)
+- 📦 **Android APK:** вкладка [Releases](https://github.com/SPARTANEC08/mood/releases) этого репозитория или напрямую [mood-1.1.0.apk](https://mood-app.ru/apk/mood-1.1.0.apk)
 - 📖 Документация по запуску и деплою — ниже в этом файле
 
 ## ⚠️ Это личный проект для одного вуза
@@ -109,7 +109,7 @@
   главные кнопки — «Установить» и ведут на `/setup`. Экран установки не требует
   входа, а на iOS сразу заменяет адрес на `/`, чтобы иконка открывала приложение,
   а не лендинг. Вход — после установки или по «Продолжить в браузере». APK:
-  `/apk/mood-latest.apk`.
+  `/apk/mood-1.1.0.apk` (имя совпадает с файлом из `apk/`).
 - **Уведомления в приложении**: центр уведомлений по колокольчику в шапке —
   вся история и фильтры по типам; события (оценки, письма, приказы, стипендия)
   с деталями, по почте — только количество новых писем. Новое уведомление
@@ -128,8 +128,13 @@
 Telegram больше не платформа приложения. Бот оставлен как канал поддержки и
 установки:
 
-- 👋 `/start` — ссылка на PWA, `📱 iOS` / `🤖 Android`, канал, поддержка, GitHub;
-- 📦 Android получает APK, если он собран на сервере;
+- 👋 `/start` — кнопка «Установить» (раздел `/#install` на лендинге),
+  `📱 iOS` / `🤖 Android`, канал, поддержка, GitHub;
+- 📱 iOS и 🤖 Android не дублируют шаги: бот отправляет на лендинг, где
+  инструкция с картинками;
+- ⬇️ на Android есть кнопка «Скачать из Telegram» — пост с последней версией
+  APK (`TELEGRAM_APK_POST_URL`, по умолчанию `https://t.me/mood_mpei/15`);
+- 📦 сам бот APK файлом больше не отправляет — только ссылку на пост;
 - 💬 кнопка «Поддержка» ведёт в `@mood_mpei_sup`;
 - 💾 локальный список тех, кто запускал бота (`bot-subscribers.json`), и
   рассылка по нему скриптом `tg/broadcast.mjs` (например, новым APK);
@@ -173,7 +178,7 @@ Push-уведомления»; если push не включён, приложе
   приложение, а не экран установки.
 - **iOS**: Safari → «Поделиться» → «На экран “Домой”»; в инструкции —
   реальные картинки из `pwa/public/install/`.
-- **Android**: главная кнопка — «Скачать APK» (`/apk/mood-latest.apk`), ниже —
+- **Android**: главная кнопка — «Скачать APK» (`/apk/mood-1.1.0.apk`), ниже —
   установка из Chrome, Telegram и GitHub Releases.
 - **Компьютер**: установка из Chrome/Edge или «Продолжить в браузере».
 - «Продолжить в браузере» убирает установочный адрес и открывает вход.
@@ -183,8 +188,10 @@ Push-уведомления»; если push не включён, приложе
 - `?login=1` — прямой вход для старых ссылок; `?install=1` — legacy-адрес
   установки.
 - APK: `pwa/scripts/copy-apk.mjs` берёт свежий `apk/*.apk` и кладёт его в
-  `pwa/public/apk/mood-latest.apk` при `npm run pwa:build`. Бинарник в git не
-  попадает, но едет в `pwa/dist/apk/` и на сервер.
+  `pwa/public/apk/` под тем же именем (`mood-1.1.0.apk`), удаляя старые
+  версии и служебный `mood-latest.apk`. Бинарник в git не попадает, но едет в
+  `pwa/dist/apk/` и на сервер. При выпуске новой версии обновите имя файла в
+  `landing.html` и `InstallScreen.tsx`.
 - CSP продакшена запрещает inline-скрипты: тема, меню и раскрытие секций
   лендинга живут в `/landing-theme.js` и `/landing.js`.
 
@@ -198,7 +205,7 @@ Push-уведомления»; если push не включён, приложе
         ┌──────────────── бот: node dist/bot.js ─────────────────┐
         │                                                        │
 Telegram ─► grammY long polling ─► botEngine ─► pwaView ─► ответ │
-        │                                     APK из tg/apk/     │
+        │                          лендинг + пост с APK в канале │
         └────────────────────────────────────────────────────────┘
          ни базы, ни API, ни БАРС/OWA, ни ключей шифрования
 
@@ -288,7 +295,7 @@ PWA ──► nginx/Vite ──► Fastify /api/* ──┬─► db/storage (SQ
 
 | Папка | Роль |
 |---|---|
-| 🖥 `tg/` | **Telegram-бот**: самостоятельный процесс, только ссылки и APK |
+| 🖥 `tg/` | **Telegram-бот**: самостоятельный процесс, только ссылки |
 | ⚙️ `backend/` | **Вычисления, парсеры, API**: REST-сервер, сервисы МЭИ, кэши |
 | 🗄 `db/` | **Данные**: хранилища, движок JSON-записей и рантайм-данные |
 | 📱 `pwa/` | **Сайт**: React-приложение (PWA) |
@@ -303,15 +310,14 @@ Mood/
 ├── .env                        # секреты приложения (в git не попадает)
 │
 ├── tg/                         # 🤖 Telegram-бот поддержки (отдельный процесс)
-│   ├── bot.ts                  #   точка входа: только токен и PWA_URL, без базы/API
+│   ├── bot.ts                  #   точка входа: токен и PWA_URL, без базы/API
 │   ├── telegramService.ts      #   запуск grammY long polling и отправка экранов
 │   ├── botEngine.ts            #   /start, callbacks: только установка и ссылки
 │   ├── pwaView.ts              #   экраны: приветствие, iOS, Android
-│   ├── apk.ts                  #   поиск свежего APK в tg/apk/ (и старом apk/)
 │   ├── subscribers.ts          #   локальный список подписчиков (bot-subscribers.json)
 │   ├── broadcast.mjs           #   рассылка по подписчикам (например, новый APK)
 │   ├── format.ts               #   HTML-разметка, esc/b/i/link, RULE, safeErrorMessage
-│   └── apk/                    #   APK для выдачи (бинарники в git не попадают)
+│   └── apk/                    #   APK для рассылки (бинарники в git не попадают)
 │
 ├── backend/                    # ⚙️ Вычисления, парсеры, API
 │   ├── server/                 #   REST API (Fastify) для PWA
@@ -354,7 +360,7 @@ Mood/
 │   │   ├── landing-theme.js    #   тема до первого кадра + standalone-редирект
 │   │   ├── landing-boot.js     #   редирект / → /landing.html без токена
 │   │   ├── landing/            #   WebP-скриншоты лендинга
-│   │   └── apk/                #   mood-latest.apk (собирается, в git нет)
+│   │   └── apk/                #   mood-1.1.0.apk (собирается, в git нет)
 │   └── scripts/                #   иконки, версия SW, копирование APK, dev-туннель
 │
 └── ios/                        # 🍏 Нативное iOS-приложение (SwiftUI, iOS 18+)
@@ -717,8 +723,8 @@ VAPID_SUBJECT=mailto:noreply@mood.local
 
 # --- Бот (dist/bot.js): /opt/mood-bot/bot.env ---
 TELEGRAM_BOT_TOKEN=         # от @BotFather
-PWA_URL=                    # кнопка «Открыть Mood»
-# MOOD_APK_DIR=/opt/mood-bot/tg/apk
+PWA_URL=                    # кнопка «Установить» и ссылка на инструкцию
+TELEGRAM_APK_POST_URL=      # пост с последней версией APK (необязательно)
 ```
 
 **Отладка:** `API_PERF_LOG=1` (все запросы API), `?perf=1`/`mood_perf`
@@ -736,7 +742,8 @@ PWA_URL=                    # кнопка «Открыть Mood»
 | приложение | `PWA_URL` | CORS без origin, ссылки на приложение скрыты |
 | приложение | `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` | push-канал выключен |
 | бот | `TELEGRAM_BOT_TOKEN` | процесс завершается с ошибкой |
-| бот | `PWA_URL` | кнопки «Открыть Mood» нет |
+| бот | `PWA_URL` | кнопок «Установить» и «Инструкция на сайте» нет |
+| бот | `TELEGRAM_APK_POST_URL` | кнопка ведёт на пост по умолчанию (`t.me/mood_mpei/15`) |
 
 Неверный **формат** ключа (не 64 hex) останавливает процесс приложения на
 старте: лучше не подняться, чем молча ломаться на первом шифровании.
@@ -768,7 +775,7 @@ npm run start         # node dist/app.js (прод)
 npm run start:bot     # node dist/bot.js (прод)
 npm run check:bot     # в бандле бота нет серверного кода и ключей
 
-# APK для бота: копия из apk/ в tg/apk/
+# APK для рассылки из Telegram: копия из apk/ в tg/apk/
 npm run apk:bot
 
 # Только API, без нотификатора
@@ -776,7 +783,8 @@ npm run api
 ```
 
 `npm run pwa:build` собирает приложение и копирует свежий APK из `apk/` в
-`pwa/public/apk/mood-latest.apk`. Лендинг (`/landing.html`), его скрипты и
+`pwa/public/apk/` под его собственным именем (`mood-1.1.0.apk`), удаляя старые
+версии. Лендинг (`/landing.html`), его скрипты и
 картинки лежат в `pwa/public/` и попадают в `pwa/dist/` как статика. В dev
 `/landing.html` и `/setup` открываются на Vite.
 
@@ -847,8 +855,9 @@ bash pwa/scripts/dev-tunnel.sh   # vite + cloudflared + бот одним про
 - лендинг: `/` без токена открывает `/landing.html`, с токеном — приложение;
 - «Установить» с лендинга открывает `/setup`, адрес сразу становится `/`;
   на iOS иконка после установки открывает приложение, а не лендинг;
-- Android: кнопка APK скачивает `/apk/mood-latest.apk`, «Продолжить в браузере»
-  открывает вход без автоматической подсказки установки;
+- Android: кнопка APK скачивает `/apk/mood-1.1.0.apk` с именем файла
+  `mood-1.1.0.apk`, «Продолжить в браузере» открывает вход без автоматической
+  подсказки установки;
 - установленный лендинг в standalone переходит на `/`, а без токена показывает
   вход.
 
@@ -874,11 +883,12 @@ cp backend/deploy/mood.service /etc/systemd/system/mood.service
 
 # --- бот: только ссылки, отдельный пользователь и каталог ---
 useradd --system --home /opt/mood-bot --shell /usr/sbin/nologin mood-bot
-install -d -m 700 -o mood-bot -g mood-bot /opt/mood-bot/dist /opt/mood-bot/tg/apk
+install -d -m 700 -o mood-bot -g mood-bot /opt/mood-bot/dist
+install -d -m 700 -o mood-bot -g mood-bot /opt/mood-bot/tg/apk  # для рассылки
 install -m 600 -o mood-bot -g mood-bot /dev/null /opt/mood-bot/bot.env
-#   в bot.env: TELEGRAM_BOT_TOKEN, PWA_URL, при необходимости MOOD_APK_DIR
+#   в bot.env: TELEGRAM_BOT_TOKEN, PWA_URL, при необходимости TELEGRAM_APK_POST_URL
 cp dist/bot.js /opt/mood-bot/dist/
-cp tg/apk/*.apk /opt/mood-bot/tg/apk/     # если APK собран
+cp tg/apk/*.apk /opt/mood-bot/tg/apk/     # только если нужна рассылка файлом
 cp backend/deploy/mood-bot.service /etc/systemd/system/mood-bot.service
 
 mkdir -p /etc/systemd/journald.conf.d && cp backend/deploy/journald.conf /etc/systemd/journald.conf.d/mood.conf
@@ -886,7 +896,7 @@ systemctl daemon-reload && systemctl enable --now mood mood-bot
 ```
 
 `dist/bot.js` — самодостаточный бандл: на сервере с ботом не нужны ни
-`npm ci`, ни `node_modules`, ни база. Достаточно Node 20 и двух переменных в
+`npm ci`, ни `node_modules`, ни база. Достаточно Node 20 и пары переменных в
 `bot.env`. Юнит бота работает от отдельного пользователя, с `ProtectSystem=strict`
 и без доступа к домашнему каталогу — компрометация бота не даёт ключей
 шифрования и персональных данных.
@@ -910,8 +920,8 @@ sudo rsync -a --delete pwa/dist/ /var/www/mood-pwa/
 от шаблона `*`, без него офлайн-оболочка Service Worker остаётся без бандлов.
 
 В `pwa/dist/` также лежат `landing.html`, `landing.js`, `landing-theme.js`,
-`landing/` и `apk/mood-latest.apk`. Не исключайте их из rsync: это публичный
-лендинг и прямая ссылка на APK. `apk/mood-latest.apk` появляется только после
+`landing/` и `apk/mood-1.1.0.apk`. Не исключайте их из rsync: это публичный
+лендинг и прямая ссылка на APK. Файл появляется только после
 `npm run pwa:build` (скрипт `copy-apk.mjs`).
 
 ⚠️ **`--delete` не должен удалять старые `assets/*.js`.** У клиента `index.html`
@@ -957,7 +967,7 @@ sudo systemctl restart mood mood-bot
 Android-приложение — **Trusted Web Activity** (Bubblewrap): тонкая нативная
 оболочка, которая открывает `PWA_URL` в Chrome без адресной строки. Google Play
 не используется, APK раздаётся файлом (Telegram), с GitHub Releases и напрямую
-с сайта — `/apk/mood-latest.apk`. iOS этот APK не подходит —
+с сайта — `/apk/mood-1.1.0.apk`. iOS этот APK не подходит —
 там Safari → «Поделиться» → «На экран Домой».
 
 ### Когда пересобирать APK
@@ -1039,35 +1049,38 @@ npm run apk:verify        # apksigner + сверка SHA-256 с assetlinks.json 
 из `APK_*`). В `android/` в git лежит только `twa-manifest.json`; Gradle-проект
 генерируется и в репозиторий не попадает (см. `android/.gitignore`).
 
-Прямая ссылка с лендинга — `/apk/mood-latest.apk`. `npm run pwa:build`
+Прямая ссылка с лендинга — `/apk/mood-1.1.0.apk`. `npm run pwa:build`
 запускает `pwa/scripts/copy-apk.mjs`, который берёт самый свежий `apk/*.apk` и
-кладёт его в `pwa/public/apk/mood-latest.apk`; бинарник в git не попадает, но
-оказывается в `pwa/dist/apk/` и на сервере после деплоя статики.
+кладёт его в `pwa/public/apk/` под тем же именем, удаляя старые версии; бинарник
+в git не попадает, но оказывается в `pwa/dist/apk/` и на сервере после деплоя
+статики. При выпуске новой версии обновите ссылку в `landing.html` и
+`InstallScreen.tsx`.
 
 ### Раздача в Telegram
 
-APK (~1–2 МБ) отправляется файлом в канал/бот. Минимальная версия — **Android
+APK (~1–2 МБ) публикуется файлом в канал, а бот ведёт на этот пост. Минимальная версия — **Android
 7.0** (`minSdk 24`: требование `androidbrowserhelper`). Получатель открывает
 файл, разрешает установку из неизвестных источников (Android 8+:
 «Установить неизвестное приложение» для Telegram/файлового менеджера),
 устанавливает.
 Обновление — тем же путём: новый APK с той же подписью ставится поверх.
 
-Бот берёт файл из `tg/apk/` (не из общего `apk/`), поэтому после сборки APK
-скопируйте его:
+Бот сам APK не хранит: на Android-экране кнопка «Скачать из Telegram» ведёт на
+пост с последней версией (адрес задаётся `TELEGRAM_APK_POST_URL`). Для ручной
+рассылки файл из `apk/` копируется в `tg/apk/`:
 
 ```bash
 npm run apk:bot     # apk/*.apk → tg/apk/, старые версии удаляются
+node tg/broadcast.mjs --text "Новая версия" --apk tg/apk/mood-1.1.0.apk
 ```
 
-В git бинарник не попадает: `tg/apk/*.apk` в `.gitignore`, `deploy.sh` копирует
-файл на сервер бота. Если файла нет, бот показывает инструкцию установки PWA.
+В git бинарник не попадает: `tg/apk/*.apk` в `.gitignore`.
 
 Черновик сообщения:
 
 > **Mood для Android**
 > Расписание, задания, оценки и почта МЭИ — в одном приложении.
-> Скачать: `mood-1.0.0.apk` (прикрепить файлом)
+> Скачать: `mood-1.1.0.apk` (прикрепить файлом)
 > Установка: откройте файл → «Разрешить установку» → «Установить».
 > iPhone: APK не подходит — откройте https://<домен> в Safari → «Поделиться» →
 > «На экран Домой».
@@ -1274,5 +1287,7 @@ Apple, а не кода.
 26. Лендинг и `/setup` — клиентская логика. При отключённом JS редирект с `/`
     не сработает и откроется обычный экран входа; установку на iOS всё равно
     лучше начинать с `/setup`, хотя standalone-редирект лендинга её чинит.
-27. `/apk/mood-latest.apk` существует только если перед `npm run pwa:build` в
-    `apk/` лежал APK. Без файла кнопка «Скачать APK» ведёт на 404.
+27. `/apk/mood-1.1.0.apk` существует только если перед `npm run pwa:build` в
+    `apk/` лежал APK. Без файла кнопка «Скачать APK» ведёт на 404. При выпуске
+    новой версии имя файла в `landing.html`, `InstallScreen.tsx`, README и
+    редиректе nginx нужно обновить вручную.

@@ -141,8 +141,8 @@ function AndroidInstall() {
   return (
     <>
       <a
-        href="/apk/mood-latest.apk"
-        download
+        href="/apk/mood-1.1.0.apk"
+        download="mood-1.1.0.apk"
         onClick={() => haptic('medium')}
         className="pressable pressable-active flex w-full items-center justify-center gap-2 rounded-[14px] bg-[var(--accent)] px-4 py-3.5 text-[16px] font-semibold text-white"
       >
@@ -150,7 +150,7 @@ function AndroidInstall() {
         Скачать APK
       </a>
       <p className="mt-2 text-center text-[11.5px] text-[var(--text-tertiary)]">
-        APK · 1,4 МБ · Android 7+
+        APK 1.1.0 · 1,4 МБ · Android 7+
       </p>
 
       <button
@@ -173,7 +173,7 @@ function AndroidInstall() {
 
       <div className="flex flex-wrap justify-center gap-x-4 gap-y-2 text-[12px]">
         <a
-          href="https://t.me/mood_mpei"
+          href="https://t.me/mood_mpei/15"
           target="_blank"
           rel="noopener noreferrer"
           className="inline-flex items-center gap-1 font-medium"

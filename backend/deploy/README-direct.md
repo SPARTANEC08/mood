@@ -135,21 +135,22 @@ sudo systemctl enable --now mood
 ## 4a. Сервис бота (`/etc/systemd/system/mood-bot.service`)
 
 Бот — самостоятельный процесс и в приложение не входит. Ему нужен только
-`dist/bot.js` (самодостаточный бандл) и `tg/apk/` с APK. Готовый юнит —
+`dist/bot.js` (самодостаточный бандл). Готовый юнит —
 `backend/deploy/mood-bot.service`; переменные — в отдельном `bot.env`:
 
 ```env
 TELEGRAM_BOT_TOKEN=...
 PWA_URL=https://<домен>
-MOOD_APK_DIR=/opt/mood-bot/tg/apk
+TELEGRAM_APK_POST_URL=https://t.me/mood_mpei/15
 ```
 
 ```bash
 sudo systemctl enable --now mood-bot
 ```
 
-Бота можно держать и на другом сервере: `node` + `dist/bot.js` + `tg/apk/` +
-`bot.env`, без node_modules и без базы.
+Бота можно держать и на другом сервере: `node` + `dist/bot.js` + `bot.env`,
+без node_modules и без базы. `tg/apk/` нужен только для ручной рассылки
+`tg/broadcast.mjs`.
 
 ## 5. Важно при миграции с туннеля
 

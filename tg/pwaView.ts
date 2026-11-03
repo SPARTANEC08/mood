@@ -2,12 +2,15 @@
  * Экраны бота поддержки.
  *
  * Telegram больше не платформа приложения: здесь только ссылки на PWA, канал,
- * GitHub, поддержку и инструкции установки. Ни данных студента, ни привязки,
- * ни уведомлений — всё это живёт в приложении.
+ * GitHub, поддержку и установку. Ни данных студента, ни привязки, ни
+ * уведомлений — всё это живёт в приложении.
+ *
+ * Инструкции по установке больше не дублируются в боте: он отправляет на
+ * лендинг, в раздел «Установка», где шаги уже описаны с картинками. На
+ * Android дополнительно есть кнопка с постом последней версии APK в Telegram.
  */
 
-import { findLatestApk } from './apk.ts';
-import { b, i, joinBlocks, link, quote, RULE } from './format.ts';
+import { b, i, joinBlocks, RULE } from './format.ts';
 
 /** Кнопка Telegram: либо callback, либо ссылка. */
 export interface InlineButton {
@@ -17,11 +20,10 @@ export interface InlineButton {
   style?: 'danger' | 'success' | 'primary';
 }
 
-/** Что показать: текст, клавиатура и (опционально) файл. */
+/** Что показать: текст и клавиатура. */
 export interface BotViewResult {
   text: string;
   keyboard: InlineButton[][];
-  document?: { path?: string; filename: string; html?: string };
 }
 
 function btn(text: string, callbackData: string, style?: InlineButton['style']): InlineButton {
@@ -49,18 +51,51 @@ export function getPwaUrl(): string | null {
   }
 }
 
+/** Адрес раздела установки на лендинге. */
+function installUrl(): string | null {
+  const url = getPwaUrl();
+  return url ? `${url}/#install` : null;
+}
+
 export const CHANNEL_URL = 'https://t.me/mood_mpei';
 export const SUPPORT_URL = 'https://t.me/mood_mpei_sup';
 export const GITHUB_URL = 'https://github.com/SPARTANEC08/mood';
 
-function appLink(): string {
-  const url = getPwaUrl();
-  return url ? link(url, '🌐 Открыть Mood') : quote('Веб-приложение ещё не настроено на сервере.');
+/** Пост с последней версией APK, если TELEGRAM_APK_POST_URL не задан. */
+export const DEFAULT_APK_POST_URL = 'https://t.me/mood_mpei/15';
+
+/**
+ * Ссылка на пост с последней версией APK.
+ *
+ * Вынесена в окружение, чтобы менять пост после каждого релиза без пересборки
+ * бота. Значение по умолчанию — актуальный пост канала на момент правки.
+ */
+export function getApkPostUrl(): string {
+  const raw = process.env.TELEGRAM_APK_POST_URL?.trim();
+  if (!raw) return DEFAULT_APK_POST_URL;
+
+  try {
+    const url = new URL(raw);
+    if (url.protocol !== 'https:') return DEFAULT_APK_POST_URL;
+    return raw;
+  } catch {
+    console.warn('[APK] TELEGRAM_APK_POST_URL задан, но не разбирается как URL — беру значение по умолчанию');
+    return DEFAULT_APK_POST_URL;
+  }
 }
 
-function appButtonRow(): InlineButton[] {
-  const url = getPwaUrl();
-  return url ? [urlBtn('🌐 Открыть Mood', url)] : [];
+function installButtonRow(): InlineButton[] {
+  const url = installUrl();
+  return url ? [urlBtn('📲 Установить', url)] : [];
+}
+
+function instructionButtonRow(): InlineButton[] {
+  const url = installUrl();
+  return url ? [urlBtn('🌐 Инструкция на сайте', url)] : [];
+}
+
+function backButtonRow(): InlineButton[] {
+  return [btn('⬅️ Назад', 'menu_back')];
 }
 
 function supportRow(): InlineButton[] {
@@ -71,72 +106,54 @@ function supportRow(): InlineButton[] {
   ];
 }
 
-/** Главный экран: приложение, установка, поддержка. */
+/** Главный экран: установка, платформы и ссылки на источники. */
 export function buildWelcomeView(): BotViewResult {
   return {
     text: joinBlocks([
       `👋 ${b('Mood')}`,
-      'Расписание, задания, оценки и почта — в приложении.',
+      'Расписание, задания, оценки и почта МЭИ — в приложении.',
       '',
-      b('Установка'),
-      '• iPhone — откройте сайт в Safari → «Поделиться» → «На экран Домой».',
-      '• Android — установите APK или в Chrome выберите «Установить приложение».',
-      '',
-      'Уведомления включаются в приложении: Кабинет → Настройки приложения → Push-уведомления.',
+      'Выберите платформу — покажу, как установить.',
       '',
       RULE,
       '',
       i('Поддержка: @mood_mpei_sup'),
-      '',
-      appLink(),
     ]),
     keyboard: [
-      ...(appButtonRow().length > 0 ? [appButtonRow()] : []),
+      ...(installButtonRow().length > 0 ? [installButtonRow()] : []),
       [btn('📱 iOS', 'platform_ios'), btn('🤖 Android', 'platform_android')],
       supportRow(),
     ],
   };
 }
 
-/** Инструкция для iOS: APK не подходит. */
+/** iOS: подробная инструкция живёт на лендинге. */
 export function buildIosGuideView(): BotViewResult {
   return {
     text: joinBlocks([
-      `🍎 ${b('Установка на iPhone / iPad')}`,
-      '1. Откройте сайт в Safari (именно Safari, не Chrome).',
-      '2. Нажмите «Поделиться» → «На экран Домой» → «Добавить».',
-      '3. Запустите Mood с иконки и войдите логином и паролем БАРС.',
-      '4. Уведомления включите в приложении: Кабинет → Настройки приложения.',
+      `🍎 ${b('iPhone / iPad')}`,
+      'Откройте сайт — там пошаговая инструкция с картинками.',
       '',
-      i('APK для iOS не подходит — это Android-приложение.'),
-      '',
-      appLink(),
+      i('Установка идёт через Safari: «Поделиться» → «На экран “Домой”».'),
     ]),
-    keyboard: [[btn('⬅️ Назад', 'menu_back')], appButtonRow(), supportRow()].filter(
-      (row) => row.length > 0,
-    ),
+    keyboard: [instructionButtonRow(), backButtonRow()].filter((row) => row.length > 0),
   };
 }
 
-/** Инструкция для Android + APK файлом, если он уже собран на сервере. */
+/** Android: та же инструкция на сайте плюс пост с последней версией APK. */
 export function buildAndroidGuideView(): BotViewResult {
-  const apk = findLatestApk();
-
   return {
     text: joinBlocks([
-      `🤖 ${b('Установка на Android')}`,
-      '1. Установите APK из сообщения ниже (разрешите установку из неизвестных источников).',
-      '2. Откройте Mood и войдите логином и паролем БАРС.',
-      '3. Уведомления включите в приложении: Кабинет → Настройки приложения.',
+      `🤖 ${b('Android')}`,
+      'Откройте сайт — там пошаговая инструкция с картинками.',
+      'Последнюю версию APK можно скачать в Telegram.',
       '',
-      apk
-        ? i('Файл пришлю следующим сообщением.')
-        : i('APK пока не собран на сервере.'),
       i('Можно и как PWA: Chrome → меню ⋮ → «Установить приложение».'),
-      '',
-      appLink(),
     ]),
-    keyboard: [[btn('⬅️ Назад', 'menu_back')], supportRow()].filter((row) => row.length > 0),
-    ...(apk ? { document: { path: apk, filename: apk.split('/').pop() ?? 'mood.apk' } } : {}),
+    keyboard: [
+      [urlBtn('⬇️ Скачать из Telegram', getApkPostUrl())],
+      ...(instructionButtonRow().length > 0 ? [instructionButtonRow()] : []),
+      backButtonRow(),
+    ],
   };
 }
