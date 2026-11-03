@@ -46,6 +46,13 @@ const VERSION = '__SW_VERSION__';
 const SHELL_CACHE = `mood-shell-${VERSION}`;
 const DATA_CACHE = `mood-data-${VERSION}`;
 
+/**
+ * Кэш старой шведской сборки. Если он ещё есть у клиента, значит человек
+ * пришёл со старой версией: после активации нового SW уводим его на статью
+ * переезда, а не оставляем на экране входа.
+ */
+const OLD_SE_SHELL_CACHE = 'mood-shell-mvqdf0pa';
+
 /** Сколько последних ответов /api/schedule держим. */
 const SCHEDULE_CACHE_LIMIT = 3;
 
@@ -246,6 +253,8 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(
     (async () => {
       const names = await caches.keys();
+      const hadOldSeCache = names.includes(OLD_SE_SHELL_CACHE);
+
       await Promise.all(
         names
           // Чужие кэши (например, от другой версии эксперимента) не трогаем:
@@ -255,6 +264,28 @@ self.addEventListener('activate', (event) => {
       );
 
       await self.clients.claim();
+
+      // Старая PWA на mood-app.ru после переезда DNS всё ещё может отдавать
+      // старую оболочку из кэша. Если нашли кэш шведской сборки — уводим
+      // открытые вкладки на статью переезда. Новые установки этого кэша не
+      // имеют и продолжают работать с приложением.
+      if (hadOldSeCache) {
+        try {
+          const clients = await self.clients.matchAll({
+            type: 'window',
+            includeUncontrolled: true,
+          });
+          await Promise.all(
+            clients.map((client) =>
+              'navigate' in client
+                ? client.navigate('/migration/').catch(() => undefined)
+                : Promise.resolve(),
+            ),
+          );
+        } catch {
+          // Вкладок уже нет — ничего страшного.
+        }
+      }
     })(),
   );
 });
