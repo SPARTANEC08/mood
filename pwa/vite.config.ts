@@ -109,6 +109,8 @@ export default defineConfig({
         // /test/ на проде закрыт nginx, а показать новые экраны нужно без
         // временного ослабления правил безопасности.
         preview: path.resolve(ROOT, 'preview/index.html'),
+        // Отдельное демо PDF-просмотрщика: /preview/pdf.html.
+        pdfDemo: path.resolve(ROOT, 'preview/pdf.html'),
       },
       output: {
         // Зависимости меняются редко, и вынос их отдельно не сбрасывает кэш
