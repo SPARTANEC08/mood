@@ -7,12 +7,18 @@
       // «На экран Домой» берёт текущий адрес), иконка не должна открывать
       // маркетинговую страницу. Уходим в приложение; там будет вход или
       // сохранённая сессия.
+      var params = new URLSearchParams(window.location.search);
+      var fromMigration = params.get("from") === "migration";
+
       var standalone =
         window.navigator.standalone === true ||
         (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) ||
         document.referrer.indexOf("android-app://") === 0;
 
-      if (standalone) {
+      // Старая PWA из Швеции открывает лендинг внутри standalone-контекста.
+      // Для ссылки из статьи переезда оставляем лендинг, иначе человек увидит
+      // экран авторизации вместо инструкции по установке.
+      if (standalone && !fromMigration) {
         window.location.replace("/");
         return;
       }
