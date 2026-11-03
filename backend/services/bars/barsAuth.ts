@@ -154,10 +154,20 @@ const STUDENT_ID_LOOKUP_PATHS = [
   '/bars_web/ST_Study',
 ];
 
+export interface StudentCandidate {
+  studentId: string;
+  name: string;
+  recordBook: string;
+  status: string;
+  group: string;
+}
+
 interface StudentIdProbe {
   path: string;
   studentId: string | null;
   candidates: number;
+  choice?: string;
+  details?: StudentCandidate[];
   title: string;
   error?: string;
 }
@@ -167,19 +177,147 @@ interface StudentIdSearch {
   probes: StudentIdProbe[];
 }
 
+export interface StudentSelection {
+  studentId: string | null;
+  count: number;
+  choice: string;
+  details: StudentCandidate[];
+}
+
+/** Текст без неразрывных пробелов и лишних отступов. */
+function cleanText(text: string): string {
+  return text
+    .replace(/\u00a0/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 /**
- * Достаёт ровно один studentID из страницы.
+ * Разбирает таблицу «Студенты → Список студентов».
  *
- * На дашборде все ссылки ведут на одного и того же студента, а вот список
- * студентов у сотрудника/деканата может содержать много ID. Такой аккаунт
- * нельзя автоматически превращать в первого студента из списка: это вход
- * в чужую запись. Поэтому несколько разных ID считаем «не найден».
+ * Таблица содержит все записи, доступные учётной записи: у обычного студента
+ * это он сам, у человека с перепоступлением — две строки (например, активная
+ * и отчисленная), у сотрудника — список чужих студентов.
  */
+export function parseStudentCandidates($: cheerio.CheerioAPI): StudentCandidate[] {
+  let table = $('#tbl__PartialListStudent').first();
+  if (!table.length) {
+    table = $('table')
+      .filter((_, el) => /зачётная книжка|зачетная книжка|статус \(на сегодня\)/i.test($(el).find('thead').text()))
+      .first();
+  }
+  if (!table.length) return [];
+
+  // Колонки ищем по заголовкам: порядок в разных версиях БАРС может отличаться.
+  const columns = new Map<'name' | 'recordBook' | 'status' | 'group', number>();
+  table
+    .find('thead tr')
+    .first()
+    .find('th')
+    .each((index, el) => {
+      const header = cleanText($(el).text()).toLowerCase();
+      if (header.includes('фио')) columns.set('name', index);
+      else if (header.includes('зачёт') || header.includes('зачет')) columns.set('recordBook', index);
+      else if (header.includes('статус')) columns.set('status', index);
+      else if (header.includes('группа')) columns.set('group', index);
+    });
+
+  const candidates: StudentCandidate[] = [];
+  const seen = new Set<string>();
+
+  table.find('tbody tr').each((_, row) => {
+    const $row = $(row);
+    const link = $row.find('a[href*="studentID="]').first();
+    const href = link.attr('href') ?? '';
+    const idMatch = href.match(/studentID=([a-f0-9-]+)/i);
+    if (!idMatch?.[1] || seen.has(idMatch[1])) return;
+    seen.add(idMatch[1]);
+
+    const cells = $row.find('td');
+    const cellAt = (key: 'name' | 'recordBook' | 'status' | 'group', fallback: number): string => {
+      const index = columns.get(key);
+      return cleanText(cells.eq(index ?? fallback).text());
+    };
+
+    candidates.push({
+      studentId: idMatch[1],
+      name: cleanText(link.text()) || cellAt('name', 0),
+      recordBook: cellAt('recordBook', 1),
+      status: cellAt('status', 2),
+      group: cellAt('group', 3),
+    });
+  });
+
+  return candidates;
+}
+
+/**
+ * Выбирает запись студента из списка.
+ *
+ * Разные ФИО — это чужой список (сотрудник/деканат), его нельзя превращать
+ * в первого попавшегося студента. Одинаковые ФИО — записи одного человека
+ * (например, активная и отчисленная): берём активную.
+ */
+export function chooseStudent(candidates: StudentCandidate[]): StudentSelection {
+  const details = candidates;
+  if (candidates.length === 0) return { studentId: null, count: 0, choice: 'none', details };
+  if (candidates.length === 1) {
+    return { studentId: candidates[0].studentId, count: 1, choice: 'single', details };
+  }
+
+  const names = new Set(
+    candidates
+      .map((candidate) =>
+        candidate.name
+          .toLowerCase()
+          .replace(/ё/g, 'е')
+          .replace(/\s+/g, ' ')
+          .trim(),
+      )
+      .filter(Boolean),
+  );
+  if (names.size > 1) {
+    return { studentId: null, count: candidates.length, choice: 'multiple_names', details };
+  }
+
+  const active = candidates.filter((candidate) => /обучается/i.test(candidate.status));
+  if (active.length > 0) {
+    return {
+      studentId: active[0].studentId,
+      count: candidates.length,
+      choice: active.length === 1 ? 'active' : 'first_active',
+      details,
+    };
+  }
+
+  return {
+    studentId: candidates[0].studentId,
+    count: candidates.length,
+    choice: 'no_active',
+    details,
+  };
+}
+
+/** Достаёт ровно один studentID из страницы. */
 function extractSingleStudentId(html: string): { studentId: string | null; candidates: number } {
   const ids = [
     ...new Set([...html.matchAll(/studentID=([a-f0-9-]+)/gi)].map((m) => m[1])),
   ];
   return { studentId: ids.length === 1 ? ids[0] : null, candidates: ids.length };
+}
+
+/** Ищет студента на странице: сначала таблицу записей, потом одну ссылку. */
+function selectStudentFromPage($: cheerio.CheerioAPI): StudentSelection {
+  const fromList = chooseStudent(parseStudentCandidates($));
+  if (fromList.count > 0) return fromList;
+
+  const single = extractSingleStudentId($.html());
+  return {
+    studentId: single.studentId,
+    count: single.candidates,
+    choice: single.studentId ? 'single_id' : 'none',
+    details: [],
+  };
 }
 
 /**
@@ -196,17 +334,19 @@ function extractSingleStudentId(html: string): { studentId: string | null; candi
 async function findStudentId(client: BarsClient, html: string): Promise<StudentIdSearch> {
   const probes: StudentIdProbe[] = [];
 
-  const direct = extractSingleStudentId(html);
+  const direct = selectStudentFromPage(cheerio.load(html));
   if (direct.studentId) return { studentId: direct.studentId, probes };
 
   for (const path of STUDENT_ID_LOOKUP_PATHS) {
     try {
       const $ = await client.getHtml(path);
-      const found = extractSingleStudentId($.html());
+      const found = selectStudentFromPage($);
       probes.push({
         path,
         studentId: found.studentId,
-        candidates: found.candidates,
+        candidates: found.count,
+        choice: found.choice,
+        details: found.details.slice(0, 10),
         title: $('title').text().trim(),
       });
       if (found.studentId) return { studentId: found.studentId, probes };
