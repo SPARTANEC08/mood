@@ -139,30 +139,69 @@ export function looksLikeStudentProfile(info: StudentInfo): boolean {
 /** Студенческий дашборд: известный адрес, не зависит от того, куда редиректнуло. */
 const STUDENT_DASHBOARD_URL = '/bars_web/ST_Study/Main/Main';
 
+/** Где ещё БАРС может показать studentID, если стартовая страница — меню. */
+const STUDENT_ID_LOOKUP_PATHS = [
+  // «Актуализировать права» из меню: обновляет права сессии и у студента
+  // редиректит сразу на дашборд с studentID. Помогает новым аккаунтам, у
+  // которых права ещё не подхватились и `/bars_web/` показывает только меню.
+  '/bars_web/Service/RefreshPermissions',
+  '/bars_web/',
+  '/',
+  // «Студенты → Список студентов»: ссылка есть в меню даже когда `/bars_web/`
+  // открывает «Выбор действия». В таблице — ссылка на карточку с studentID.
+  '/bars_web/ST/Student/ListStudent',
+  // Прямой раздел «Учёба»: у части аккаунтов редиректит сразу на дашборд.
+  '/bars_web/ST_Study',
+];
+
+interface StudentIdProbe {
+  path: string;
+  studentId: string | null;
+  title: string;
+  error?: string;
+}
+
+interface StudentIdSearch {
+  studentId: string | null;
+  probes: StudentIdProbe[];
+}
+
 /**
  * Ищет studentID в разметке.
  *
  * БАРС не отдаёт дашборд без `?studentID=`: на `/ST_Study/Main/Main` без
  * параметра приходит заглушка 591 байт «Отсутствует обязательный параметр».
  * ID обычно есть в ссылках страницы, на которую редиректит вход.
+ *
+ * Однако у аккаунта с несколькими ролями или с сохранённой «страницей входа»
+ * `/bars_web/` и `/` открывают `/Auth/Menu`, где studentID нет вовсе. Поэтому
+ * дополнительно проверяем список студентов и раздел «Учёба».
  */
-async function findStudentId(client: BarsClient, html: string): Promise<string | null> {
-  const direct = html.match(/studentID=([a-f0-9-]+)/i);
-  if (direct?.[1]) return direct[1];
+async function findStudentId(client: BarsClient, html: string): Promise<StudentIdSearch> {
+  const probes: StudentIdProbe[] = [];
 
-  // Стартовая страница и корень портала: у студента они ведут в раздел
-  // «Учёба» со ссылкой, содержащей studentID.
-  for (const path of ['/bars_web/', '/']) {
+  const direct = html.match(/studentID=([a-f0-9-]+)/i);
+  if (direct?.[1]) return { studentId: direct[1], probes };
+
+  for (const path of STUDENT_ID_LOOKUP_PATHS) {
     try {
       const $ = await client.getHtml(path);
       const match = $.html().match(/studentID=([a-f0-9-]+)/i);
-      if (match?.[1]) return match[1];
-    } catch {
+      const studentId = match?.[1] ?? null;
+      probes.push({ path, studentId, title: $('title').text().trim() });
+      if (studentId) return { studentId, probes };
+    } catch (err: unknown) {
       // Страница недоступна — пробуем следующую.
+      probes.push({
+        path,
+        studentId: null,
+        title: '',
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
   }
 
-  return null;
+  return { studentId: null, probes };
 }
 
 /**
@@ -187,10 +226,10 @@ async function extractStudentInfoWithFallback(
   const studentInfo = client.extractStudentInfo($);
   if (looksLikeStudentProfile(studentInfo)) return { studentInfo, finalUrl };
 
-  const studentId = await findStudentId(client, $.html());
+  const search = await findStudentId(client, $.html());
 
-  if (studentId) {
-    const dashboardUrl = `${STUDENT_DASHBOARD_URL}?studentID=${studentId}`;
+  if (search.studentId) {
+    const dashboardUrl = `${STUDENT_DASHBOARD_URL}?studentID=${search.studentId}`;
     try {
       const $dashboard = await client.getHtml(dashboardUrl);
       const fromDashboard = client.extractStudentInfo($dashboard);
@@ -207,8 +246,9 @@ async function extractStudentInfoWithFallback(
     '[Auth] профиль не распознан и на дашборде:',
     JSON.stringify({
       finalUrl,
-      studentId: studentId ?? null,
+      studentId: search.studentId ?? null,
       title: $('title').text().trim(),
+      probes: search.probes,
     }),
   );
 
