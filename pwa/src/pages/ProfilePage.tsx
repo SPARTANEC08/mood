@@ -3,6 +3,7 @@ import {
   ArrowUpRight,
   BookOpen,
   ChevronRight,
+  Gamepad2,
   GitBranch,
   GraduationCap,
   Mail,
@@ -18,6 +19,7 @@ import { Page } from '@/components/Page';
 import { Card, SkeletonCard, Toast } from '@/components/ui';
 import { RefreshIndicator } from '@/components/RefreshIndicator';
 import { usePullToRefresh } from '@/components/PullToRefresh';
+import { GameOverlay } from '@/components/games/GameOverlay';
 import { DeleteAccountCard } from '@/components/profile/DeleteAccountCard';
 import { HiddenMenuScreen } from '@/components/profile/HiddenMenuScreen';
 import { SettingsCard } from '@/components/profile/SettingsCard';
@@ -65,6 +67,7 @@ export function ProfilePage({ profile }: { profile: BootstrapResponse }) {
   } = useAppData();
 
   const [toast, setToast] = useState<string | null>(null);
+  const [gameOpen, setGameOpen] = useState(false);
 
   /**
    * Скрытый экран: десять быстрых тапов по карточке профиля.
@@ -567,6 +570,38 @@ export function ProfilePage({ profile }: { profile: BootstrapResponse }) {
             </button>
           </Card>
 
+          <h2 className="px-1 pt-2 text-[12px] font-semibold uppercase tracking-[0.09em] text-[var(--text-secondary)]">
+            Игры
+          </h2>
+          <Card className="overflow-hidden">
+            <button
+              type="button"
+              onClick={() => {
+                haptic('light');
+                setGameOpen(true);
+              }}
+              className="pressable flex w-full items-center gap-3 px-4 py-3 text-left active:pressable-active"
+            >
+              <span
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] text-white"
+                style={{
+                  background: 'linear-gradient(135deg, var(--accent), #b388ff)',
+                  boxShadow: '0 4px 14px rgba(124, 77, 255, 0.28)',
+                }}
+                aria-hidden
+              >
+                <Gamepad2 size={18} />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-[14px] font-medium">Block Pop</span>
+                <span className="block text-[12px] text-[var(--text-tertiary)]">
+                  Головоломка · играть внутри Mood
+                </span>
+              </span>
+              <ChevronRight size={16} className="shrink-0" style={{ color: 'var(--accent)' }} aria-hidden />
+            </button>
+          </Card>
+
           <div className="flex items-center justify-between gap-3 px-2 pt-4">
             <button
               type="button"
@@ -588,6 +623,7 @@ export function ProfilePage({ profile }: { profile: BootstrapResponse }) {
         </div>
       </Page>
 
+      {gameOpen ? <GameOverlay onClose={() => setGameOpen(false)} /> : null}
       {toast ? <Toast text={toast} onClose={() => setToast(null)} /> : null}
     </>
   );
