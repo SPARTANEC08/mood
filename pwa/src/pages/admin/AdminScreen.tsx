@@ -57,11 +57,12 @@ export function AdminScreen({
   const isEnvAdmin = profile.isEnvAdmin === true;
 
   useEffect(() => {
+    if (section !== 'menu') return;
     void Promise.all([
       api.adminRegistration().then((state) => setRegistrationOpen(state.open)),
       api.adminStats({ period: 'today' }).then(setToday),
     ]).catch((err: unknown) => setError(errorText(err)));
-  }, []);
+  }, [section]);
 
   async function toggleRegistration(next: boolean): Promise<void> {
     if (busy || !isEnvAdmin) return;

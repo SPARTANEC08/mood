@@ -84,6 +84,10 @@ export function AdminMessages({ onBack }: { onBack: () => void }) {
       setError('Выберите хотя бы один канал.');
       return;
     }
+    if (url.trim() && !/^https?:\/\//i.test(url.trim())) {
+      setError('Ссылка должна начинаться с http:// или https://');
+      return;
+    }
     if (mode === 'one' && !target) {
       setError('Выберите получателя.');
       return;
