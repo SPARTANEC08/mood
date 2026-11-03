@@ -157,6 +157,7 @@ const STUDENT_ID_LOOKUP_PATHS = [
 interface StudentIdProbe {
   path: string;
   studentId: string | null;
+  candidates: number;
   title: string;
   error?: string;
 }
@@ -164,6 +165,21 @@ interface StudentIdProbe {
 interface StudentIdSearch {
   studentId: string | null;
   probes: StudentIdProbe[];
+}
+
+/**
+ * Достаёт ровно один studentID из страницы.
+ *
+ * На дашборде все ссылки ведут на одного и того же студента, а вот список
+ * студентов у сотрудника/деканата может содержать много ID. Такой аккаунт
+ * нельзя автоматически превращать в первого студента из списка: это вход
+ * в чужую запись. Поэтому несколько разных ID считаем «не найден».
+ */
+function extractSingleStudentId(html: string): { studentId: string | null; candidates: number } {
+  const ids = [
+    ...new Set([...html.matchAll(/studentID=([a-f0-9-]+)/gi)].map((m) => m[1])),
+  ];
+  return { studentId: ids.length === 1 ? ids[0] : null, candidates: ids.length };
 }
 
 /**
@@ -180,21 +196,26 @@ interface StudentIdSearch {
 async function findStudentId(client: BarsClient, html: string): Promise<StudentIdSearch> {
   const probes: StudentIdProbe[] = [];
 
-  const direct = html.match(/studentID=([a-f0-9-]+)/i);
-  if (direct?.[1]) return { studentId: direct[1], probes };
+  const direct = extractSingleStudentId(html);
+  if (direct.studentId) return { studentId: direct.studentId, probes };
 
   for (const path of STUDENT_ID_LOOKUP_PATHS) {
     try {
       const $ = await client.getHtml(path);
-      const match = $.html().match(/studentID=([a-f0-9-]+)/i);
-      const studentId = match?.[1] ?? null;
-      probes.push({ path, studentId, title: $('title').text().trim() });
-      if (studentId) return { studentId, probes };
+      const found = extractSingleStudentId($.html());
+      probes.push({
+        path,
+        studentId: found.studentId,
+        candidates: found.candidates,
+        title: $('title').text().trim(),
+      });
+      if (found.studentId) return { studentId: found.studentId, probes };
     } catch (err: unknown) {
       // Страница недоступна — пробуем следующую.
       probes.push({
         path,
         studentId: null,
+        candidates: 0,
         title: '',
         error: err instanceof Error ? err.message : String(err),
       });
