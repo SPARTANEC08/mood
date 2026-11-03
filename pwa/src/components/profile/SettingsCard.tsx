@@ -6,11 +6,18 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { BellOff, BellRing, Monitor } from 'lucide-react';
+import { BellOff, BellRing, Check, Monitor, Palette } from 'lucide-react';
 
 import { Card } from '@/components/ui';
 import { PushHelpSheet } from '@/components/profile/PushHelpSheet';
 import { PushConsentSheet } from '@/components/legal/PushConsentSheet';
+import {
+  ACCENT_PRESETS,
+  DEFAULT_ACCENT,
+  contrastText,
+  normalizeHex,
+  useAccent,
+} from '@/lib/accent';
 import { api } from '@/lib/api';
 import { haptic } from '@/lib/env';
 import { enablePush, pushPermission, pushSupport, syncPush } from '@/lib/push';
@@ -31,6 +38,22 @@ export function SettingsCard({
   pushConsentAccepted?: boolean;
 }) {
   const [mode, setMode] = useTheme();
+  const [accent, setAccent, resetAccent] = useAccent();
+
+  /**
+   * Черновик HEX-поля.
+   *
+   * Ввод идёт в состояние, а не сразу в localStorage: человек набирает «#7c4…»
+   * по символу, и применять недописанный цвет нельзя. Как только строка стала
+   * валидным цветом — применяем сразу, чтобы выбор был «живым».
+   */
+  const [hexDraft, setHexDraft] = useState(accent);
+  const [hexValid, setHexValid] = useState(true);
+
+  useEffect(() => {
+    setHexDraft(accent);
+    setHexValid(true);
+  }, [accent]);
 
   const [pushEnabled, setPushEnabled] = useState<boolean>(profile.pushEnabled !== false);
   const [pushDevices, setPushDevices] = useState<number>(profile.pushDevices ?? 0);
@@ -155,6 +178,23 @@ export function SettingsCard({
 
   const themeLabel = THEME_OPTIONS.find((option) => option.mode === mode)?.label ?? 'Системная';
 
+  const accentPreset = ACCENT_PRESETS.find((preset) => preset.hex === accent);
+  const accentLabel = accentPreset?.name ?? 'Свой цвет';
+  /** Цвет не из палитры — значит выбран пипеткой/HEX-полем. */
+  const customAccent = accentPreset === undefined;
+
+  const pickAccent = (hex: string): void => {
+    haptic('light');
+    setAccent(hex);
+  };
+
+  const onHexChange = (value: string): void => {
+    setHexDraft(value);
+    const normalized = normalizeHex(value);
+    setHexValid(normalized !== null);
+    if (normalized) setAccent(normalized);
+  };
+
   return (
     <>
     <Card className="overflow-hidden p-0">
@@ -267,6 +307,161 @@ export function SettingsCard({
             </button>
           );
         })}
+      </div>
+
+      {/* ── Акцент ──────────────────────────────────────────────────────────
+          Настройка живёт рядом с темой: обе меняют оформление и обе — только
+          для этого устройства. Цвет применяется сразу, превью показывает и
+          заливку с текстом на ней, и мягкий фон акцента. */}
+      <div
+        className="flex items-center gap-3 border-t px-4 py-3.5"
+        style={{ borderColor: 'var(--separator-soft)' }}
+      >
+        <span
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px]"
+          style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}
+          aria-hidden
+        >
+          <Palette size={18} />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-[15px] font-semibold leading-snug">Акцент</p>
+          <p className="mt-0.5 text-[12px] leading-snug" style={{ color: 'var(--text-secondary)' }}>
+            {accentLabel}
+          </p>
+        </div>
+        <span
+          className="h-6 w-6 shrink-0 rounded-full"
+          style={{ background: accent, boxShadow: 'inset 0 0 0 1px var(--separator)' }}
+          aria-hidden
+        />
+      </div>
+
+      <div className="mx-4 mb-3.5">
+        <div
+          role="radiogroup"
+          aria-label="Акцентный цвет"
+          className="flex flex-wrap items-center gap-2"
+        >
+          {ACCENT_PRESETS.map((preset) => {
+            const active = preset.hex === accent;
+
+            return (
+              <button
+                key={preset.id}
+                type="button"
+                role="radio"
+                aria-checked={active}
+                aria-label={preset.name}
+                title={preset.name}
+                onClick={() => pickAccent(preset.hex)}
+                className="pressable relative flex h-9 w-9 items-center justify-center rounded-full active:pressable-active"
+                style={{
+                  background: preset.hex,
+                  boxShadow: active
+                    ? `0 0 0 2px var(--surface), 0 0 0 4px ${preset.hex}`
+                    : 'inset 0 0 0 1px var(--separator)',
+                }}
+              >
+                {active ? (
+                  <Check size={16} strokeWidth={3} style={{ color: contrastText(preset.hex) }} aria-hidden />
+                ) : null}
+              </button>
+            );
+          })}
+
+          {/* Свой цвет: нативный пикер поверх круглой кнопки. Так работает и
+              на iOS Safari, и на Android без собственной палитры. */}
+          <label
+            className="relative flex h-9 w-9 cursor-pointer items-center justify-center rounded-full"
+            style={{
+              background: 'var(--surface-grouped)',
+              boxShadow: customAccent
+                ? '0 0 0 2px var(--surface), 0 0 0 4px var(--accent)'
+                : 'inset 0 0 0 1px var(--separator)',
+            }}
+            title="Свой цвет"
+          >
+            <input
+              type="color"
+              value={accent}
+              onChange={(event) => setAccent(event.target.value)}
+              aria-label="Свой цвет"
+              className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+            />
+            <Palette
+              size={16}
+              style={{ color: customAccent ? 'var(--accent)' : 'var(--text-secondary)' }}
+              aria-hidden
+            />
+          </label>
+        </div>
+
+        <div className="mt-2.5 flex items-center gap-2">
+          <input
+            type="text"
+            value={hexDraft}
+            onChange={(event) => onHexChange(event.target.value)}
+            onBlur={() => {
+              // Недописанный/битый ввод не применяем и возвращаем актуальный
+              // цвет, чтобы поле не расходилось с реальным состоянием.
+              if (hexValid) return;
+              setHexDraft(accent);
+              setHexValid(true);
+            }}
+            aria-label="Акцент, HEX"
+            spellCheck={false}
+            autoCapitalize="characters"
+            autoComplete="off"
+            className="w-[104px] rounded-[9px] border bg-[var(--surface)] px-2.5 py-1.5 text-[13px] tabular-nums outline-none"
+            style={{
+              borderColor: hexValid ? 'var(--separator-soft)' : 'var(--danger)',
+              color: 'var(--text-primary)',
+            }}
+          />
+          <span
+            className="text-[12px]"
+            style={{ color: hexValid ? 'var(--text-tertiary)' : 'var(--danger)' }}
+          >
+            {hexValid ? 'HEX' : 'Формат #RRGGBB'}
+          </span>
+
+          <button
+            type="button"
+            disabled={accent === DEFAULT_ACCENT}
+            onClick={() => {
+              haptic('light');
+              resetAccent();
+            }}
+            className="pressable ml-auto rounded-full px-3 py-1.5 text-[12px] font-semibold active:pressable-active disabled:opacity-40"
+            style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}
+          >
+            По умолчанию
+          </button>
+        </div>
+
+        {/* Превью: чип пары показывает контраст текста на заливке, кнопка —
+            мягкий фон. Так видно, что получится, не уходя из настроек. */}
+        <div
+          className="mt-3 flex items-center gap-2 rounded-[11px] px-3 py-2.5"
+          style={{ background: 'var(--surface-grouped)' }}
+        >
+          <span
+            className="rounded-md px-1.5 py-0.5 text-[11px] font-semibold"
+            style={{ background: 'var(--accent)', color: 'var(--accent-text)' }}
+          >
+            1 пара
+          </span>
+          <span className="text-[12px] tabular-nums" style={{ color: 'var(--text-secondary)' }}>
+            09:20 — 10:55
+          </span>
+          <span
+            className="ml-auto rounded-full px-2.5 py-1 text-[12px] font-semibold"
+            style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}
+          >
+            Готово
+          </span>
+        </div>
       </div>
 
       {helpKind ? <PushHelpSheet kind={helpKind} onClose={() => setHelpKind(null)} /> : null}

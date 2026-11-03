@@ -18,6 +18,8 @@
 
 import { useCallback, useEffect, useSyncExternalStore } from 'react';
 
+import { applyAccent } from './accent';
+
 export type ThemeMode = 'dark' | 'light' | 'system';
 
 /** Ключ выбора пользователя в localStorage. */
@@ -82,6 +84,11 @@ function applyToDocument(mode: ThemeMode): void {
   // отладки и для CSS-правил, которым важно «выбрана системная», а не итог.
   root.setAttribute('data-theme-mode', mode);
   root.style.colorScheme = theme;
+
+  // Производные токены акцента зависят от темы: пересчитываем их здесь, а не
+  // в компонентах. Без этого пользовательский цвет остался бы с коррекцией
+  // для прежней темы и мог потерять контраст.
+  applyAccent(theme);
 
   const meta = document.querySelector('meta[name="theme-color"]');
   if (meta) meta.setAttribute('content', THEME_COLOR[theme]);
