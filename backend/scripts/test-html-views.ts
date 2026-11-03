@@ -55,6 +55,7 @@ check(
     welcomeButtons.some((b) => b.callback_data === 'platform_android'),
 );
 check('в приветствии нет длинной инструкции', !/Safari|экран Домой/.test(welcome.text));
+check('в приветствии нет дубля поддержки', !welcome.text.includes('@mood_mpei_sup'));
 check('нет привязки Telegram', !JSON.stringify(welcome).includes('start='));
 check('нет админки', !JSON.stringify(welcome).includes('admin'));
 

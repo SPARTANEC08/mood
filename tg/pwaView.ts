@@ -10,7 +10,7 @@
  * Android дополнительно есть кнопка с постом последней версии APK в Telegram.
  */
 
-import { b, i, joinBlocks, RULE } from './format.ts';
+import { b, i, joinBlocks } from './format.ts';
 
 /** Кнопка Telegram: либо callback, либо ссылка. */
 export interface InlineButton {
@@ -114,10 +114,6 @@ export function buildWelcomeView(): BotViewResult {
       'Расписание, задания, оценки и почта МЭИ — в приложении.',
       '',
       'Выберите платформу — покажу, как установить.',
-      '',
-      RULE,
-      '',
-      i('Поддержка: @mood_mpei_sup'),
     ]),
     keyboard: [
       ...(installButtonRow().length > 0 ? [installButtonRow()] : []),
