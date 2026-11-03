@@ -1,9 +1,10 @@
 /**
- * Уведомления внутри приложения (PWA).
+ * Сообщения внутри приложения (лента) и история админских отправок.
  *
- * Админ отправляет текст из бота, а приложение показывает его модальным окном
- * всем, кто авторизован в БАРС. Объявления живут очередью: новое не затирает
- * предыдущее, а встаёт в конец.
+ * Админ отправляет текст из админки, приложение показывает его модальным окном
+ * всем, кто авторизован в БАРС. Сообщения живут очередью: новое не затирает
+ * предыдущее, а встаёт в конец. Push-only сообщения тоже пишутся сюда с
+ * `feed: false` — чтобы остаться в истории, но не всплывать в ленте.
  *
  * Закрытие запоминается по пользователю (`dismissed[userId]`), поэтому после
  * «Закрыть» объявление больше не всплывает на этом аккаунте. Сами объявления
@@ -29,6 +30,12 @@ export interface AppAnnouncement {
   createdBy?: number | string;
   /** Личное объявление: видит только этот пользователь. */
   targetUserId?: string;
+  /** Ссылка в сообщении (для push и истории админки). */
+  url?: string;
+  /** false — сообщение только push, в ленте приложения не показываем. */
+  feed?: boolean;
+  /** Какие каналы использовались; для истории админки. */
+  channels?: { feed: boolean; push: boolean };
 }
 
 interface AnnouncementsDocument {
@@ -70,6 +77,7 @@ function visibleSince(
   since?: string,
 ): AppAnnouncement[] {
   return items.filter((item) => {
+    if (item.feed === false) return false;
     if (item.targetUserId && item.targetUserId !== userId) return false;
     return since ? item.createdAt >= since : true;
   });
@@ -77,7 +85,16 @@ function visibleSince(
 
 export const announcementStore = {
   /** Ставит объявление в очередь. */
-  create(text: string, createdBy?: number | string, targetUserId?: string): AppAnnouncement {
+  create(
+    text: string,
+    createdBy?: number | string,
+    targetUserId?: string,
+    options?: {
+      feed?: boolean;
+      url?: string;
+      channels?: { feed: boolean; push: boolean };
+    },
+  ): AppAnnouncement {
     const doc = read();
     const item: AppAnnouncement = {
       id: randomUUID(),
@@ -85,6 +102,9 @@ export const announcementStore = {
       createdAt: new Date().toISOString(),
       createdBy,
       ...(targetUserId ? { targetUserId } : {}),
+      ...(options?.feed === false ? { feed: false } : {}),
+      ...(options?.url ? { url: options.url } : {}),
+      ...(options?.channels ? { channels: options.channels } : {}),
     };
 
     doc.items.push(item);

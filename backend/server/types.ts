@@ -24,6 +24,8 @@ export interface BootstrapProfile {
   pushDevices?: number;
   /** Админ: показывает шестерёнку и доступ к /api/admin. */
   isAdmin?: boolean;
+  /** Основной админ из ADMIN_BARS_LOGINS: управляет админами и настройками. */
+  isEnvAdmin?: boolean;
   fullName: string;
   groupName: string;
   faculty?: string;

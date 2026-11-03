@@ -35,6 +35,7 @@ import type {
   AdminStatsResponse,
   AdminUserSummary,
   AdminUserDetails,
+  AdminUserFilter,
   AdminJob,
   AdminAnnouncement,
   AdminDiagnostics,
@@ -289,9 +290,9 @@ export const api = {
     return request<AdminStatsResponse>(`/admin/stats?${query.toString()}`);
   },
 
-  adminUsers: (query: string, limit = 50) =>
+  adminUsers: (query: string, limit = 50, filter: AdminUserFilter = 'all') =>
     request<{ users: AdminUserSummary[]; total: number }>(
-      `/admin/users?query=${encodeURIComponent(query)}&limit=${limit}`,
+      `/admin/users?query=${encodeURIComponent(query)}&limit=${limit}&filter=${filter}`,
     ),
 
   adminUser: (id: string) =>
@@ -307,6 +308,13 @@ export const api = {
       method: 'POST',
       body: { confirmation },
     }),
+
+  adminSendMessage: (body: {
+    text: string;
+    url?: string;
+    userId?: string;
+    channels: { feed: boolean; push: boolean };
+  }) => request<{ jobId: string; total: number }>('/admin/messages', { method: 'POST', body }),
 
   adminBroadcast: (body: { text: string; url?: string; userId?: string }) =>
     request<{ jobId: string; total: number }>('/admin/broadcast', { method: 'POST', body }),

@@ -131,6 +131,19 @@ check(
 );
 check('гость помечен в ответе', guestList.json<{ users: Array<{ id: string }> }>().users.some((user) => user.id === guest.user.userId));
 
+const guestsOnly = await app.inject({
+  method: 'GET',
+  url: '/api/admin/users?filter=guests',
+  headers: root.auth,
+});
+check(
+  'фильтр «Гости» оставляет только гостей',
+  guestsOnly.statusCode === 200 &&
+    guestsOnly
+      .json<{ users: Array<{ isGuest: boolean }> }>()
+      .users.every((user) => user.isGuest),
+);
+
 const card = await app.inject({
   method: 'GET',
   url: `/api/admin/users/${target.user.userId}`,
@@ -229,6 +242,51 @@ check(
   ),
 );
 
+// ── Сообщения: лента и push раздельно ─────────────────────────────────────────
+console.log('— Сообщения —');
+
+const feedOnly = await app.inject({
+  method: 'POST',
+  url: '/api/admin/messages',
+  headers: root.auth,
+  payload: { text: 'Только лента', channels: { feed: true, push: false } },
+});
+check('сообщение в ленту запущено', feedOnly.statusCode === 200, String(feedOnly.statusCode));
+if (feedOnly.statusCode === 200) {
+  await waitJob(feedOnly.json<{ jobId: string }>().jobId, root.auth);
+}
+check(
+  'сообщение в ленте видно пользователю',
+  announcementStore.listForUser(plain.user.userId).some((item) => item.text === 'Только лента'),
+);
+
+const pushOnly = await app.inject({
+  method: 'POST',
+  url: '/api/admin/messages',
+  headers: root.auth,
+  payload: { text: 'Только push', channels: { feed: false, push: true } },
+});
+check('push-only запущен', pushOnly.statusCode === 200, String(pushOnly.statusCode));
+if (pushOnly.statusCode === 200) {
+  await waitJob(pushOnly.json<{ jobId: string }>().jobId, root.auth);
+}
+check(
+  'push-only не показывается в ленте',
+  !announcementStore.listForUser(plain.user.userId).some((item) => item.text === 'Только push'),
+);
+check(
+  'push-only остаётся в истории админки',
+  announcementStore.listAll().some((item) => item.text === 'Только push' && item.feed === false),
+);
+
+const noChannels = await app.inject({
+  method: 'POST',
+  url: '/api/admin/messages',
+  headers: root.auth,
+  payload: { text: 'Без каналов', channels: { feed: false, push: false } },
+});
+check('без каналов → 400', noChannels.statusCode === 400, String(noChannels.statusCode));
+
 // ── Регистрация и обслуживание ────────────────────────────────────────────────
 console.log('— Регистрация и обслуживание —');
 
@@ -260,6 +318,44 @@ check('назначение админа', addAdmin.statusCode === 200, String(a
 
 const nowAdmin = await app.inject({ method: 'GET', url: '/api/admin/users', headers: plain.auth });
 check('назначенный получил доступ', nowAdmin.statusCode === 200);
+
+const assignedAdd = await app.inject({
+  method: 'POST',
+  url: '/api/admin/admins',
+  headers: plain.auth,
+  payload: { userId: target.user.userId },
+});
+check('назначенный не может назначать админов', assignedAdd.statusCode === 403, String(assignedAdd.statusCode));
+
+const assignedRegistration = await app.inject({
+  method: 'POST',
+  url: '/api/admin/registration',
+  headers: plain.auth,
+  payload: { open: true },
+});
+check(
+  'назначенный не может менять регистрацию',
+  assignedRegistration.statusCode === 403,
+  String(assignedRegistration.statusCode),
+);
+
+const assignedMaintenance = await app.inject({
+  method: 'POST',
+  url: '/api/admin/maintenance',
+  headers: plain.auth,
+});
+check(
+  'назначенный не может запускать обслуживание',
+  assignedMaintenance.statusCode === 403,
+  String(assignedMaintenance.statusCode),
+);
+
+const selfRemove = await app.inject({
+  method: 'DELETE',
+  url: `/api/admin/admins/${root.user.userId}`,
+  headers: root.auth,
+});
+check('нельзя снять самого себя', selfRemove.statusCode === 400, String(selfRemove.statusCode));
 
 const adminsList = await app.inject({ method: 'GET', url: '/api/admin/admins', headers: root.auth });
 check(
@@ -342,6 +438,21 @@ const stats = await app.inject({
 });
 check('живая статистика за сегодня', stats.statusCode === 200 && stats.json<{ days: unknown[] }>().days.length === 1);
 
+const activeA = createUser('active-a');
+const activeB = createUser('active-b');
+const activeGuest = createUser('active-guest', { isGuest: true });
+
+const beforeActive = getStats().today?.active.total ?? 0;
+recordActivity(activeA.user.userId, '/api/schedule');
+recordActivity(activeA.user.userId, '/api/schedule');
+recordActivity(activeB.user.userId, '/api/schedule');
+recordActivity(activeGuest.user.userId, '/api/schedule');
+const liveStats = getStats();
+const afterActive = liveStats.today?.active.total ?? 0;
+
+check('уникальные активные не удваиваются', afterActive - beforeActive === 3, String(afterActive - beforeActive));
+check('гость считается отдельно', (liveStats.today?.active.guests ?? 0) >= 1);
+
 const badDate = await app.inject({
   method: 'GET',
   url: '/api/admin/stats?period=date&date=2020-01-01',
@@ -358,7 +469,10 @@ check('диагностика содержит нотификатор', typeof d
 
 const audit = await app.inject({ method: 'GET', url: '/api/admin/audit', headers: root.auth });
 check('аудит пишется', audit.json<{ items: unknown[] }>().items.length > 0);
-check('аудит содержит рассылку', adminAuditStore.list().some((entry) => entry.action === 'broadcast_all'));
+check(
+  'аудит содержит рассылку',
+  adminAuditStore.list().some((entry) => entry.action === 'message_all' || entry.action === 'broadcast_all'),
+);
 
 // ── Активность ────────────────────────────────────────────────────────────────
 console.log('— Фоновая активность —');

@@ -47,7 +47,7 @@ import {
 import { forgetBarsClient, forgetBarsSessionValid } from '../../services/bars/barsServiceFactory.ts';
 import { forgetOwaClient } from '../../services/mail/owaClientRegistry.ts';
 import { clearMailStatus } from '../../services/mail/mailStatusCache.ts';
-import { adminName, envBarsLoginHashes, isEnvBarsAdmin, isPwaAdmin, requireAdmin } from '../../utils/adminAuth.ts';
+import { adminName, envBarsLoginHashes, isEnvBarsAdmin, isPwaAdmin, requireAdmin, requireEnvAdmin } from '../../utils/adminAuth.ts';
 import { AuthError } from '../middleware/auth.ts';
 
 const DATA_DIR = path.resolve(process.cwd(), 'db', 'data');
@@ -73,6 +73,16 @@ function readUrl(body: unknown): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+function readChannels(body: unknown): { feed: boolean; push: boolean } | null {
+  if (!body || typeof body !== 'object') return null;
+  const raw = (body as { channels?: unknown }).channels;
+  if (!raw || typeof raw !== 'object') return null;
+
+  const value = raw as { feed?: unknown; push?: unknown };
+  if (typeof value.feed !== 'boolean' || typeof value.push !== 'boolean') return null;
+  return { feed: value.feed, push: value.push };
 }
 
 /**
@@ -192,8 +202,9 @@ export function registerAdminRoutes(app: FastifyInstance): void {
   app.get('/api/admin/users', async (request, reply) => {
     requireAdmin(request);
 
-    const query = request.query as { query?: string; limit?: string };
+    const query = request.query as { query?: string; limit?: string; filter?: string };
     const search = text(query.query).toLowerCase();
+    const filter = text(query.filter) || 'all';
     const limit = Math.min(100, Math.max(1, Number(query.limit) || 50));
 
     const activity = activityByUser();
@@ -201,6 +212,9 @@ export function registerAdminRoutes(app: FastifyInstance): void {
       .all()
       .map((user) => userSummary(user, activity))
       .filter((user) => {
+        if (filter === 'bars' && user.bars !== 'active') return false;
+        if (filter === 'guests' && !user.isGuest) return false;
+        if (filter === 'admins' && !user.isAdmin) return false;
         if (!search) return true;
         return (
           user.name.toLowerCase().includes(search) ||
@@ -271,7 +285,62 @@ export function registerAdminRoutes(app: FastifyInstance): void {
     return reply.send({ ok: true });
   });
 
-  /* ── рассылка ───────────────────────────────────────────────────────────── */
+  /* ── сообщения: лента и push ─────────────────────────────────────────────── */
+
+  app.post('/api/admin/messages', async (request, reply) => {
+    const admin = requireAdmin(request);
+    const body = request.body as { text?: unknown; url?: unknown; userId?: unknown; channels?: unknown } | null;
+    const message = readText(body);
+    const channels = readChannels(body);
+
+    if (!message) {
+      return reply.code(400).send({ error: 'bad_request', message: 'Текст сообщения пуст.' });
+    }
+    if (message.length > 4000) {
+      return reply.code(400).send({ error: 'bad_request', message: 'Текст длиннее 4000 символов.' });
+    }
+    if (!channels || (!channels.feed && !channels.push)) {
+      return reply.code(400).send({
+        error: 'bad_request',
+        message: 'Выберите хотя бы один канал: лента или push.',
+      });
+    }
+
+    const targetUserId = text(body?.userId) || undefined;
+    if (targetUserId) {
+      const target = userStore.getByUserId(targetUserId);
+      if (!target) {
+        return reply.code(404).send({ error: 'not_found', message: 'Получатель не найден.' });
+      }
+      if (target.isGuest === true) {
+        return reply.code(400).send({
+          error: 'bad_request',
+          message: 'Гость не получает сообщения — выберите обычного пользователя.',
+        });
+      }
+    }
+
+    const job = startBroadcast({
+      text: message,
+      url: readUrl(body),
+      targetUserId,
+      channels,
+      admin,
+    });
+
+    if (!job) {
+      const running = runningJob('broadcast');
+      return reply.code(409).send({
+        error: 'job_running',
+        message: 'Рассылка уже идёт.',
+        jobId: running?.id ?? null,
+      });
+    }
+
+    return reply.send({ jobId: job.id, total: job.total });
+  });
+
+  /* ── рассылка (deprecated alias) ──────────────────────────────────────────── */
 
   app.post('/api/admin/broadcast', async (request, reply) => {
     const admin = requireAdmin(request);
@@ -329,7 +398,7 @@ export function registerAdminRoutes(app: FastifyInstance): void {
   });
 
   app.post('/api/admin/notifier/run', async (request, reply) => {
-    const admin = requireAdmin(request);
+    const admin = requireEnvAdmin(request);
 
     const running = runningJob('notifier');
     if (running) return reply.send({ jobId: running.id, total: running.total, running: true });
@@ -393,7 +462,10 @@ export function registerAdminRoutes(app: FastifyInstance): void {
       }
     }
 
-    const item = announcementStore.create(message, admin.userId, targetUserId);
+    const item = announcementStore.create(message, admin.userId, targetUserId, {
+      feed: true,
+      channels: { feed: true, push: false },
+    });
     audit(admin, 'announcement_create', targetUserId ?? 'все', message.slice(0, 80));
     return reply.send({ item });
   });
@@ -444,7 +516,7 @@ export function registerAdminRoutes(app: FastifyInstance): void {
   });
 
   app.post('/api/admin/maintenance', async (request, reply) => {
-    const admin = requireAdmin(request);
+    const admin = requireEnvAdmin(request);
     const result = await runMaintenance();
 
     audit(
@@ -464,7 +536,7 @@ export function registerAdminRoutes(app: FastifyInstance): void {
   });
 
   app.post('/api/admin/registration', async (request, reply) => {
-    const admin = requireAdmin(request);
+    const admin = requireEnvAdmin(request);
     const body = request.body as { open?: unknown } | null;
 
     if (typeof body?.open !== 'boolean') {
@@ -502,7 +574,7 @@ export function registerAdminRoutes(app: FastifyInstance): void {
   });
 
   app.post('/api/admin/admins', async (request, reply) => {
-    const admin = requireAdmin(request);
+    const admin = requireEnvAdmin(request);
     const userId = text((request.body as { userId?: unknown } | null)?.userId);
     const user = userId ? userStore.getByUserId(userId) : undefined;
 
@@ -523,8 +595,16 @@ export function registerAdminRoutes(app: FastifyInstance): void {
   });
 
   app.delete('/api/admin/admins/:userId', async (request, reply) => {
-    const admin = requireAdmin(request);
+    const admin = requireEnvAdmin(request);
     const { userId } = request.params as { userId: string };
+
+    if (userId === admin.userId) {
+      return reply.code(400).send({
+        error: 'cannot_remove_self',
+        message: 'Нельзя снять самого себя.',
+      });
+    }
+
     const user = userStore.getByUserId(userId);
 
     if (!user) return reply.code(404).send({ error: 'not_found', message: 'Пользователь не найден.' });

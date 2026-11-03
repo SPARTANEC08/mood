@@ -10,10 +10,11 @@ import { Search, ShieldCheck, Trash2, UserPlus } from 'lucide-react';
 
 import { api } from '@/lib/api';
 import { Card, ListGroup } from '@/components/ui';
-import type { AdminAdminsResponse, AdminUserSummary } from '@/types/api';
+import type { AdminAdminsResponse, AdminUserSummary, BootstrapProfile } from '@/types/api';
 import { AdminHeader, ConfirmDialog, SectionRow, errorText, formatStamp } from './shared';
 
-export function AdminAdmins({ onBack }: { onBack: () => void }) {
+export function AdminAdmins({ onBack, profile }: { onBack: () => void; profile: BootstrapProfile }) {
+  const isEnvAdmin = profile.isEnvAdmin === true;
   const [data, setData] = useState<AdminAdminsResponse | null>(null);
   const [query, setQuery] = useState('');
   const [users, setUsers] = useState<AdminUserSummary[]>([]);
@@ -96,7 +97,7 @@ export function AdminAdmins({ onBack }: { onBack: () => void }) {
 
           <Card className="px-4 py-3">
             <p className="text-[12px] font-semibold uppercase tracking-wide" style={{ color: 'var(--text-secondary)' }}>
-              Env-админы
+              Основные админы
             </p>
             <p className="mt-1 text-[12px] leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
               Логинов БАРС: {data?.env.barsHashes ?? 0} (сами логины не показываются)
@@ -106,20 +107,28 @@ export function AdminAdmins({ onBack }: { onBack: () => void }) {
             </p>
           </Card>
 
-          <ListGroup>
-            <SectionRow
-              icon={UserPlus}
-              title={adding ? 'Отмена' : 'Назначить админа'}
-              subtitle="Из существующих пользователей"
-              onClick={() => {
-                setAdding((value) => !value);
-                setQuery('');
-                setUsers([]);
-              }}
-            />
-          </ListGroup>
+          {isEnvAdmin ? (
+            <ListGroup>
+              <SectionRow
+                icon={UserPlus}
+                title={adding ? 'Отмена' : 'Назначить админа'}
+                subtitle="Из существующих пользователей"
+                onClick={() => {
+                  setAdding((value) => !value);
+                  setQuery('');
+                  setUsers([]);
+                }}
+              />
+            </ListGroup>
+          ) : (
+            <Card className="px-4 py-3">
+              <p className="text-[12px] leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+                Управлять составом может только основной администратор. Список доступен для просмотра.
+              </p>
+            </Card>
+          )}
 
-          {adding ? (
+          {isEnvAdmin && adding ? (
             <>
               <div className="flex items-center gap-2 rounded-[11px] px-3" style={{ background: 'var(--surface-grouped)' }}>
                 <Search size={16} style={{ color: 'var(--text-tertiary)' }} aria-hidden />
@@ -183,20 +192,36 @@ export function AdminAdmins({ onBack }: { onBack: () => void }) {
                 >
                   <ShieldCheck size={16} className="shrink-0" style={{ color: 'var(--accent)' }} aria-hidden />
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-[14px] font-medium">{admin.name}</p>
+                    <p className="truncate text-[14px] font-medium">
+                      {admin.name}
+                      {admin.userId === profile.userId ? (
+                        <span className="ml-2 text-[10px] font-semibold" style={{ color: 'var(--accent)' }}>
+                          вы
+                        </span>
+                      ) : null}
+                    </p>
                     <p className="text-[11px]" style={{ color: 'var(--text-tertiary)' }}>
                       {admin.group || 'без группы'} · {formatStamp(Date.parse(admin.addedAt))}
                     </p>
                   </div>
-                  <button
-                    type="button"
-                    aria-label="Снять"
-                    onClick={() => setRemoving(admin.userId)}
-                    className="pressable shrink-0 rounded-full p-1.5 active:pressable-active"
-                    style={{ color: 'var(--danger)' }}
-                  >
-                    <Trash2 size={16} aria-hidden />
-                  </button>
+                  {isEnvAdmin && admin.userId !== profile.userId ? (
+                    <button
+                      type="button"
+                      aria-label="Снять"
+                      onClick={() => setRemoving(admin.userId)}
+                      className="pressable shrink-0 rounded-full p-1.5 active:pressable-active"
+                      style={{ color: 'var(--danger)' }}
+                    >
+                      <Trash2 size={16} aria-hidden />
+                    </button>
+                  ) : (
+                    <span
+                      className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold"
+                      style={{ background: 'var(--surface-grouped)', color: 'var(--text-secondary)' }}
+                    >
+                      назначенный
+                    </span>
+                  )}
                 </div>
               ))
             )}

@@ -57,6 +57,15 @@ export function requireAdmin(request: FastifyRequest): StoredUser {
   return user;
 }
 
+/** Управление составом админов и системными настройками — только env-админ. */
+export function requireEnvAdmin(request: FastifyRequest): StoredUser {
+  const user = requireAdmin(request);
+  if (!isEnvBarsAdmin(user)) {
+    throw new AuthError('Это действие доступно только основному администратору.', 403, 'not_env_admin');
+  }
+  return user;
+}
+
 /** Человеческое имя для журнала действий. */
 export function adminName(user: StoredUser): string {
   return (

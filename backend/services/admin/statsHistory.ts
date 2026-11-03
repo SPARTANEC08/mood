@@ -36,6 +36,8 @@ export interface DailyStats {
   platforms: { ios: number; android: number; web: number; unknown: number };
   files: { totalFiles: number; totalBytes: number };
   sessionsCount: number;
+  /** Уникальные люди за день; null у старых срезов. */
+  active: { total: number; users: number; guests: number } | null;
   /** Почасовые значения, если они были в срезе. */
   hours: Array<{ label: string; value: number }> | null;
   source: 'json' | 'html';
@@ -127,6 +129,7 @@ export function dailyStatsFromResponse(stats: StatsResponse, date: string): Dail
     currentOnline: stats.current.online,
     homework: { ...w.homework },
     important: { ...w.important },
+    active: stats.window.active ?? null,
     platforms: { ...stats.platforms },
     files: { totalFiles: stats.files.totalFiles, totalBytes: stats.files.totalBytes },
     sessionsCount: stats.sessions.length,
@@ -189,6 +192,7 @@ function parseJson(raw: string, date: string): DailyStats | null {
         totalBytes: number(parsed.files?.totalBytes),
       },
       sessionsCount: number(parsed.sessionsCount),
+      active: activeOf(parsed.active),
       hours: Array.isArray(parsed.hours)
         ? parsed.hours.map((item) => ({ label: String(item.label ?? ''), value: number(item.value) }))
         : null,
@@ -271,6 +275,7 @@ export function parseHtml(html: string, date: string): DailyStats | null {
         totalBytes: filesMatch ? parseSize(filesMatch[2]) : 0,
       },
       sessionsCount: sessionsMatch ? number(sessionsMatch[1]) : 0,
+      active: null,
       hours: hours.length > 0 ? hours : null,
       source: 'html',
     };
@@ -296,6 +301,17 @@ function parseSize(raw: string): number {
 function number(value: unknown): number {
   const parsed = typeof value === 'number' ? value : Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+/** Старые срезы не знали про уникальных: отсутствие поля — это null, не 0. */
+function activeOf(value: unknown): DailyStats['active'] {
+  if (!value || typeof value !== 'object') return null;
+  const raw = value as { total?: unknown; users?: unknown; guests?: unknown };
+  return {
+    total: number(raw.total),
+    users: number(raw.users),
+    guests: number(raw.guests),
+  };
 }
 
 /** Дни, за которые есть срезы (JSON или HTML), новые сверху. */

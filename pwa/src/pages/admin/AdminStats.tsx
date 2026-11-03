@@ -62,12 +62,27 @@ export function AdminStats({ onBack }: { onBack: () => void }) {
 
   const day: AdminDayStats | null = data?.days.length ? data.days[data.days.length - 1] : null;
   const latest = data?.latest ?? day;
+  const active =
+    period === 'today'
+      ? data?.live?.today?.active ?? null
+      : period === 'yesterday' || period === 'date'
+        ? day?.active ?? null
+        : null;
+  const showActive = period === 'today' || period === 'yesterday' || period === 'date';
   const hours = data?.live?.requestsByHour ?? (period === 'date' || period === 'yesterday' ? day?.hours ?? null : null);
   const showDayList = period === 'week' || period === 'month';
 
   const totals = data?.totals;
-  const requests = showDayList ? totals?.requests ?? 0 : day?.requests ?? 0;
-  const visits = showDayList ? totals?.visits ?? 0 : day?.visits ?? 0;
+  const requests = showDayList
+    ? totals?.requests ?? 0
+    : period === 'today'
+      ? data?.live?.today?.requests ?? day?.requests ?? 0
+      : day?.requests ?? 0;
+  const visits = showDayList
+    ? totals?.visits ?? 0
+    : period === 'today'
+      ? data?.live?.today?.visits ?? day?.visits ?? 0
+      : day?.visits ?? 0;
   const maxOnline = showDayList ? totals?.maxOnline ?? 0 : day?.maxOnline ?? 0;
   const newSessions = showDayList ? totals?.newBarsSessions ?? 0 : day?.newBarsSessions ?? 0;
 
@@ -159,6 +174,18 @@ export function AdminStats({ onBack }: { onBack: () => void }) {
           {data && data.days.length > 0 ? (
             <>
               <div className="grid grid-cols-2 gap-2">
+                {showActive ? (
+                  <StatCard
+                    label={period === 'today' ? 'Активных сегодня' : 'Активных за день'}
+                    value={active ? active.total : '—'}
+                    hint={
+                      active
+                        ? `${active.users} с БАРС · ${active.guests} гостей`
+                        : 'нет данных'
+                    }
+                    tone="success"
+                  />
+                ) : null}
                 <StatCard
                   label="Онлайн"
                   value={latest?.currentOnline ?? 0}
@@ -166,8 +193,12 @@ export function AdminStats({ onBack }: { onBack: () => void }) {
                   tone="success"
                 />
                 <StatCard label="Сессии БАРС" value={latest?.currentBars ?? 0} />
+                <StatCard
+                  label="Открытий"
+                  value={visits}
+                  hint="заходы в приложение"
+                />
                 <StatCard label="Запросов" value={requests} />
-                <StatCard label="Заходов" value={visits} />
                 <StatCard label="Макс. онлайн" value={maxOnline} hint="окно 5 минут" />
                 <StatCard label="Новых сессий" value={newSessions} />
               </div>

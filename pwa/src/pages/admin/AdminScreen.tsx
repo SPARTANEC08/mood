@@ -1,41 +1,40 @@
 /**
- * Админка внутри PWA.
+ * Админка внутри PWA: мобильный дашборд и группы разделов.
  *
- * Полноэкранный список разделов: статистика, рассылка, пользователи,
- * объявления, диагностика, обслуживание, администраторы. Вход — шестерёнка в
- * шапке «Кабинета», видимая только админу (сервер всё равно проверяет права
- * на каждом запросе).
+ * Сверху — четыре живые цифры и быстрые действия, ниже — «Обзор», «Люди»,
+ * «Сообщения», «Система». Доступ к управлению админами и системным настройкам
+ * показываем только основному админу; сервер всё равно проверяет права.
  */
 
 import { useEffect, useState } from 'react';
 import {
   Activity,
   BarChart3,
-  BellRing,
   Brush,
+  Gauge,
+  Lock,
   Megaphone,
   ShieldCheck,
   Users,
+  Wifi,
 } from 'lucide-react';
 
 import { api } from '@/lib/api';
-import { Card, ListGroup } from '@/components/ui';
-import type { BootstrapProfile } from '@/types/api';
+import { Card } from '@/components/ui';
+import type { AdminStatsResponse, BootstrapProfile } from '@/types/api';
 import { AdminAdmins } from './AdminAdmins';
-import { AdminAnnouncements } from './AdminAnnouncements';
-import { AdminBroadcast } from './AdminBroadcast';
 import { AdminDiagnostics } from './AdminDiagnostics';
 import { AdminMaintenance } from './AdminMaintenance';
+import { AdminMessages } from './AdminMessages';
 import { AdminStats } from './AdminStats';
 import { AdminUsers } from './AdminUsers';
-import { AdminHeader, SectionRow, Toggle, errorText } from './shared';
+import { AdminHeader, SectionRow, StatCard, Toggle, errorText } from './shared';
 
 export type AdminSection =
   | 'menu'
   | 'stats'
-  | 'broadcast'
+  | 'messages'
   | 'users'
-  | 'announcements'
   | 'diagnostics'
   | 'maintenance'
   | 'admins';
@@ -51,18 +50,21 @@ export function AdminScreen({
 }) {
   const [section, setSection] = useState<AdminSection>(initial);
   const [registrationOpen, setRegistrationOpen] = useState<boolean | null>(null);
+  const [today, setToday] = useState<AdminStatsResponse | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const isEnvAdmin = profile.isEnvAdmin === true;
+
   useEffect(() => {
-    void api
-      .adminRegistration()
-      .then((state) => setRegistrationOpen(state.open))
-      .catch((err: unknown) => setError(errorText(err)));
+    void Promise.all([
+      api.adminRegistration().then((state) => setRegistrationOpen(state.open)),
+      api.adminStats({ period: 'today' }).then(setToday),
+    ]).catch((err: unknown) => setError(errorText(err)));
   }, []);
 
   async function toggleRegistration(next: boolean): Promise<void> {
-    if (busy) return;
+    if (busy || !isEnvAdmin) return;
     setBusy(true);
 
     try {
@@ -78,86 +80,180 @@ export function AdminScreen({
   const backToMenu = () => setSection('menu');
 
   if (section === 'stats') return <AdminStats onBack={backToMenu} />;
-  if (section === 'broadcast') return <AdminBroadcast onBack={backToMenu} />;
+  if (section === 'messages') return <AdminMessages onBack={backToMenu} />;
   if (section === 'users') return <AdminUsers onBack={backToMenu} />;
-  if (section === 'announcements') return <AdminAnnouncements onBack={backToMenu} />;
-  if (section === 'diagnostics') return <AdminDiagnostics onBack={backToMenu} />;
+  if (section === 'diagnostics') return <AdminDiagnostics onBack={backToMenu} isEnvAdmin={isEnvAdmin} />;
   if (section === 'maintenance') return <AdminMaintenance onBack={backToMenu} />;
-  if (section === 'admins') return <AdminAdmins onBack={backToMenu} />;
+  if (section === 'admins') return <AdminAdmins onBack={backToMenu} profile={profile} />;
+
+  const active = today?.live?.today?.active;
+  const online = today?.live?.current?.online ?? 0;
+  const bars = today?.live?.current?.barsSessions ?? 0;
+  const visits = today?.live?.today?.visits ?? 0;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <AdminHeader title="Администрирование" onBack={onClose} />
+      <AdminHeader
+        title="Админка"
+        onBack={onClose}
+        right={
+          <span
+            className="rounded-full px-2.5 py-1 text-[11px] font-semibold"
+            style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}
+          >
+            {isEnvAdmin ? 'Основной' : 'Админ'}
+          </span>
+        }
+      />
 
       <div className="scroll-hidden min-h-0 flex-1 overflow-y-auto overscroll-contain">
-        <div className="mx-auto max-w-[560px] space-y-3 px-4 pb-8 pt-1">
-          <p className="px-1 text-[12px]" style={{ color: 'var(--text-secondary)' }}>
-            {profile.fullName}
-          </p>
+        <div className="mx-auto max-w-[560px] space-y-4 px-4 pb-8 pt-1">
+          <Card className="px-4 py-3.5">
+            <p className="text-[15px] font-semibold leading-tight">{profile.fullName}</p>
+            <p className="mt-0.5 text-[12px]" style={{ color: 'var(--text-secondary)' }}>
+              {profile.groupName || 'без группы'} · {isEnvAdmin ? 'полный доступ' : 'без управления админами'}
+            </p>
+          </Card>
 
-          <ListGroup>
-            <SectionRow
-              icon={BarChart3}
-              title="Статистика"
-              subtitle="Сегодня, вчера, неделя, месяц, дата"
-              onClick={() => setSection('stats')}
+          <div className="grid grid-cols-2 gap-2">
+            <StatCard
+              label="Активных сегодня"
+              value={active ? active.total : '—'}
+              hint={active ? `${active.users} с БАРС · ${active.guests} гостей` : 'считаем…'}
+              tone="success"
             />
-            <SectionRow
-              icon={Megaphone}
-              title="Рассылка"
-              subtitle="Всем или лично · push, Telegram, лента"
-              onClick={() => setSection('broadcast')}
-            />
-            <SectionRow
-              icon={Users}
-              title="Пользователи"
-              subtitle="Поиск, карточка, сессии, удаление"
-              onClick={() => setSection('users')}
-            />
-            <SectionRow
-              icon={BellRing}
-              title="Объявления"
-              subtitle="Очередь в приложении"
-              onClick={() => setSection('announcements')}
-            />
-            <SectionRow
-              icon={Activity}
-              title="Диагностика"
-              subtitle="Сервисы, прогресс, журнал действий"
-              onClick={() => setSection('diagnostics')}
-            />
-            <SectionRow
-              icon={Brush}
-              title="Обслуживание"
-              subtitle="Уборка файлов и кэшей"
-              onClick={() => setSection('maintenance')}
-            />
-            <SectionRow
-              icon={ShieldCheck}
-              title="Администраторы"
-              subtitle="Env-админы и назначенные"
-              onClick={() => setSection('admins')}
-            />
-            <SectionRow
-              icon={BellRing}
-              title="Регистрация"
-              subtitle={
-                registrationOpen === null
-                  ? 'Загрузка…'
-                  : registrationOpen
-                    ? 'Открыта'
-                    : 'Закрыта'
-              }
-              right={
-                <Toggle
-                  checked={registrationOpen === true}
-                  onChange={(next) => void toggleRegistration(next)}
-                  label="Регистрация"
-                  disabled={registrationOpen === null || busy}
+            <StatCard label="Онлайн" value={online} hint="±5 минут" />
+            <StatCard label="Сессии БАРС" value={bars} hint="активные входы" />
+            <StatCard label="Открытий" value={visits} hint="заходы в приложение" />
+          </div>
+
+          <div className="grid grid-cols-3 gap-2">
+            {[
+              { label: 'Написать', icon: Megaphone, go: 'messages' as const },
+              { label: 'Люди', icon: Users, go: 'users' as const },
+              { label: 'Графики', icon: BarChart3, go: 'stats' as const },
+            ].map((item) => {
+              const Icon = item.icon;
+              return (
+                <button
+                  key={item.label}
+                  type="button"
+                  onClick={() => setSection(item.go)}
+                  className="pressable flex flex-col items-center gap-1.5 rounded-[14px] px-2 py-3 text-[12px] font-semibold active:pressable-active"
+                  style={{ background: 'var(--surface-grouped)', color: 'var(--text-primary)' }}
+                >
+                  <Icon size={18} style={{ color: 'var(--accent)' }} aria-hidden />
+                  {item.label}
+                </button>
+              );
+            })}
+          </div>
+
+          <section className="space-y-2">
+            <h2 className="px-1 text-[11px] font-semibold uppercase tracking-wide" style={{ color: 'var(--text-tertiary)' }}>
+              Обзор
+            </h2>
+            <Card className="divide-y divide-[var(--separator-soft)] overflow-hidden">
+              <SectionRow
+                icon={BarChart3}
+                title="Статистика"
+                subtitle="Активные, открытия, сессии, история"
+                onClick={() => setSection('stats')}
+              />
+              <SectionRow
+                icon={Activity}
+                title="Диагностика"
+                subtitle="Сервисы, память, журнал действий"
+                onClick={() => setSection('diagnostics')}
+              />
+            </Card>
+          </section>
+
+          <section className="space-y-2">
+            <h2 className="px-1 text-[11px] font-semibold uppercase tracking-wide" style={{ color: 'var(--text-tertiary)' }}>
+              Люди
+            </h2>
+            <Card className="divide-y divide-[var(--separator-soft)] overflow-hidden">
+              <SectionRow
+                icon={Users}
+                title="Пользователи"
+                subtitle="Поиск, фильтры, сессии, удаление"
+                onClick={() => setSection('users')}
+              />
+              <SectionRow
+                icon={ShieldCheck}
+                title="Администраторы"
+                subtitle={isEnvAdmin ? 'Состав и роли' : 'Только просмотр'}
+                onClick={() => setSection('admins')}
+              />
+            </Card>
+          </section>
+
+          <section className="space-y-2">
+            <h2 className="px-1 text-[11px] font-semibold uppercase tracking-wide" style={{ color: 'var(--text-tertiary)' }}>
+              Сообщения
+            </h2>
+            <Card className="divide-y divide-[var(--separator-soft)] overflow-hidden">
+              <SectionRow
+                icon={Megaphone}
+                title="Сообщения"
+                subtitle="Лента и push · всем или лично"
+                onClick={() => setSection('messages')}
+              />
+            </Card>
+          </section>
+
+          <section className="space-y-2">
+            <h2 className="px-1 text-[11px] font-semibold uppercase tracking-wide" style={{ color: 'var(--text-tertiary)' }}>
+              Система
+            </h2>
+            <Card className="divide-y divide-[var(--separator-soft)] overflow-hidden">
+              <SectionRow
+                icon={Gauge}
+                title="Регистрация"
+                subtitle={
+                  registrationOpen === null
+                    ? 'Загрузка…'
+                    : registrationOpen
+                      ? 'Открыта для новых пользователей'
+                      : 'Закрыта'
+                }
+                right={
+                  isEnvAdmin ? (
+                    <Toggle
+                      checked={registrationOpen === true}
+                      onChange={(next) => void toggleRegistration(next)}
+                      label="Регистрация"
+                      disabled={registrationOpen === null || busy}
+                    />
+                  ) : (
+                    <Lock size={16} style={{ color: 'var(--text-tertiary)' }} aria-hidden />
+                  )
+                }
+              />
+              {isEnvAdmin ? (
+                <SectionRow
+                  icon={Brush}
+                  title="Обслуживание"
+                  subtitle="Уборка файлов, кэшей и брошенных гостей"
+                  onClick={() => setSection('maintenance')}
                 />
-              }
-            />
-          </ListGroup>
+              ) : (
+                <SectionRow
+                  icon={Lock}
+                  title="Обслуживание"
+                  subtitle="Доступно только основному администратору"
+                />
+              )}
+            </Card>
+          </section>
+
+          {today?.live ? (
+            <p className="px-1 text-[11px]" style={{ color: 'var(--text-tertiary)' }}>
+              <Wifi size={12} className="mr-1 inline" aria-hidden />
+              Данные на {today.live.moscowNow.time} МСК
+            </p>
+          ) : null}
 
           {error ? (
             <Card className="px-4 py-3">

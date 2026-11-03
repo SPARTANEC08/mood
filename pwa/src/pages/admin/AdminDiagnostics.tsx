@@ -22,6 +22,8 @@ import {
 } from './shared';
 
 const ACTION_LABELS: Record<string, string> = {
+  message_all: 'Сообщение всем',
+  message_personal: 'Личное сообщение',
   broadcast_all: 'Рассылка всем',
   broadcast_personal: 'Личная рассылка',
   user_delete: 'Удаление аккаунта',
@@ -35,7 +37,7 @@ const ACTION_LABELS: Record<string, string> = {
   notifier_run: 'Обновление данных',
 };
 
-export function AdminDiagnostics({ onBack }: { onBack: () => void }) {
+export function AdminDiagnostics({ onBack, isEnvAdmin }: { onBack: () => void; isEnvAdmin: boolean }) {
   const [data, setData] = useState<Diagnostics | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -163,16 +165,24 @@ export function AdminDiagnostics({ onBack }: { onBack: () => void }) {
                 </div>
               </Card>
 
-              <button
-                type="button"
-                onClick={() => void runNotifier()}
-                disabled={running}
-                className="pressable flex w-full items-center justify-center gap-2 rounded-[14px] py-3 text-[15px] font-semibold text-white active:pressable-active disabled:opacity-50"
-                style={{ background: 'var(--accent)' }}
-              >
-                <Play size={16} aria-hidden />
-                {running ? 'Прогон идёт…' : 'Обновить данные'}
-              </button>
+              {isEnvAdmin ? (
+                <button
+                  type="button"
+                  onClick={() => void runNotifier()}
+                  disabled={running}
+                  className="pressable flex w-full items-center justify-center gap-2 rounded-[14px] py-3 text-[15px] font-semibold text-white active:pressable-active disabled:opacity-50"
+                  style={{ background: 'var(--accent)' }}
+                >
+                  <Play size={16} aria-hidden />
+                  {running ? 'Прогон идёт…' : 'Обновить данные'}
+                </button>
+              ) : (
+                <Card className="px-4 py-3">
+                  <p className="text-[12px]" style={{ color: 'var(--text-secondary)' }}>
+                    Принудительный прогон доступен только основному администратору.
+                  </p>
+                </Card>
+              )}
 
               {job ? (
                 <Card className="px-4 py-3">

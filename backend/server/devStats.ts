@@ -323,6 +323,15 @@ export interface StatsFilesRow {
   lastUploadAt: number;
 }
 
+export interface ActiveBreakdown {
+  /** Уникальные люди за интервал. */
+  total: number;
+  /** Из них обычные пользователи. */
+  users: number;
+  /** Из них гости. */
+  guests: number;
+}
+
 export interface StatsResponse {
   generatedAt: number;
   /** Границы окна. Для автоотчёта конец — 23:59 описываемых суток. */
@@ -336,9 +345,17 @@ export interface StatsResponse {
     visits: number;
     maxOnline: number;
     newBarsSessions: number;
+    /** Уникальные люди за окно (не сумма открытий). */
+    active: ActiveBreakdown;
     homework: { created: number; deleted: number; total: number };
     important: { created: number; deleted: number; total: number };
   };
+  /** Календарный день по Москве; null для исторического среза. */
+  today: {
+    active: ActiveBreakdown;
+    visits: number;
+    requests: number;
+  } | null;
   /** Диаграмма запросов: по часам за окно. */
   requestsByHour: { label: string; value: number }[];
   /** Разбивка всех пользователей по платформам (unknown — старые записи). */
@@ -457,6 +474,39 @@ export function getStats(options: { windowEnd?: number } = {}): StatsResponse {
     .filter((bucket) => bucket.at + MINUTE_MS > windowStart && bucket.at <= windowEnd)
     .sort((a, b) => a.at - b.at);
 
+  const users = userStore.all();
+  const guestIds = new Set(users.filter((user) => user.isGuest === true).map((user) => user.userId));
+
+  function activeFrom(source: MinuteBucket[]): ActiveBreakdown {
+    const ids = new Set<string>();
+    for (const bucket of source) {
+      for (const id of bucket.users) ids.add(id);
+    }
+
+    let guests = 0;
+    for (const id of ids) {
+      if (guestIds.has(id)) guests += 1;
+    }
+
+    return { total: ids.size, users: ids.size - guests, guests };
+  }
+
+  const active = activeFrom(inWindow);
+
+  let today: StatsResponse['today'] = null;
+  if (live) {
+    const todayRaw = toMoscow(new Date(windowEnd)).rawDate;
+    const todayBuckets = inWindow.filter(
+      (bucket) => toMoscow(new Date(bucket.at)).rawDate === todayRaw,
+    );
+
+    today = {
+      active: activeFrom(todayBuckets),
+      visits: todayBuckets.reduce((sum, bucket) => sum + bucket.visits, 0),
+      requests: todayBuckets.reduce((sum, bucket) => sum + bucket.requests, 0),
+    };
+  }
+
   // Последняя активность по корзинам: после рестарта живой map пуст, но окно
   // восстанавливается из stats_window.json, и человек не «пропадает» из среза.
   const lastFromBuckets = new Map<string, number>();
@@ -510,7 +560,6 @@ export function getStats(options: { windowEnd?: number } = {}): StatsResponse {
 
   // ── состояние «сейчас» ─────────────────────────────────────────────────
   const now = windowEnd;
-  const users = userStore.all();
 
   let barsSessions: number;
   let online: number;
@@ -590,9 +639,11 @@ export function getStats(options: { windowEnd?: number } = {}): StatsResponse {
       visits,
       maxOnline,
       newBarsSessions: barsNew.size,
+      active,
       homework: { created: homeworkCreated, deleted: homeworkDeleted, total: homeworkStore.all().length },
       important: { created: importantCreated, deleted: importantDeleted, total: importantStore.all().length },
     },
+    today,
     requestsByHour,
     platforms,
     sessions,

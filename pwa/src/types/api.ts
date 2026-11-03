@@ -35,6 +35,8 @@ export interface BootstrapProfile {
   pushDevices?: number;
   /** Админ: показывает шестерёнку и доступ к /api/admin. */
   isAdmin?: boolean;
+  /** Основной админ из ADMIN_BARS_LOGINS: управляет админами и настройками. */
+  isEnvAdmin?: boolean;
   fullName: string;
   groupName: string;
   faculty?: string;
@@ -489,6 +491,12 @@ export interface NotificationsFeedResponse {
 
 /* ── админка ──────────────────────────────────────────────────────────────── */
 
+export interface ActiveBreakdown {
+  total: number;
+  users: number;
+  guests: number;
+}
+
 export interface AdminDayStats {
   date: string;
   requests: number;
@@ -502,6 +510,8 @@ export interface AdminDayStats {
   platforms: { ios: number; android: number; web: number; unknown: number };
   files: { totalFiles: number; totalBytes: number };
   sessionsCount: number;
+  /** Уникальные люди за день; null у старых срезов. */
+  active: ActiveBreakdown | null;
   hours: Array<{ label: string; value: number }> | null;
   source: 'json' | 'html';
 }
@@ -517,6 +527,11 @@ export interface AdminStatsResponse {
     windowStart: number;
     windowEnd: number;
     moscowNow: { date: string; time: string };
+    /** Текущее состояние: сессии БАРС и онлайн за 5 минут. */
+    current: { barsSessions: number; online: number };
+    /** Календарный день по Москве: уникальные люди и открытия. */
+    today: { active: ActiveBreakdown; visits: number; requests: number } | null;
+    window: { visits: number; requests: number; active: ActiveBreakdown };
   } | null;
   days: AdminDayStats[];
   totals: {
@@ -532,6 +547,8 @@ export interface AdminStatsResponse {
   latest: AdminDayStats | null;
   availableDates: string[];
 }
+
+export type AdminUserFilter = 'all' | 'bars' | 'guests' | 'admins';
 
 export interface AdminUserSummary {
   id: string;
@@ -574,6 +591,11 @@ export interface AdminAnnouncement {
   createdAt: string;
   createdBy?: number | string;
   targetUserId?: string;
+  /** Ссылка в сообщении. */
+  url?: string;
+  /** false — только push, в ленте приложения не показывалось. */
+  feed?: boolean;
+  channels?: { feed: boolean; push: boolean };
 }
 
 export interface AdminAuditEntry {

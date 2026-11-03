@@ -6,11 +6,11 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { ArrowLeft, Search, Trash2 } from 'lucide-react';
+import { ArrowLeft, Bell, Clock, Search, ShieldCheck, Smartphone, Trash2, User } from 'lucide-react';
 
 import { api } from '@/lib/api';
 import { Card, ListGroup } from '@/components/ui';
-import type { AdminUserDetails, AdminUserSummary } from '@/types/api';
+import type { AdminUserDetails, AdminUserFilter, AdminUserSummary } from '@/types/api';
 import {
   AdminHeader,
   ConfirmDialog,
@@ -22,6 +22,7 @@ import {
 
 export function AdminUsers({ onBack }: { onBack: () => void }) {
   const [query, setQuery] = useState('');
+  const [filter, setFilter] = useState<AdminUserFilter>('all');
   const [users, setUsers] = useState<AdminUserSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<AdminUserDetails | null>(null);
@@ -36,14 +37,14 @@ export function AdminUsers({ onBack }: { onBack: () => void }) {
     setLoading(true);
     setError(null);
     try {
-      const result = await api.adminUsers(query.trim(), 50);
+      const result = await api.adminUsers(query.trim(), 50, filter);
       setUsers(result.users);
     } catch (err: unknown) {
       setError(errorText(err));
     } finally {
       setLoading(false);
     }
-  }, [query]);
+  }, [query, filter]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => void load(), 250);
@@ -115,17 +116,17 @@ export function AdminUsers({ onBack }: { onBack: () => void }) {
 
             <ListGroup>
               <SectionRow
-                icon={Search}
+                icon={Clock}
                 title="Последний вход"
                 subtitle={formatRelative(selected.lastSeenAt)}
               />
               <SectionRow
-                icon={Search}
+                icon={Smartphone}
                 title="Платформа"
                 subtitle={`${selected.platform} · PWA-токенов: ${selected.pwaTokens}`}
               />
               <SectionRow
-                icon={Search}
+                icon={ShieldCheck}
                 title="БАРС"
                 subtitle={
                   selected.barsAuthedAt
@@ -134,12 +135,12 @@ export function AdminUsers({ onBack }: { onBack: () => void }) {
                 }
               />
               <SectionRow
-                icon={Search}
+                icon={Bell}
                 title="Уведомления"
                 subtitle={`push: ${selected.push} (${selected.pushEnabled ? 'вкл' : 'выкл'})`}
               />
               <SectionRow
-                icon={Search}
+                icon={User}
                 title="Права"
                 subtitle={selected.isAdmin ? 'администратор' : 'обычный пользователь'}
               />
@@ -230,6 +231,40 @@ export function AdminUsers({ onBack }: { onBack: () => void }) {
               className="min-w-0 flex-1 bg-transparent py-2.5 text-[14px] outline-none"
               style={{ color: 'var(--text-primary)' }}
             />
+          </div>
+
+          <div
+            role="radiogroup"
+            aria-label="Фильтр пользователей"
+            className="flex gap-1 rounded-[11px] p-1"
+            style={{ background: 'var(--surface-grouped)' }}
+          >
+            {(
+              [
+                ['all', 'Все'],
+                ['bars', 'С БАРС'],
+                ['guests', 'Гости'],
+                ['admins', 'Админы'],
+              ] as const
+            ).map(([id, label]) => {
+              const active = filter === id;
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  role="radio"
+                  aria-checked={active}
+                  onClick={() => setFilter(id)}
+                  className="pressable flex-1 rounded-[8px] py-1.5 text-[11px] font-semibold active:pressable-active"
+                  style={{
+                    background: active ? 'var(--accent)' : 'transparent',
+                    color: active ? 'var(--accent-text)' : 'var(--text-secondary)',
+                  }}
+                >
+                  {label}
+                </button>
+              );
+            })}
           </div>
 
           {message ? (
