@@ -1,0 +1,44 @@
+[Unit]
+Description=Mood Telegram support bot (links only)
+After=network-online.target
+Wants=network-online.target
+# Бот не должен останавливаться из-за серии сетевых сбоев: пусть systemd
+# перезапускает его сколько нужно.
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=mood-bot
+Group=mood-bot
+WorkingDirectory=/opt/mood-bot
+UMask=0077
+EnvironmentFile=/opt/mood-bot/bot.env
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/node --max-old-space-size=96 dist/bot.js
+MemoryMax=160M
+Restart=always
+RestartSec=5
+TimeoutStopSec=30
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=mood-bot
+
+# Боту не нужны ни домашние каталоги, ни БД, ни запись куда-либо, кроме
+# собственного списка подписчиков.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/mood-bot
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictSUIDSGID=true
+LockPersonality=true
+SystemCallArchitectures=native
+CapabilityBoundingSet=
+
+[Install]
+WantedBy=multi-user.target
