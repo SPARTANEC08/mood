@@ -3,7 +3,6 @@ import {
   ArrowUpRight,
   BookOpen,
   ChevronRight,
-  Gamepad2,
   GitBranch,
   GraduationCap,
   Mail,
@@ -13,6 +12,8 @@ import {
   Settings,
   ShieldCheck,
 } from 'lucide-react';
+
+import cabinetMark from '@/assets/games/cabinet-mark.png';
 
 import { Header } from '@/components/TabBar';
 import { Page } from '@/components/Page';
@@ -343,6 +344,40 @@ export function ProfilePage({ profile }: { profile: BootstrapResponse }) {
             </span>
           </button>
 
+          {/* Игры — сразу после почты: брендовая строка без подписи, ведёт на хаб. */}
+          <Card className="overflow-hidden">
+            <button
+              type="button"
+              onClick={() => {
+                haptic('light');
+                openLink('https://mood-app.online/');
+              }}
+              className="pressable flex w-full items-center gap-3 px-4 py-3 text-left active:pressable-active"
+              aria-label="Открыть Mood Games"
+            >
+              <span
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[11px]"
+                style={{
+                  background: '#070512',
+                  boxShadow: 'inset 0 0 0 1px rgba(179, 136, 255, 0.22)',
+                }}
+                aria-hidden
+              >
+                <img
+                  src={cabinetMark}
+                  alt=""
+                  className="h-9 w-auto"
+                  style={{ imageRendering: 'pixelated' }}
+                  draggable={false}
+                />
+              </span>
+              <span className="mood-games-wordmark min-w-0 flex-1 text-[24px] leading-none">
+                mood games
+              </span>
+              <ArrowUpRight size={16} className="shrink-0" style={{ color: 'var(--accent)' }} aria-hidden />
+            </button>
+          </Card>
+
           <h2 className="px-1 pt-2 text-[12px] font-semibold uppercase tracking-[0.09em] text-[var(--text-secondary)]">
             Учёба
           </h2>
@@ -565,38 +600,6 @@ export function ProfilePage({ profile }: { profile: BootstrapResponse }) {
                 <span className="block text-[12px] text-[var(--text-tertiary)]">SPARTANEC08/mood</span>
               </span>
               <ChevronRight size={16} className="shrink-0" style={{ color: 'var(--text-tertiary)' }} aria-hidden />
-            </button>
-          </Card>
-
-          <h2 className="px-1 pt-2 text-[12px] font-semibold uppercase tracking-[0.09em] text-[var(--text-secondary)]">
-            Игры
-          </h2>
-          <Card className="overflow-hidden">
-            <button
-              type="button"
-              onClick={() => {
-                haptic('light');
-                openLink('https://mood-app.online/');
-              }}
-              className="pressable flex w-full items-center gap-3 px-4 py-3 text-left active:pressable-active"
-            >
-              <span
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] text-white"
-                style={{
-                  background: 'linear-gradient(135deg, var(--accent), #b388ff)',
-                  boxShadow: '0 4px 14px rgba(124, 77, 255, 0.28)',
-                }}
-                aria-hidden
-              >
-                <Gamepad2 size={18} />
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block text-[14px] font-medium">Mood Games</span>
-                <span className="block text-[12px] text-[var(--text-tertiary)]">
-                  Block Pop и другие игры · отдельный сайт
-                </span>
-              </span>
-              <ArrowUpRight size={16} className="shrink-0" style={{ color: 'var(--accent)' }} aria-hidden />
             </button>
           </Card>
 

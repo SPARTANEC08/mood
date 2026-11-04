@@ -1,6 +1,21 @@
 @import 'tailwindcss';
 
 /**
+ * Фирменный шрифт Mood Games.
+ *
+ * Тот же Handjet, что в логотипе хаба игр: пиксельная графика, но только для
+ * брендовой строки «mood games» в кабинете. Основной интерфейс остаётся на
+ * системном SF Pro/Inter — шрифт не подменяет типографику приложения.
+ */
+@font-face {
+  font-family: 'Handjet';
+  src: url('./assets/fonts/Handjet.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+/**
  * Дизайн-система в дубликате Apple iOS HIG.
  *
  * Решения и их причины:
@@ -32,6 +47,14 @@
 
   /* Анимации. iOS ощущается «тяжёлым» — кривые заметно длиннее, чем в вебе. */
   --ease-ios: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/* Логотипная строка Mood Games: только брендовый шрифт, размер и цвет
+   задаются рядом в разметке. */
+.mood-games-wordmark {
+  font-family: 'Handjet', ui-monospace, monospace;
+  font-weight: 700;
+  letter-spacing: 0.02em;
 }
 
 :root {
