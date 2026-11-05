@@ -38,6 +38,7 @@ import { homeworkStore } from '../../../db/storage/homeworkStore.ts';
 import { importantStore } from '../../../db/storage/importantStore.ts';
 import { announcementStore } from '../../../db/storage/announcementStore.ts';
 import { pwaAdminsStore } from '../../../db/storage/pwaAdminsStore.ts';
+import { themeStore } from '../../../db/storage/themeStore.ts';
 import { deleteAllFiles } from '../../../db/storage/fileStore.ts';
 import { forgetUser as forgetStatsUser } from '../../server/devStats.ts';
 import { forgetBarsClient, forgetBarsSessionValid } from '../bars/barsServiceFactory.ts';
@@ -93,8 +94,11 @@ export async function deleteAccount(user: StoredUser): Promise<void> {
   userEventStore.clearForUser(userId);
   homeworkDoneStore.clearForUser(userId);
 
-  // 6. Права администратора PWA.
+  // 6. Права администратора PWA и опубликованные темы. Темы привязаны к
+  // автору и должны исчезнуть вместе с аккаунтом, иначе имя/вкус человека
+  // оставались бы в общем списке после удаления.
   pwaAdminsStore.forget(userId);
+  themeStore.deleteByAuthor(userId);
 
   // 7. Кэши в памяти. Без этого удалённый человек мог бы ещё минут двадцать
   // отдаваться из снимка БАРС или считаться в опросе почты.

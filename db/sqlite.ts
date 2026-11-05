@@ -95,6 +95,30 @@ export function getDb(): Database.Database {
       fetched_at INTEGER NOT NULL,
       data       TEXT NOT NULL
     );
+
+    /*
+     * Темы оформления, опубликованные пользователями.
+     *
+     * Официальные темы живут в коде PWA и в базе не хранятся: их набор
+     * меняется вместе с релизом, а не через админку. Здесь только темы
+     * сообщества. author_user_id нужен для лимитов и удаления своей темы, но
+     * наружу не отдаётся — в API есть лишь булев mine.
+     */
+    CREATE TABLE IF NOT EXISTS themes (
+      id             TEXT PRIMARY KEY,
+      author_user_id TEXT NOT NULL,
+      name           TEXT NOT NULL,
+      variants       TEXT NOT NULL,
+      status         TEXT NOT NULL DEFAULT 'published',
+      created_at     TEXT NOT NULL,
+      updated_at     TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_themes_status_created
+      ON themes(status, created_at DESC);
+
+    CREATE INDEX IF NOT EXISTS idx_themes_author
+      ON themes(author_user_id, created_at DESC);
   `);
 
   /*

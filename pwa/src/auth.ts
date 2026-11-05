@@ -20,7 +20,7 @@
  */
 
 import type { BootstrapProfile } from './types/api';
-import { syncAccentWithAuth } from './lib/accent';
+import { syncThemeWithAuth } from './lib/theme';
 import { perfLog } from './lib/perf';
 import { platformHeader } from './lib/platform';
 import { CACHE_KEYS, clearPersistedData, clearPreviewCache, readJson } from './lib/data/tier1';
@@ -101,7 +101,7 @@ export function setPwaToken(token: string, expiresAt: number): void {
 
   // Акцент — только для авторизованного приложения: после входа возвращаем
   // сохранённый цвет, до него остаётся встроенный фиолетовый.
-  syncAccentWithAuth();
+  syncThemeWithAuth();
 }
 
 /**
@@ -137,9 +137,9 @@ export function clearPwaToken(): void {
   clearPreviewCache();
   clearPreviewUrlCache();
 
-  // Экран входа снова фиолетовый: акцент — часть оформления приложения, а не
+  // Экран входа снова фиолетовый: тема — часть оформления приложения, а не
   // публичных страниц. Сам выбор в storage остаётся и вернётся после входа.
-  syncAccentWithAuth();
+  syncThemeWithAuth();
 
   announceSignedOut();
 }
@@ -160,9 +160,9 @@ export function setGuestMode(): void {
     // Приватный режим: гость всё равно откроется по профилю из bootstrap.
   }
 
-  // Гостю настройка акцента недоступна: гасим цвет, даже если на устройстве
+  // Гостю темы недоступны: гасим кастомные цвета, даже если на устройстве
   // остался выбор прошлого аккаунта.
-  syncAccentWithAuth();
+  syncThemeWithAuth();
 }
 
 export function clearGuestMode(): void {
@@ -172,7 +172,7 @@ export function clearGuestMode(): void {
     // см. выше
   }
 
-  syncAccentWithAuth();
+  syncThemeWithAuth();
 }
 
 /** Истёк ли токен по известной метке времени. */

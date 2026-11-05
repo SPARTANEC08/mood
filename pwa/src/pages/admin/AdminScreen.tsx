@@ -14,6 +14,7 @@ import {
   Gauge,
   Lock,
   Megaphone,
+  Palette,
   ShieldCheck,
   Users,
   Wifi,
@@ -27,6 +28,7 @@ import { AdminDiagnostics } from './AdminDiagnostics';
 import { AdminMaintenance } from './AdminMaintenance';
 import { AdminMessages } from './AdminMessages';
 import { AdminStats } from './AdminStats';
+import { AdminThemes } from './AdminThemes';
 import { AdminUsers } from './AdminUsers';
 import { AdminHeader, SectionRow, StatCard, Toggle, errorText } from './shared';
 
@@ -35,6 +37,7 @@ export type AdminSection =
   | 'stats'
   | 'messages'
   | 'users'
+  | 'themes'
   | 'diagnostics'
   | 'maintenance'
   | 'admins';
@@ -83,6 +86,7 @@ export function AdminScreen({
   if (section === 'stats') return <AdminStats onBack={backToMenu} />;
   if (section === 'messages') return <AdminMessages onBack={backToMenu} />;
   if (section === 'users') return <AdminUsers onBack={backToMenu} />;
+  if (section === 'themes') return <AdminThemes onBack={backToMenu} />;
   if (section === 'diagnostics') return <AdminDiagnostics onBack={backToMenu} isEnvAdmin={isEnvAdmin} />;
   if (section === 'maintenance') return <AdminMaintenance onBack={backToMenu} />;
   if (section === 'admins') return <AdminAdmins onBack={backToMenu} profile={profile} />;
@@ -200,6 +204,12 @@ export function AdminScreen({
                 title="Сообщения"
                 subtitle="Лента и push · всем или лично"
                 onClick={() => setSection('messages')}
+              />
+              <SectionRow
+                icon={Palette}
+                title="Темы"
+                subtitle="Темы сообщества: скрыть или удалить"
+                onClick={() => setSection('themes')}
               />
             </Card>
           </section>

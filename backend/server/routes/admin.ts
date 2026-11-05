@@ -17,6 +17,7 @@ import { adminAuditStore } from '../../../db/storage/adminAuditStore.ts';
 import { announcementStore } from '../../../db/storage/announcementStore.ts';
 import { pwaAdminsStore } from '../../../db/storage/pwaAdminsStore.ts';
 import { registrationStore } from '../../../db/storage/registrationStore.ts';
+import { themeStore } from '../../../db/storage/themeStore.ts';
 import { isBarsAuthorized, userStore, type StoredUser } from '../../../db/storage/userStore.ts';
 import { deleteAccount } from '../../services/account/deleteAccount.ts';
 import {
@@ -478,6 +479,61 @@ export function registerAdminRoutes(app: FastifyInstance): void {
     if (!removed) return reply.code(404).send({ error: 'not_found', message: 'Объявление не найдено.' });
 
     audit(admin, 'announcement_delete', id);
+    return reply.send({ ok: true });
+  });
+
+  /* ── темы оформления ────────────────────────────────────────────────────── */
+
+  app.get('/api/admin/themes', async (request, reply) => {
+    requireAdmin(request);
+    const query = request.query as { status?: string };
+    const status =
+      query.status === 'published' || query.status === 'hidden' || query.status === 'all'
+        ? query.status
+        : 'all';
+
+    return reply.send({ items: themeStore.listAdmin(status) });
+  });
+
+  app.post('/api/admin/themes/:id/hide', async (request, reply) => {
+    const admin = requireAdmin(request);
+    const { id } = request.params as { id: string };
+
+    const theme = themeStore.getById(id);
+    if (!theme || theme.status === 'deleted') {
+      return reply.code(404).send({ error: 'not_found', message: 'Тема не найдена.' });
+    }
+
+    themeStore.setStatus(id, 'hidden');
+    audit(admin, 'theme_hide', id);
+    return reply.send({ ok: true });
+  });
+
+  app.post('/api/admin/themes/:id/unhide', async (request, reply) => {
+    const admin = requireAdmin(request);
+    const { id } = request.params as { id: string };
+
+    const theme = themeStore.getById(id);
+    if (!theme || theme.status === 'deleted') {
+      return reply.code(404).send({ error: 'not_found', message: 'Тема не найдена.' });
+    }
+
+    themeStore.setStatus(id, 'published');
+    audit(admin, 'theme_unhide', id);
+    return reply.send({ ok: true });
+  });
+
+  app.delete('/api/admin/themes/:id', async (request, reply) => {
+    const admin = requireAdmin(request);
+    const { id } = request.params as { id: string };
+
+    const theme = themeStore.getById(id);
+    if (!theme || theme.status === 'deleted') {
+      return reply.code(404).send({ error: 'not_found', message: 'Тема не найдена.' });
+    }
+
+    themeStore.setStatus(id, 'deleted');
+    audit(admin, 'theme_delete', id);
     return reply.send({ ok: true });
   });
 

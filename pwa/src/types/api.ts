@@ -630,3 +630,47 @@ export interface AdminAdminsResponse {
   env: { barsHashes: number };
   assigned: Array<{ userId: string; name: string; group: string; addedAt: string }>;
 }
+
+/* ── темы оформления ──────────────────────────────────────────────────────── */
+
+/** Один вариант темы: три оттенка HSL, насыщенность и светлота вычисляются. */
+export interface ApiThemeVariant {
+  backgroundHue: number;
+  surfaceHue: number;
+  accentHue: number;
+}
+
+export interface ApiThemeVariants {
+  light?: ApiThemeVariant;
+  dark?: ApiThemeVariant;
+}
+
+/** Тема в публичном API. Автор не отдаётся — только булев `mine`. */
+export interface ApiTheme {
+  id: string;
+  name: string;
+  variants: ApiThemeVariants;
+  createdAt: string;
+  mine: boolean;
+}
+
+export interface ThemesResponse {
+  items: ApiTheme[];
+}
+
+export interface CreateThemeBody {
+  name: string;
+  variants: ApiThemeVariants;
+}
+
+export interface AdminTheme {
+  id: string;
+  name: string;
+  variants: ApiThemeVariants;
+  createdAt: string;
+  status: 'published' | 'hidden' | 'deleted';
+}
+
+export interface AdminThemesResponse {
+  items: AdminTheme[];
+}

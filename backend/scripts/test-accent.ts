@@ -1,9 +1,9 @@
 /**
- * Тесты персонального акцента.
+ * Тесты цветовой модели тем и раннего theme-init.js.
  *
- * Проверяем чистую логику `pwa/src/lib/accent.ts`: разбор HEX, производные
- * токены под светлую/тёмную тему и контраст текста на заливке. UI и localStorage
- * здесь не участвуют — только математика цвета, поэтому тест детерминирован.
+ * Проверяем чистую математику `pwa/src/lib/themeColors.ts` и то, что ранний
+ * скрипт применяет заранее вычисленные токены без расхождений. UI, сеть и
+ * localStorage приложения здесь не участвуют.
  *
  * Запуск: npm run test:accent
  */
@@ -14,13 +14,16 @@ import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
 
 import {
-  ACCENT_PRESETS,
-  DEFAULT_ACCENT,
   contrastRatio,
   contrastText,
-  deriveAccent,
+  deriveAllTokens,
+  deriveThemeTokens,
   normalizeHex,
-} from '../../pwa/src/lib/accent.ts';
+  primaryContrast,
+  secondaryContrast,
+  type ThemeDefinition,
+} from '../../pwa/src/lib/themeColors.ts';
+import { OFFICIAL_THEMES } from '../../pwa/src/lib/officialThemes.ts';
 
 let passed = 0;
 let failed = 0;
@@ -40,7 +43,7 @@ function section(title: string): void {
 }
 
 console.log('====================================================');
-console.log('   ТЕСТЫ АКЦЕНТА (цвет и контраст)');
+console.log('   ТЕСТЫ ТЕМ (цвет, контраст, ранний старт)');
 console.log('====================================================');
 
 section('Разбор HEX');
@@ -56,67 +59,111 @@ section('Разбор HEX');
   check('невалидный hex-символ', normalizeHex('#gggggg') === null);
 }
 
-section('Пресеты');
-{
-  check('семь оттенков — все в одну строку', ACCENT_PRESETS.length === 7, String(ACCENT_PRESETS.length));
-  check('id уникальны', new Set(ACCENT_PRESETS.map((p) => p.id)).size === ACCENT_PRESETS.length);
-  check('цвета уникальны', new Set(ACCENT_PRESETS.map((p) => p.hex)).size === ACCENT_PRESETS.length);
-  check(
-    'все цвета нормализуются',
-    ACCENT_PRESETS.every((p) => normalizeHex(p.hex) === p.hex),
-  );
-  check('фиолетовый — дефолт', ACCENT_PRESETS[0].hex === DEFAULT_ACCENT);
-}
-
 section('Контраст');
 {
   check('белый и чёрный = 21', Math.round(contrastRatio('#ffffff', '#000000')) === 21);
   check('цвет сам с собой = 1', Math.round(contrastRatio('#7c4dff', '#7c4dff')) === 1);
   check('мусор не падает', contrastRatio('мусор', '#ffffff') === 1);
-
   check('фиолетовый → белый текст', contrastText('#7c4dff') === '#ffffff');
   check('оранжевый → тёмный текст', contrastText('#ff9500') === '#15131e');
   check('жёлтый → тёмный текст', contrastText('#ffe600') === '#15131e');
+}
 
+section('Официальные темы');
+{
+  check('семь официальных тем', OFFICIAL_THEMES.length === 7, String(OFFICIAL_THEMES.length));
+  check('id уникальны', new Set(OFFICIAL_THEMES.map((theme) => theme.id)).size === OFFICIAL_THEMES.length);
   check(
-    'у каждого пресета текст читаем (AA 4.5)',
-    ACCENT_PRESETS.every((p) => contrastRatio(p.hex, contrastText(p.hex)) >= 4.5),
+    'у каждой есть светлая и тёмная версии',
+    OFFICIAL_THEMES.every((theme) => Boolean(theme.variants.light && theme.variants.dark)),
+  );
+  check(
+    'все оттенки в диапазоне 0…359',
+    OFFICIAL_THEMES.every((theme) =>
+      (['light', 'dark'] as const).every((key) => {
+        const variant = theme.variants[key];
+        return (
+          variant !== undefined &&
+          [variant.backgroundHue, variant.surfaceHue, variant.accentHue].every(
+            (hue) => Number.isInteger(hue) && hue >= 0 && hue <= 359,
+          )
+        );
+      }),
+    ),
   );
 }
 
 section('Производные токены');
 {
-  const light = deriveAccent(DEFAULT_ACCENT, 'light');
-  check('светлая: акцент без изменений', light.accent === DEFAULT_ACCENT, light.accent);
-  check('светлая: мягкий фон 0.12', light.soft === 'rgba(124, 77, 255, 0.12)', light.soft);
-  check('светлая: текст белый', light.text === '#ffffff', light.text);
+  for (const theme of OFFICIAL_THEMES) {
+    for (const key of ['light', 'dark'] as const) {
+      const variant = theme.variants[key]!;
+      const tokens = deriveThemeTokens(variant, key);
 
-  const dark = deriveAccent(DEFAULT_ACCENT, 'dark');
-  check('тёмная: мягкий фон 0.2', dark.soft === 'rgba(124, 77, 255, 0.2)', dark.soft);
-  check('тёмная: акцент без изменений', dark.accent === DEFAULT_ACCENT, dark.accent);
+      check(
+        `${theme.name}/${key}: основные цвета — HEX`,
+        [tokens.appBg, tokens.surface, tokens.surfaceGrouped, tokens.textPrimary, tokens.accent].every(
+          (hex) => normalizeHex(hex) === hex,
+        ),
+      );
+      check(
+        `${theme.name}/${key}: текст на фоне ≥ 7`,
+        primaryContrast(tokens) >= 7,
+        primaryContrast(tokens).toFixed(2),
+      );
+      check(
+        `${theme.name}/${key}: вторичный текст ≥ 4.5`,
+        secondaryContrast(tokens) >= 4.5,
+        secondaryContrast(tokens).toFixed(2),
+      );
+      check(
+        `${theme.name}/${key}: текст на акценте ≥ 4.5`,
+        contrastRatio(tokens.accent, tokens.accentText) >= 4.5,
+        contrastRatio(tokens.accent, tokens.accentText).toFixed(2),
+      );
+    }
+  }
 
-  check(
-    'fade — валидные HEX',
-    [light.fade1, light.fade2, light.fade3, dark.fade1, dark.fade2, dark.fade3].every(
-      (hex) => normalizeHex(hex) === hex,
-    ),
-  );
+  const light = deriveThemeTokens({ backgroundHue: 255, surfaceHue: 255, accentHue: 256 }, 'light');
+  const dark = deriveThemeTokens({ backgroundHue: 255, surfaceHue: 255, accentHue: 256 }, 'dark');
+  check('светлая тема светлее тёмной', contrastRatio(light.appBg, '#ffffff') < contrastRatio(dark.appBg, '#ffffff'));
+  check('оба варианта дают разные токены', light.appBg !== dark.appBg);
+  check('themeColor совпадает с фоном', light.themeColor === light.appBg);
 
-  const tooLight = deriveAccent('#f0f0f0', 'light');
-  check('светлая: почти белый притемняется', tooLight.accent !== '#f0f0f0', tooLight.accent);
+  const boundary = deriveThemeTokens({ backgroundHue: 0, surfaceHue: 359, accentHue: 360 }, 'dark');
+  check('граничные оттенки не падают', normalizeHex(boundary.accent) !== null);
+}
 
-  const tooDark = deriveAccent('#101010', 'dark');
-  check('тёмная: почти чёрный осветляется', tooDark.accent !== '#101010', tooDark.accent);
+section('Токены для обоих вариантов');
+{
+  const theme: ThemeDefinition = {
+    id: 'test',
+    name: 'Тест',
+    variants: {
+      light: { backgroundHue: 200, surfaceHue: 200, accentHue: 200 },
+      dark: { backgroundHue: 20, surfaceHue: 20, accentHue: 20 },
+    },
+  };
 
-  check('мусор → дефолт', deriveAccent('не цвет', 'light').accent === DEFAULT_ACCENT);
+  const tokens = deriveAllTokens(theme);
+  check('light посчитан', Boolean(tokens.light));
+  check('dark посчитан', Boolean(tokens.dark));
+  check('варианты различаются', tokens.light?.appBg !== tokens.dark?.appBg);
+
+  const single = deriveAllTokens({
+    id: 'single',
+    name: 'Одна',
+    variants: { dark: { backgroundHue: 10, surfaceHue: 10, accentHue: 10 } },
+  });
+  check('один вариант не создаёт второй', Boolean(single.dark) && !single.light);
 }
 
 /**
- * Ранний скрипт дублирует деривацию, чтобы цвет стоял до первого кадра.
- * Дубликат обязан совпадать с accent.ts байт-в-байт по значениям, иначе будет
- * вспышка одного оттенка и перекраска в другой сразу после загрузки React.
+ * Ранний скрипт не дублирует формулы: он читает готовые токены. Проверяем,
+ * что значения доходят до CSS-переменных и что одноvariant-тема принудительно
+ * включает свой режим.
  */
-section('Ранний theme-init.js совпадает с accent.ts');
+section('Ранний theme-init.js применяет готовые токены');
 {
   const scriptPath = resolve(
     dirname(fileURLToPath(import.meta.url)),
@@ -124,62 +171,101 @@ section('Ранний theme-init.js совпадает с accent.ts');
   );
   const script = readFileSync(scriptPath, 'utf8');
 
-  function earlyVars(hex: string, dark: boolean): Record<string, string> {
-    const props: Record<string, string> = {};
+  interface RunResult {
+    vars: Record<string, string>;
+    attributes: Record<string, string>;
+    meta: string | null;
+  }
+
+  function run(storage: Record<string, string>, systemDark: boolean): RunResult {
+    const vars: Record<string, string> = {};
+    const attributes: Record<string, string> = {};
+    let meta: string | null = null;
 
     const document = {
       documentElement: {
-        setAttribute: () => {},
+        setAttribute: (name: string, value: string) => {
+          attributes[name] = value;
+        },
+        removeAttribute: (name: string) => {
+          delete attributes[name];
+        },
         style: {
           colorScheme: '',
           setProperty: (name: string, value: string) => {
-            props[name] = value;
+            vars[name] = value;
           },
-          removeProperty: () => {},
+          removeProperty: (name: string) => {
+            delete vars[name];
+          },
         },
       },
-      querySelector: () => ({ setAttribute: () => {} }),
+      querySelector: () => ({
+        setAttribute: (_name: string, value: string) => {
+          meta = value;
+        },
+      }),
     };
-    const sandboxWindow = { matchMedia: () => ({ matches: dark }) };
+
+    const sandboxWindow = { matchMedia: () => ({ matches: systemDark }) };
     const localStorage = {
-      getItem: (key: string): string | null =>
-        ({ mood_theme: dark ? 'dark' : 'light', mood_accent: hex, mood_pwa_token: 'a.b.c' })[
-          key
-        ] ?? null,
+      getItem: (key: string): string | null => storage[key] ?? null,
       setItem: () => {},
       removeItem: () => {},
     };
 
     vm.runInNewContext(script, { window: sandboxWindow, document, localStorage });
-    return props;
+    return { vars, attributes, meta };
   }
 
-  for (const theme of ['light', 'dark'] as const) {
-    let mismatches = 0;
+  const variant = { backgroundHue: 30, surfaceHue: 210, accentHue: 330 };
+  const theme: ThemeDefinition = {
+    id: 'thm_test',
+    name: 'Закат',
+    variants: { dark: variant, light: variant },
+  };
+  const tokens = deriveAllTokens(theme);
 
-    for (const preset of ACCENT_PRESETS) {
-      if (preset.hex === DEFAULT_ACCENT) continue;
+  const baseStorage = {
+    mood_theme: 'dark',
+    mood_theme_selected: JSON.stringify(theme),
+    mood_theme_tokens: JSON.stringify(tokens),
+    mood_pwa_token: 'a.b.c',
+  };
 
-      const expected = deriveAccent(preset.hex, theme);
-      const actual = earlyVars(preset.hex, theme === 'dark');
+  const dark = run(baseStorage, true);
+  check('тёмная: data-theme=dark', dark.attributes['data-theme'] === 'dark', dark.attributes['data-theme']);
+  check('тёмная: фон совпадает', dark.vars['--app-bg'] === tokens.dark!.appBg, dark.vars['--app-bg']);
+  check('тёмная: акцент совпадает', dark.vars['--accent'] === tokens.dark!.accent, dark.vars['--accent']);
+  check('тёмная: meta theme-color', dark.meta === tokens.dark!.themeColor, String(dark.meta));
 
-      const same =
-        actual['--accent'] === expected.accent &&
-        actual['--accent-soft'] === expected.soft &&
-        actual['--accent-text'] === expected.text &&
-        actual['--accent-fade-1'] === expected.fade1 &&
-        actual['--accent-fade-2'] === expected.fade2 &&
-        actual['--accent-fade-3'] === expected.fade3;
+  const light = run({ ...baseStorage, mood_theme: 'light' }, true);
+  check('светлая: data-theme=light', light.attributes['data-theme'] === 'light', light.attributes['data-theme']);
+  check('светлая: фон совпадает', light.vars['--app-bg'] === tokens.light!.appBg, light.vars['--app-bg']);
 
-      if (!same) mismatches += 1;
-    }
+  const system = run({ ...baseStorage, mood_theme: 'system' }, false);
+  check('системная светлая: выбран light', system.attributes['data-theme'] === 'light', system.attributes['data-theme']);
 
-    check(`${theme}: все пресеты совпадают`, mismatches === 0, `${mismatches} расхождений`);
-    check(
-      `${theme}: дефолт не пишет переменные`,
-      Object.keys(earlyVars(DEFAULT_ACCENT, theme === 'dark')).length === 0,
-    );
-  }
+  const singleTheme: ThemeDefinition = {
+    id: 'thm_single',
+    name: 'Только тёмная',
+    variants: { dark: variant },
+  };
+  const singleTokens = deriveAllTokens(singleTheme);
+  const single = run(
+    {
+      ...baseStorage,
+      mood_theme: 'light',
+      mood_theme_selected: JSON.stringify(singleTheme),
+      mood_theme_tokens: JSON.stringify(singleTokens),
+    },
+    false,
+  );
+  check('одноvariant: светлый режим принудительно тёмный', single.attributes['data-theme'] === 'dark', single.attributes['data-theme']);
+
+  const guest = run({ ...baseStorage, mood_guest_mode: '1' }, true);
+  check('гость: кастомные переменные не применяются', guest.vars['--app-bg'] === undefined);
+  check('гость: остаётся системный режим', guest.attributes['data-theme'] === 'dark');
 }
 
 console.log(`\n${'='.repeat(52)}`);

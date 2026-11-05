@@ -6,16 +6,16 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { BellOff, BellRing, Check, Monitor, Palette } from 'lucide-react';
+import { BellOff, BellRing, ChevronRight, Palette } from 'lucide-react';
 
 import { Card } from '@/components/ui';
 import { PushHelpSheet } from '@/components/profile/PushHelpSheet';
+import { ThemeSheet } from '@/components/profile/ThemeSheet';
 import { PushConsentSheet } from '@/components/legal/PushConsentSheet';
-import { ACCENT_PRESETS, DEFAULT_ACCENT, contrastText, useAccent } from '@/lib/accent';
 import { api } from '@/lib/api';
 import { haptic } from '@/lib/env';
 import { enablePush, pushPermission, pushSupport, syncPush } from '@/lib/push';
-import { useTheme, type ThemeMode } from '@/lib/theme';
+import { useTheme, useThemePreset, type ThemeMode } from '@/lib/theme';
 import type { BootstrapProfile } from '@/types/api';
 
 const THEME_OPTIONS: Array<{ mode: ThemeMode; label: string }> = [
@@ -32,7 +32,8 @@ export function SettingsCard({
   pushConsentAccepted?: boolean;
 }) {
   const [mode, setMode] = useTheme();
-  const [accent, setAccent, resetAccent] = useAccent();
+  const { theme, availableModes, effective } = useThemePreset();
+  const [themeSheetOpen, setThemeSheetOpen] = useState(false);
 
   const [pushEnabled, setPushEnabled] = useState<boolean>(profile.pushEnabled !== false);
   const [pushDevices, setPushDevices] = useState<number>(profile.pushDevices ?? 0);
@@ -155,17 +156,13 @@ export function SettingsCard({
         ? 'ios'
         : null;
 
-  const themeLabel = THEME_OPTIONS.find((option) => option.mode === mode)?.label ?? 'Системная';
-
-  const accentPreset = ACCENT_PRESETS.find((preset) => preset.hex === accent);
-  const accentLabel = accentPreset?.name ?? 'Свой цвет';
-  /** Цвет не из палитры — значит выбран пипеткой/HEX-полем. */
-  const customAccent = accentPreset === undefined;
-
-  const pickAccent = (hex: string): void => {
-    haptic('light');
-    setAccent(hex);
-  };
+  const themeLabel = theme.name;
+  const displayMode: ThemeMode = availableModes.includes(mode) ? mode : effective;
+  const singleVariantHint = !theme.variants.light
+    ? 'В этой теме только тёмная версия'
+    : !theme.variants.dark
+      ? 'В этой теме только светлая версия'
+      : null;
 
   return (
     <>
@@ -232,44 +229,63 @@ export function SettingsCard({
         ) : null}
       </div>
 
-      <div
-        className="flex items-center gap-3 border-t px-4 py-3.5"
+      <button
+        type="button"
+        onClick={() => {
+          haptic('light');
+          setThemeSheetOpen(true);
+        }}
+        className="pressable flex w-full items-center gap-3 border-t px-4 py-3.5 text-left active:pressable-active"
         style={{ borderColor: 'var(--separator-soft)' }}
+        aria-label="Открыть все темы"
       >
         <span
           className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px]"
           style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}
           aria-hidden
         >
-          <Monitor size={18} />
+          <Palette size={18} />
         </span>
-        <div className="min-w-0 flex-1">
-          <p className="text-[15px] font-semibold leading-snug">Тема</p>
-          <p className="mt-0.5 text-[12px] leading-snug" style={{ color: 'var(--text-secondary)' }}>
+        <span className="min-w-0 flex-1">
+          <span className="block text-[15px] font-semibold leading-snug">Тема</span>
+          <span
+            className="mt-0.5 block truncate text-[12px] leading-snug"
+            style={{ color: 'var(--text-secondary)' }}
+          >
             {themeLabel}
-          </p>
-        </div>
-      </div>
+          </span>
+        </span>
+        <span
+          className="flex shrink-0 items-center gap-0.5 text-[13px] font-semibold"
+          style={{ color: 'var(--accent)' }}
+        >
+          Все темы
+          <ChevronRight size={15} aria-hidden />
+        </span>
+      </button>
 
       <div
         role="radiogroup"
         aria-label="Тема оформления"
-        className="mx-4 mb-3.5 flex gap-1 rounded-[11px] p-1"
+        className="mx-4 mb-1 flex gap-1 rounded-[11px] p-1"
         style={{ background: 'var(--surface-grouped)' }}
       >
         {THEME_OPTIONS.map((option) => {
-          const active = mode === option.mode;
+          const available = availableModes.includes(option.mode);
+          const active = displayMode === option.mode;
           return (
             <button
               key={option.mode}
               type="button"
               role="radio"
               aria-checked={active}
+              disabled={!available}
               onClick={() => {
+                if (!available) return;
                 haptic('light');
                 setMode(option.mode);
               }}
-              className="pressable flex-1 rounded-[8px] py-1.5 text-[11px] font-semibold active:pressable-active"
+              className="pressable flex-1 rounded-[8px] py-1.5 text-[11px] font-semibold active:pressable-active disabled:cursor-default disabled:opacity-40"
               style={{
                 background: active ? 'var(--accent)' : 'transparent',
                 color: active ? 'var(--accent-text)' : 'var(--text-secondary)',
@@ -281,113 +297,18 @@ export function SettingsCard({
         })}
       </div>
 
-      {/* ── Акцент ──────────────────────────────────────────────────────────
-          Компактный блок: строка заголовка и один ряд кружков (все пресеты
-          помещаются на любой ширине). Свой цвет — последний кружок с нативным
-          пикером. Никаких демо-карточек и полей ввода: цвет виден прямо на
-          интерфейсе, как только его выбрали. */}
-      <div
-        className="flex items-center gap-3 border-t px-4 py-3.5"
-        style={{ borderColor: 'var(--separator-soft)' }}
-      >
-        <span
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px]"
-          style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}
-          aria-hidden
-        >
-          <Palette size={18} />
-        </span>
-        <div className="min-w-0 flex-1">
-          <p className="text-[15px] font-semibold leading-snug">Акцент</p>
-          <p className="mt-0.5 text-[12px] leading-snug" style={{ color: 'var(--text-secondary)' }}>
-            {accentLabel}
-          </p>
-        </div>
-
-        {accent === DEFAULT_ACCENT ? (
-          <span
-            className="h-5 w-5 shrink-0 rounded-full"
-            style={{ background: accent, boxShadow: 'inset 0 0 0 1px var(--separator)' }}
-            aria-hidden
-          />
-        ) : (
-          <button
-            type="button"
-            onClick={() => {
-              haptic('light');
-              resetAccent();
-            }}
-            className="pressable shrink-0 rounded-full px-2.5 py-1 text-[12px] font-semibold active:pressable-active"
-            style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}
-          >
-            Сбросить
-          </button>
-        )}
-      </div>
-
-      <div className="mx-4 mb-3.5">
-        <div
-          role="radiogroup"
-          aria-label="Акцентный цвет"
-          className="flex items-center justify-between"
-        >
-          {ACCENT_PRESETS.map((preset) => {
-            const active = preset.hex === accent;
-
-            return (
-              <button
-                key={preset.id}
-                type="button"
-                role="radio"
-                aria-checked={active}
-                aria-label={preset.name}
-                title={preset.name}
-                onClick={() => pickAccent(preset.hex)}
-                className="pressable relative flex h-8 w-8 items-center justify-center rounded-full active:pressable-active"
-                style={{
-                  background: preset.hex,
-                  boxShadow: active
-                    ? `0 0 0 2px var(--surface), 0 0 0 3.5px ${preset.hex}`
-                    : 'inset 0 0 0 1px var(--separator)',
-                }}
-              >
-                {active ? (
-                  <Check size={14} strokeWidth={3} style={{ color: contrastText(preset.hex) }} aria-hidden />
-                ) : null}
-              </button>
-            );
-          })}
-
-          {/* Свой цвет: нативный пикер поверх кружка. Так работает и на iOS
-              Safari, и на Android без собственной палитры. */}
-          <label
-            className="relative flex h-8 w-8 cursor-pointer items-center justify-center rounded-full"
-            style={{
-              background: 'var(--surface-grouped)',
-              boxShadow: customAccent
-                ? '0 0 0 2px var(--surface), 0 0 0 3.5px var(--accent)'
-                : 'inset 0 0 0 1px var(--separator)',
-            }}
-            title="Свой цвет"
-          >
-            <input
-              type="color"
-              value={accent}
-              onChange={(event) => setAccent(event.target.value)}
-              aria-label="Свой цвет"
-              className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-            />
-            <Palette
-              size={14}
-              style={{ color: customAccent ? 'var(--accent)' : 'var(--text-secondary)' }}
-              aria-hidden
-            />
-          </label>
-        </div>
-      </div>
+      {singleVariantHint ? (
+        <p className="mx-4 mb-3.5 text-[11px] leading-snug" style={{ color: 'var(--text-tertiary)' }}>
+          {singleVariantHint}
+        </p>
+      ) : (
+        <div className="mb-3.5" />
+      )}
 
       {helpKind ? <PushHelpSheet kind={helpKind} onClose={() => setHelpKind(null)} /> : null}
     </Card>
+
+    <ThemeSheet open={themeSheetOpen} onClose={() => setThemeSheetOpen(false)} />
 
     <PushConsentSheet
       open={consentOpen}

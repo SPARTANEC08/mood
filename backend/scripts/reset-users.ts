@@ -4,7 +4,7 @@
  * Сейчас данные живут в SQLite (`db/data/mood.sqlite`). Скрипт:
  * - бэкапит файл БД в `db/data/users.backup.sqlite`;
  * - бэкапит старый `users.json`, если он ещё лежит рядом;
- * - очищает таблицу `users` (остальные таблицы не трогает);
+ * - очищает таблицу `users` и опубликованные темы (остальные таблицы не трогает);
  * - оставляет пустой `users.json` — чтобы будущая миграция JSON → SQLite
  *   не вернула удалённых пользователей.
  *
@@ -17,6 +17,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { userStore } from '../../db/storage/userStore.ts';
+import { themeStore } from '../../db/storage/themeStore.ts';
 import { closeDb, databaseFile } from '../../db/sqlite.ts';
 
 const DATA_DIR = path.resolve(process.cwd(), 'db', 'data');
@@ -47,6 +48,8 @@ async function resetUsers(): Promise<void> {
   }
 
   userStore.reset();
+  // Темы привязаны к авторам: после очистки users они стали бы сиротами.
+  themeStore.reset();
   closeDb();
 
   // Старый файл оставляем пустым: приложение его больше не читает, но миграция

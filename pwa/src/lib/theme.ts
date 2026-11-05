@@ -1,49 +1,54 @@
 /**
- * Тема оформления: тёмная, светлая и системная.
+ * Тема оформления: режим (светлая/тёмная/системная) и выбранная палитра.
  *
- * Единственный источник правды о теме. Результат всегда сводится к атрибуту
- * `data-theme` («dark» или «light») на <html> — токены цвета живут в index.css,
- * а не в компонентах. Режим «system» лишь решает, какую из двух тем взять,
- * в зависимости от системной схемы устройства.
+ * Единственный источник правды. Результат всегда сводится к атрибуту
+ * `data-theme` («dark» или «light») и набору CSS-переменных на <html>.
+ * Палитра приходит из `lib/themes.ts` / `lib/themeColors.ts`, поэтому цвета
+ * не размазаны по компонентам.
  *
- * До первого рендера то же самое делает ранний скрипт `public/theme-init.js`
- * (инлайн-скрипт запрещён CSP продакшена), поэтому вспышки темы нет. Здесь —
- * та же логика для рантайма: переключение, подписка на систему и хук.
- *
- * Производительность: режим читается из localStorage РОВНО ОДИН РАЗ при загрузке
- * модуля и дальше живёт в памяти (`currentMode`). На каждый рендер localStorage
- * не трогается — ни через getSnapshot, ни где-либо ещё: синхронный доступ к
- * storage в рендере блокировал бы поток и давал бы разные значения между вызовами.
+ * До первого рендера то же самое делает внешний `public/theme-init.js`
+ * (инлайн-скрипт запрещён CSP продакшена). Он читает уже вычисленные токены из
+ * localStorage, поэтому формулы цвета здесь и там не дублируются.
  */
 
 import { useCallback, useEffect, useSyncExternalStore } from 'react';
 
-import { applyAccent } from './accent';
+import {
+  applyThemeTokens,
+  clearThemeTokens,
+  readSelectedTheme,
+  themeAuthAllowed,
+  writeSelectedTheme,
+  writeStoredTokens,
+} from './themes';
+import {
+  availableThemeModes,
+  deriveAllTokens,
+  resolveVariantKey,
+  themeModeAvailable,
+  type ThemeDefinition,
+  type ThemeVariantKey,
+} from './themeColors';
+import { defaultOfficialTheme } from './officialThemes';
 
 export type ThemeMode = 'dark' | 'light' | 'system';
 
 /** Ключ выбора пользователя в localStorage. */
 export const THEME_STORAGE_KEY = 'mood_theme';
 
+/** Ключи авторизации: ранний скрипт и этот модуль должны понимать одно и то же. */
+const TOKEN_KEY = 'mood_pwa_token';
+const GUEST_KEY = 'mood_guest_mode';
+
 const DARK_QUERY = '(prefers-color-scheme: dark)';
 
-/**
- * Тема по умолчанию, когда в localStorage ничего нет. Именно тёмная: она
- * основная для приложения, и её же берёт ранний скрипт до первого кадра.
- */
+/** Тема по умолчанию, когда в localStorage ничего нет: тёмная. */
 const DEFAULT_MODE: ThemeMode = 'dark';
-
-/** Цвет адресной строки/статус-бара. Должен совпадать с --app-bg каждой темы. */
-const THEME_COLOR: Record<'dark' | 'light', string> = {
-  dark: '#15131e',
-  light: '#f4f2fb',
-};
 
 function isThemeMode(value: unknown): value is ThemeMode {
   return value === 'dark' || value === 'light' || value === 'system';
 }
 
-/** Однократное чтение выбора из storage. Дальше значение держим в памяти. */
 function readStoredMode(): ThemeMode {
   if (typeof localStorage === 'undefined') return DEFAULT_MODE;
   try {
@@ -54,9 +59,8 @@ function readStoredMode(): ThemeMode {
   }
 }
 
-// Кэш текущего режима. Обращения к localStorage происходят только здесь и в
-// setThemeMode — не в рендере.
 let currentMode: ThemeMode = readStoredMode();
+let currentTheme: ThemeDefinition = readSelectedTheme();
 
 const listeners = new Set<() => void>();
 
@@ -72,26 +76,50 @@ export function resolveTheme(mode: ThemeMode): 'dark' | 'light' {
   return mode;
 }
 
-/** Приводит документ к выбранному режиму. Идемпотентно. */
-function applyToDocument(mode: ThemeMode): void {
+/** Фактический вариант выбранной темы: у одноvariant-темы он принудительный. */
+export function effectiveVariant(): ThemeVariantKey {
+  return resolveVariantKey(currentTheme, currentMode, prefersDark());
+}
+
+/**
+ * Приводит документ к выбранному режиму и палитре. Идемпотентно.
+ *
+ * На экране входа, в 2FA и у гостя кастомные токены не выставляются: остаётся
+ * фирменная фиолетовая палитра из index.css.
+ */
+function applyToDocument(): void {
   if (typeof document === 'undefined') return;
 
-  const theme = resolveTheme(mode);
   const root = document.documentElement;
+  const authorized = themeAuthAllowed();
 
-  root.setAttribute('data-theme', theme);
-  // Отдельный атрибут режима — переключателю он не нужен, но полезен для
-  // отладки и для CSS-правил, которым важно «выбрана системная», а не итог.
-  root.setAttribute('data-theme-mode', mode);
-  root.style.colorScheme = theme;
+  if (!authorized) {
+    const base = resolveTheme(currentMode);
+    root.setAttribute('data-theme', base);
+    root.setAttribute('data-theme-mode', currentMode);
+    root.removeAttribute('data-theme-id');
+    root.style.colorScheme = base;
+    clearThemeTokens();
+    return;
+  }
 
-  // Производные токены акцента зависят от темы: пересчитываем их здесь, а не
-  // в компонентах. Без этого пользовательский цвет остался бы с коррекцией
-  // для прежней темы и мог потерять контраст.
-  applyAccent(theme);
+  const variant = effectiveVariant();
+  root.setAttribute('data-theme', variant);
+  root.setAttribute('data-theme-mode', currentMode);
+  root.setAttribute('data-theme-id', currentTheme.id);
+  root.style.colorScheme = variant;
 
-  const meta = document.querySelector('meta[name="theme-color"]');
-  if (meta) meta.setAttribute('content', THEME_COLOR[theme]);
+  const tokens = deriveAllTokens(currentTheme);
+  const active = tokens[variant] ?? tokens.dark ?? tokens.light;
+  if (!active) {
+    clearThemeTokens();
+    return;
+  }
+
+  // Ранний скрипт следующей загрузки возьмёт готовые токены и не будет
+  // пересчитывать цвета заново.
+  applyThemeTokens(active);
+  writeStoredTokens(tokens);
 }
 
 function emit(): void {
@@ -103,17 +131,20 @@ export function getThemeMode(): ThemeMode {
   return currentMode;
 }
 
-/**
- * Инициализация из рантайма. Дублирует theme-init.js, но идемпотентно:
- * гарантирует согласованность, если скрипт не отработал (например, стоят
- * старые кэши или он заблокирован).
- */
+/** Текущая тема из памяти. */
+export function getSelectedTheme(): ThemeDefinition {
+  return currentTheme;
+}
+
+/** Инициализация из рантайма: дублирует theme-init.js, но идемпотентно. */
 export function initTheme(): void {
-  applyToDocument(currentMode);
+  applyToDocument();
 }
 
 /** Устанавливает и сохраняет режим, немедленно применяя его к документу. */
 export function setThemeMode(mode: ThemeMode): void {
+  if (!themeModeAvailable(currentTheme, mode)) return;
+
   if (typeof localStorage !== 'undefined') {
     try {
       localStorage.setItem(THEME_STORAGE_KEY, mode);
@@ -123,7 +154,31 @@ export function setThemeMode(mode: ThemeMode): void {
   }
 
   currentMode = mode;
-  applyToDocument(mode);
+  applyToDocument();
+  emit();
+}
+
+/** Применяет и сохраняет тему. */
+export function setTheme(theme: ThemeDefinition): void {
+  currentTheme = theme;
+  writeSelectedTheme(theme);
+  applyToDocument();
+  emit();
+}
+
+/** Возвращает официальную тему по умолчанию. */
+export function resetTheme(): void {
+  setTheme(defaultOfficialTheme());
+}
+
+/**
+ * Согласует тему с текущим входом.
+ *
+ * Зовётся после входа/выхода, смены гостевого режима и из ранней инициализации:
+ * один вход — одна тема, без «протёкшего» цвета с прошлого аккаунта.
+ */
+export function syncThemeWithAuth(): void {
+  applyToDocument();
   emit();
 }
 
@@ -134,28 +189,35 @@ function subscribe(listener: () => void): () => void {
   };
 }
 
-// Синхронизация между вкладками: если тему сменили в другой вкладке, storage
-// бросит событие — обновляем кэш и DOM без чтения storage в рендере.
+// Синхронизация между вкладками.
 if (typeof window !== 'undefined') {
   window.addEventListener('storage', (event) => {
-    if (event.key !== THEME_STORAGE_KEY) return;
-    currentMode = readStoredMode();
-    applyToDocument(currentMode);
-    emit();
+    if (event.key === THEME_STORAGE_KEY) {
+      currentMode = readStoredMode();
+      applyToDocument();
+      emit();
+      return;
+    }
+
+    if (event.key === 'mood_theme_selected') {
+      currentTheme = readSelectedTheme();
+      applyToDocument();
+      emit();
+      return;
+    }
+
+    if (event.key === TOKEN_KEY || event.key === GUEST_KEY) {
+      applyToDocument();
+      emit();
+    }
   });
 }
 
 /**
- * Хук темы: текущий режим и переключатель.
+ * Хук режима: текущий режим и переключатель.
  *
- * Подписка на смену системной схемы живёт в эффекте и снимается при
- * размонтировании, поэтому слушатель не накапливается при перемонтировании
- * переключателя. Реагируем только в режиме «Системная»: при явном выборе
- * система не должна незаметно перебивать решение пользователя.
- *
- * Компонент-потребитель тут один — переключатель в «Кабинете», — поэтому
- * ререндер при смене темы касается только его. Никакого React-контекста на
- * каждый компонент: цвет приложения меняет сам CSS через data-theme.
+ * Подписчиков мало (карточка настроек), поэтому ререндер касается только её —
+ * остальной интерфейс перекрашивает CSS.
  */
 export function useTheme(): [ThemeMode, (mode: ThemeMode) => void] {
   const mode = useSyncExternalStore(subscribe, getThemeMode, () => DEFAULT_MODE);
@@ -165,7 +227,10 @@ export function useTheme(): [ThemeMode, (mode: ThemeMode) => void] {
 
     const media = window.matchMedia(DARK_QUERY);
     const onChange = (): void => {
-      if (currentMode === 'system') applyToDocument('system');
+      // В режиме «Системная» пересчитываем вариант; у одноvariant-темы
+      // фактический вариант всё равно принудительный, поэтому лишнего нет.
+      applyToDocument();
+      emit();
     };
 
     media.addEventListener('change', onChange);
@@ -175,4 +240,25 @@ export function useTheme(): [ThemeMode, (mode: ThemeMode) => void] {
   const setMode = useCallback((next: ThemeMode) => setThemeMode(next), []);
 
   return [mode, setMode];
+}
+
+/** Хук выбранной палитры. */
+export function useThemePreset(): {
+  theme: ThemeDefinition;
+  applyTheme: (theme: ThemeDefinition) => void;
+  resetTheme: () => void;
+  availableModes: Array<'system' | ThemeVariantKey>;
+  effective: ThemeVariantKey;
+} {
+  const theme = useSyncExternalStore(subscribe, getSelectedTheme, defaultOfficialTheme);
+  const apply = useCallback((next: ThemeDefinition) => setTheme(next), []);
+  const reset = useCallback(() => resetTheme(), []);
+
+  return {
+    theme,
+    applyTheme: apply,
+    resetTheme: reset,
+    availableModes: availableThemeModes(theme),
+    effective: resolveVariantKey(theme, currentMode, prefersDark()),
+  };
 }

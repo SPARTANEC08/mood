@@ -60,7 +60,7 @@
       только `script-src 'self'` и инлайн заблокировал бы. См. public/theme-init.js
       и src/lib/theme.ts.
     -->
-    <script src="/theme-init.js"></script>
+    <script src="/theme-init.js?v=2"></script>
 
     <!--
       Критический фон и стартовый splash прямо в документе.
@@ -78,7 +78,7 @@
       html,
       body {
         margin: 0;
-        background: #f4f2fb;
+        background: var(--app-bg, #f4f2fb);
         color-scheme: light dark;
       }
       #mood-splash {
@@ -88,28 +88,28 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        background: #f4f2fb;
+        background: var(--app-bg, #f4f2fb);
       }
       #mood-splash::after {
         content: '';
         width: 26px;
         height: 26px;
         border-radius: 9999px;
-        border: 3px solid rgba(124, 77, 255, 0.25);
-        border-top-color: #7c4dff;
+        border: 3px solid var(--accent-soft, rgba(124, 77, 255, 0.25));
+        border-top-color: var(--accent, #7c4dff);
         animation: mood-splash-spin 0.9s linear infinite;
       }
-      /* Тёмная тема: фон и индикатор повторяют токены --app-bg и --accent.
-         Переключается атрибутом, который ставит theme-init.js до первого
-         кадра, поэтому правило без media-запроса. */
+      /* Тёмная тема: фон и индикатор уже приходят из --app-bg/--accent.
+         Правило оставлено только как запасной вариант, если ранний скрипт
+         не выполнился или storage недоступен. */
       html[data-theme='dark'],
       html[data-theme='dark'] body,
       html[data-theme='dark'] #mood-splash {
-        background: #15131e;
+        background: var(--app-bg, #15131e);
       }
       html[data-theme='dark'] #mood-splash::after {
-        border-color: rgba(157, 69, 254, 0.25);
-        border-top-color: #9d45fe;
+        border-color: var(--accent-soft, rgba(157, 69, 254, 0.25));
+        border-top-color: var(--accent, #9d45fe);
       }
       @keyframes mood-splash-spin {
         to {
