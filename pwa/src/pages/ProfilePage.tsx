@@ -352,22 +352,17 @@ export function ProfilePage({ profile }: { profile: BootstrapResponse }) {
                 haptic('light');
                 openLink('https://mood-app.online/');
               }}
-              className="pressable flex w-full items-center gap-3 px-4 py-3 text-left active:pressable-active"
+              className="pressable flex w-full items-center gap-3 px-4 py-2.5 text-left active:pressable-active"
               aria-label="Открыть Mood Games"
             >
               <span
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[11px]"
-                style={{
-                  background: '#070512',
-                  boxShadow: 'inset 0 0 0 1px rgba(179, 136, 255, 0.22)',
-                }}
+                className="flex h-12 w-12 shrink-0 items-center justify-center"
                 aria-hidden
               >
                 <img
                   src={cabinetMark}
                   alt=""
-                  className="h-9 w-auto"
-                  style={{ imageRendering: 'pixelated' }}
+                  className="h-12 w-auto object-contain"
                   draggable={false}
                 />
               </span>
