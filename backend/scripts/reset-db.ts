@@ -176,9 +176,9 @@ async function main(): Promise<void> {
   // Основное хранилище. DELETE, а не удаление файла: так SQLite сам почистит
   // WAL и не оставит полуоткрытых страниц.
   const db = getDb();
-  db.exec('DELETE FROM users; DELETE FROM records; DELETE FROM documents; DELETE FROM themes;');
+  db.exec('DELETE FROM users; DELETE FROM records; DELETE FROM documents;');
   closeDb();
-  console.log('   · SQLite: users, records, documents, themes очищены');
+  console.log('   · SQLite: users, records, documents очищены');
 
   resetFiles(backup);
 

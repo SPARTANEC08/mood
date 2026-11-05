@@ -78,9 +78,9 @@
 
   /* Акцент — фиолетовый. Отдельный от «лекции», чтобы номер пары и
      выделение сегодняшнего дня не совпадали с бейджем типа занятия.
-     Это значения по умолчанию: выбранная пользователем тема выставляет
-     инлайн-переменные на <html> через lib/theme.ts и lib/themes.ts, поэтому
-     менять здесь числа под конкретную палитру не нужно. */
+     Это значения по умолчанию: выбранный пользователем акцент выставляет
+     инлайн-переменные на <html> через lib/accent.ts (и раньше — theme-init.js),
+     поэтому менять здесь числа под конкретный цвет не нужно. */
   --accent: #7c4dff;
   --accent-soft: rgba(124, 77, 255, 0.12);
   /* Текст на акцентной заливке */
@@ -597,48 +597,4 @@ body {
   .mood-range::-webkit-slider-thumb {
     transition: none;
   }
-}
-
-/**
- * Ползунок оттенка в конструкторе тем.
- *
- * Трек рисуется отдельным div-ом с hue-градиентом, поэтому нативный трек
- * прозрачный. Бегунок белый с тёмной обводкой: он одинаково виден на любом
- * участке спектра, в отличие от акцентного.
- */
-.mood-hue-range {
-  -webkit-appearance: none;
-  appearance: none;
-  background: transparent;
-  outline: none;
-}
-
-.mood-hue-range::-webkit-slider-runnable-track {
-  height: 8px;
-  background: transparent;
-}
-
-.mood-hue-range::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  width: 24px;
-  height: 24px;
-  margin-top: -8px;
-  border-radius: 50%;
-  background: #ffffff;
-  border: 3px solid rgba(21, 19, 30, 0.35);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-}
-
-.mood-hue-range::-moz-range-track {
-  height: 8px;
-  background: transparent;
-}
-
-.mood-hue-range::-moz-range-thumb {
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  background: #ffffff;
-  border: 3px solid rgba(21, 19, 30, 0.35);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 }

@@ -41,10 +41,6 @@ import type {
   AdminDiagnostics,
   AdminAdminsResponse,
   AdminAuditEntry,
-  AdminThemesResponse,
-  ApiTheme,
-  CreateThemeBody,
-  ThemesResponse,
 } from '@/types/api';
 import {
   deleteFile,
@@ -287,18 +283,6 @@ export const api = {
   readNotification: (id: string) =>
     request<{ ok: true }>(`/notifications/${encodeURIComponent(id)}/read`, { method: 'POST' }),
 
-  // ── темы оформления ─────────────────────────────────────────────────────
-  /** Темы сообщества. Официальные живут в коде и в этот запрос не входят. */
-  themes: () => request<ThemesResponse>('/themes'),
-
-  /** Опубликовать свою тему. Сервер сам ставит автора и id. */
-  createTheme: (body: CreateThemeBody) =>
-    request<{ theme: ApiTheme }>('/themes', { method: 'POST', body }),
-
-  /** Удалить свою тему. Чужую сервер не даст удалить. */
-  deleteTheme: (id: string) =>
-    request<{ ok: true }>(`/themes/${encodeURIComponent(id)}`, { method: 'DELETE' }),
-
   // ── админка ──────────────────────────────────────────────────────────────
   adminStats: (params: { period: AdminStatsPeriod; date?: string }) => {
     const query = new URLSearchParams({ period: params.period });
@@ -350,18 +334,6 @@ export const api = {
     request<{ ok: true }>(`/admin/announcements/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 
   adminDiagnostics: () => request<AdminDiagnostics>('/admin/diagnostics'),
-
-  adminThemes: (status: 'all' | 'published' | 'hidden' = 'all') =>
-    request<AdminThemesResponse>(`/admin/themes?status=${status}`),
-
-  adminHideTheme: (id: string) =>
-    request<{ ok: true }>(`/admin/themes/${encodeURIComponent(id)}/hide`, { method: 'POST' }),
-
-  adminUnhideTheme: (id: string) =>
-    request<{ ok: true }>(`/admin/themes/${encodeURIComponent(id)}/unhide`, { method: 'POST' }),
-
-  adminDeleteTheme: (id: string) =>
-    request<{ ok: true }>(`/admin/themes/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 
   adminMaintenance: () =>
     request<{ result: Record<string, number | null> }>('/admin/maintenance', { method: 'POST' }),

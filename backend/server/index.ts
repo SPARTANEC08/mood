@@ -28,7 +28,6 @@ import { registerImportantRoutes } from './routes/important.ts';
 import { registerFileRoutes } from './routes/files.ts';
 import { registerNotificationRoutes } from './routes/notifications.ts';
 import { registerPushRoutes } from './routes/push.ts';
-import { registerThemeRoutes } from './routes/themes.ts';
 import { registerAdminRoutes } from './routes/admin.ts';
 import { registerAnnouncementRoutes } from './routes/announcements.ts';
 import { setupActivityTracking } from './devStats.ts';
@@ -329,7 +328,6 @@ export async function buildServer(): Promise<FastifyInstance> {
   await registerFileRoutes(app);
   await registerNotificationRoutes(app);
   registerPushRoutes(app);
-  registerThemeRoutes(app);
   registerAdminRoutes(app);
   registerAnnouncementRoutes(app);
 
